@@ -216,7 +216,8 @@ Review this plan for:
 2. Task granularity - Are tasks appropriately sized?
 3. Dependencies - Are dependencies correct and complete?
 4. Gaps - Are there missing tasks or edge cases?
-5. Order - Is the execution order optimal?
+5. Parallelism - Are there unnecessary sequential dependencies? Tasks that don't share files or types should be independent.
+6. Critical path - What's the longest dependency chain? Could it be shortened?
 
 Output your verdict as SHIP (plan is solid), NEEDS_WORK (minor adjustments), or MAJOR_RETHINK (fundamental issues).`;
 

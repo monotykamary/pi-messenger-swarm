@@ -64,12 +64,21 @@ Synthesize everything you've found. Identify:
 Create a task breakdown following the exact output format below. Guidelines:
 
 - **4-8 tasks** typically (scale with complexity)
-- First tasks should have **no dependencies** to enable parallel start
 - Each task should be **completable in one work session**
 - Group related work but keep tasks focused
 - End with testing and documentation tasks
 - Include specific files to create/modify when known
 - Include acceptance criteria in task descriptions
+
+### Parallel Execution
+
+Tasks execute in waves — all tasks whose dependencies are met run concurrently. Structure your breakdown to maximize parallelism:
+
+- **Think in dependency graphs, not sequences.** Tasks form a DAG, not a numbered list. Two tasks that don't touch the same files or types should be independent.
+- **Identify independent work streams.** Backend and frontend, types and implementation, different modules — these often have separate chains that can run in parallel. A server task and a CSS task don't depend on each other.
+- **Minimize the critical path.** The longest dependency chain determines total execution time. If a 10-task plan has a single chain of 10, it's sequential. If it has two chains of 5, it's twice as fast.
+- **Dependencies should reflect real data flow.** Task B depends on Task A only if B imports types, calls functions, or reads files that A creates. Conceptual ordering ("settings before server") isn't a dependency unless the server literally imports from the settings module.
+- **Front-load foundation tasks with no dependencies** so multiple streams can start from wave 1.
 
 ## Output Format
 

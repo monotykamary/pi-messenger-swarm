@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.1] - 2026-01-30
+
+### Changed
+- **Parallelism-aware planning** - Planner prompt now includes a dedicated Parallel Execution section teaching DAG thinking, independent work streams, critical path minimization, and real data flow dependencies. Plans should produce wider dependency graphs with more concurrent waves instead of linear chains.
+- **Parallelism-aware review** - Both the automated planning loop reviewer and the manual plan review (`action: "review"`) now evaluate plans for unnecessary sequential dependencies and critical path length.
+- PRD truncation applied consistently to both explicit `prd` parameter and auto-discovered PRD files (100KB limit).
+
+### Fixed
+- Stale README agent list referenced removed "analysts" instead of the actual 5 agents.
+
 ## [0.8.0] - 2026-01-30
 
 ### Added

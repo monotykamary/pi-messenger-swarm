@@ -330,7 +330,7 @@ pi_messenger({ action: "crew.install" })
 ```
 
 **What gets installed:**
-- **5 agents** in `~/.pi/agent/agents/` (planner, analysts, worker, reviewer)
+- **5 agents** in `~/.pi/agent/agents/` (planner, worker, reviewer, interview-generator, plan-sync)
 - **1 skill** in `~/.pi/agent/skills/` (pi-messenger-crew quick reference)
 
 To remove:

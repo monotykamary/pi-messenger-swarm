@@ -16,7 +16,6 @@ import { discoverCrewAgents } from "../utils/discover.js";
 import { loadCrewConfig } from "../utils/config.js";
 import { parseVerdict, type ParsedReview } from "../utils/verdict.js";
 import * as store from "../store.js";
-import { getCrewDir } from "../store.js";
 
 const PRD_PATTERNS = [
   "PRD.md", "prd.md",
@@ -139,6 +138,9 @@ export async function execute(
       });
     }
     prdContent = fs.readFileSync(fullPath, "utf-8");
+    if (prdContent.length > MAX_PRD_SIZE) {
+      prdContent = prdContent.slice(0, MAX_PRD_SIZE) + "\n\n[Content truncated]";
+    }
   } else {
     const discovered = discoverPRD(cwd);
     if (!discovered) {
@@ -161,7 +163,7 @@ export async function execute(
     });
   }
 
-  const config = loadCrewConfig(getCrewDir(cwd));
+  const config = loadCrewConfig(store.getCrewDir(cwd));
   const maxPasses = Math.max(1, config.planning.maxPasses);
   const hasReviewer = availableAgents.some(a => a.name === "crew-reviewer");
 
@@ -386,7 +388,8 @@ Evaluate this plan against the PRD:
 2. Task granularity — is each task completable in one work session?
 3. Dependencies — correct and complete dependency chain?
 4. Gaps — missing tasks, edge cases, security concerns?
-5. Execution order — optimal for parallel start?
+5. Parallelism — are there unnecessary sequential dependencies? Tasks that don't share files or types should be independent. Flag any chain that could be split into concurrent streams.
+6. Critical path — what's the longest dependency chain? Could it be shortened by restructuring?
 
 Output your verdict as SHIP, NEEDS_WORK, or MAJOR_RETHINK with detailed feedback.`;
 }
