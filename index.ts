@@ -36,6 +36,7 @@ import type { CrewParams } from "./crew/types.js";
 import { autonomousState, restoreAutonomousState, stopAutonomous } from "./crew/state.js";
 import { loadCrewConfig } from "./crew/utils/config.js";
 import * as crewStore from "./crew/store.js";
+import { getLiveWorkers, onLiveWorkersChanged } from "./crew/live-progress.js";
 
 let overlayTui: TUI | null = null;
 
@@ -225,12 +226,21 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
       const cwd = ctx.cwd ?? process.cwd();
       const plan = crewStore.getPlan(cwd);
       if (plan) {
+        const workerCount = getLiveWorkers(cwd).size;
         crewStr = theme.fg("accent", ` ⚡${plan.completed_count}/${plan.task_count}`);
+        if (workerCount > 0) {
+          crewStr += theme.fg("dim", ` 🔨${workerCount}`);
+        }
       }
     }
 
     ctx.ui.setStatus("messenger", `msg: ${nameStr}${countStr}${unreadStr}${crewStr}`);
   }
+
+  let latestCtx: ExtensionContext | null = null;
+  onLiveWorkersChanged(() => {
+    if (latestCtx) updateStatus(latestCtx);
+  });
 
   // ===========================================================================
   // Tool Registration
@@ -303,6 +313,7 @@ Mode: action (if provided) > legacy key-based routing`,
       type: Type.Optional(StringEnum(["plan", "impl"], { description: "Review type (inferred from target if omitted)" })),
       autonomous: Type.Optional(Type.Boolean({ description: "Run work continuously until done/blocked" })),
       concurrency: Type.Optional(Type.Number({ description: "Override worker concurrency" })),
+      model: Type.Optional(Type.String({ description: "Override worker model for this work wave" })),
       cascade: Type.Optional(Type.Boolean({ description: "For task.reset - also reset dependent tasks" })),
       limit: Type.Optional(Type.Number({ description: "Number of events to return (for feed action, default 20)" })),
       paths: Type.Optional(Type.Array(Type.String(), { description: "Paths for reserve/release actions" })),
@@ -349,7 +360,8 @@ Mode: action (if provided) > legacy key-based routing`,
       autoRegisterPath?: "add" | "remove" | "list";
       list?: boolean;
       limit?: number;
-    }, _signal, _onUpdate, ctx) {
+    }, signal, _onUpdate, ctx) {
+      latestCtx = ctx;
       const {
         action,
         join,
@@ -384,7 +396,8 @@ Mode: action (if provided) > legacy key-based routing`,
           deliverMessage,
           updateStatus,
           (type, data) => pi.appendEntry(type, data),
-          { stuckThreshold: config.stuckThreshold, crewEventsInFeed: config.crewEventsInFeed, nameTheme, feedRetention: config.feedRetention }
+          { stuckThreshold: config.stuckThreshold, crewEventsInFeed: config.crewEventsInFeed, nameTheme, feedRetention: config.feedRetention },
+          signal
         );
       }
 
@@ -699,6 +712,7 @@ Mode: action (if provided) > legacy key-based routing`,
   // ===========================================================================
 
   pi.on("session_start", async (_event, ctx) => {
+    latestCtx = ctx;
     for (const entry of ctx.sessionManager.getEntries()) {
       if (entry.type === "custom" && entry.customType === "crew-state") {
         restoreAutonomousState(entry.data as Parameters<typeof restoreAutonomousState>[0]);
@@ -741,16 +755,22 @@ Mode: action (if provided) > legacy key-based routing`,
   }
 
   pi.on("session_switch", async (_event, ctx) => {
+    latestCtx = ctx;
     recoverWatcherIfNeeded();
     updateStatus(ctx);
   });
   pi.on("session_fork", async (_event, ctx) => {
+    latestCtx = ctx;
     recoverWatcherIfNeeded();
     updateStatus(ctx);
   });
-  pi.on("session_tree", async (_event, ctx) => updateStatus(ctx));
+  pi.on("session_tree", async (_event, ctx) => {
+    latestCtx = ctx;
+    updateStatus(ctx);
+  });
 
   pi.on("turn_end", async (event, ctx) => {
+    latestCtx = ctx;
     store.processAllPendingMessages(state, dirs, deliverMessage);
     recoverWatcherIfNeeded();
     updateStatus(ctx);

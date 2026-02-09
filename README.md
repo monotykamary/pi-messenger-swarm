@@ -122,12 +122,30 @@ Add to `~/.pi/agent/pi-messenger.json`:
 {
   "crew": {
     "concurrency": { "workers": 2 },
+    "models": { "worker": "claude-sonnet-4-20250514" },
     "review": { "enabled": true, "maxIterations": 3 },
     "planning": { "maxPasses": 3 },
-    "work": { "maxAttemptsPerTask": 5, "maxWaves": 50 }
+    "work": {
+      "maxAttemptsPerTask": 5,
+      "maxWaves": 50,
+      "shutdownGracePeriodMs": 30000,
+      "env": { "NODE_ENV": "test" }
+    }
   }
 }
 ```
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `concurrency.workers` | Max parallel workers per wave | `2` |
+| `models.worker` | Model for spawned workers (overridden by per-task or per-wave `model` param) | agent `.md` frontmatter |
+| `review.enabled` | Auto-review after task completion | `true` |
+| `review.maxIterations` | Max review/fix cycles per task | `3` |
+| `planning.maxPasses` | Max planner/reviewer refinement passes | `3` |
+| `work.maxAttemptsPerTask` | Auto-block after N failures | `5` |
+| `work.maxWaves` | Max autonomous waves | `50` |
+| `work.shutdownGracePeriodMs` | Grace period before SIGTERM on abort | `30000` |
+| `work.env` | Environment variables passed to spawned workers | `{}` |
 
 Crew agents (planner, worker, reviewer, interview-generator, plan-sync) are **auto-installed** on first use. Run `npx pi-messenger --crew-install` to manually install or update.
 
@@ -216,7 +234,7 @@ Pi-messenger is a [pi extension](https://github.com/badlogic/pi-mono) that hooks
 
 Incoming messages wake the receiving agent via `pi.sendMessage()` with `triggerTurn: true` and `deliverAs: "steer"`, which injects the message as a steering prompt that resumes the agent. File reservations are enforced by returning `{ block: true }` from a `tool_call` hook on write/edit operations. The `/messenger` overlay uses `ctx.ui.custom()` for the chat TUI, and `ctx.ui.setStatus()` keeps the status bar updated with peer count and unread messages.
 
-Crew workers are spawned as `pi --mode json` subprocesses with the agent's system prompt, model, and tool restrictions from their `.md` definitions. Progress is tracked via JSONL streaming. The planner and reviewer work the same way — just pi instances with different agent configs.
+Crew workers are spawned as `pi --mode json` subprocesses with the agent's system prompt, model, and tool restrictions from their `.md` definitions. Progress is tracked via JSONL streaming — the overlay subscribes to a live progress store that shows each worker's current tool, call count, and token usage in real time. Aborting a work run triggers graceful shutdown: each worker receives an inbox message asking it to stop, followed by a grace period before SIGTERM. The planner and reviewer work the same way — just pi instances with different agent configs.
 
 All coordination is file-based, no daemon required. Global state (registry, inboxes, activity feed) lives in `~/.pi/agent/messenger/`. Per-project crew data (plan, tasks, artifacts) lives in `.pi/messenger/crew/` inside your project. Dead agents are detected via PID checks and cleaned up automatically.
 

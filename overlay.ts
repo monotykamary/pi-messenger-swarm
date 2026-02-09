@@ -34,6 +34,7 @@ import {
   navigateTask,
   type CrewViewState,
 } from "./crew-overlay.js";
+import { hasLiveWorkers, onLiveWorkersChanged } from "./crew/live-progress.js";
 import { loadConfig } from "./config.js";
 
 const AGENTS_TAB = "[agents]";
@@ -50,6 +51,8 @@ export class MessengerOverlay implements Component, Focusable {
   private crewViewState: CrewViewState = createCrewViewState();
   private cwd: string;
   private stuckThresholdMs: number;
+  private progressTimer: ReturnType<typeof setInterval> | null = null;
+  private progressUnsubscribe: (() => void) | null = null;
 
   constructor(
     private tui: TUI,
@@ -67,6 +70,18 @@ export class MessengerOverlay implements Component, Focusable {
 
     if (this.selectedAgent && this.selectedAgent !== AGENTS_TAB && this.selectedAgent !== CREW_TAB) {
       state.unreadCounts.set(this.selectedAgent, 0);
+    }
+
+    this.progressUnsubscribe = onLiveWorkersChanged(() => {
+      if (this.selectedAgent === CREW_TAB) {
+        if (hasLiveWorkers(this.cwd)) this.startProgressRefresh();
+        else this.stopProgressRefresh();
+      }
+      this.tui.requestRender();
+    });
+
+    if (this.selectedAgent === CREW_TAB && hasLiveWorkers(this.cwd)) {
+      this.startProgressRefresh();
     }
   }
 
@@ -101,6 +116,30 @@ export class MessengerOverlay implements Component, Focusable {
       this.state.unreadCounts.set(agentName, 0);
     }
     this.scrollPosition = 0;
+
+    if (agentName === CREW_TAB && hasLiveWorkers(this.cwd)) {
+      this.startProgressRefresh();
+    } else {
+      this.stopProgressRefresh();
+    }
+  }
+
+  private startProgressRefresh(): void {
+    if (this.progressTimer) return;
+    this.progressTimer = setInterval(() => {
+      if (hasLiveWorkers(this.cwd)) {
+        this.tui.requestRender();
+      } else {
+        this.stopProgressRefresh();
+      }
+    }, 1000);
+  }
+
+  private stopProgressRefresh(): void {
+    if (this.progressTimer) {
+      clearInterval(this.progressTimer);
+      this.progressTimer = null;
+    }
   }
 
   private scroll(delta: number): void {
@@ -341,7 +380,9 @@ export class MessengerOverlay implements Component, Focusable {
       lines.push(row(this.renderTabBar(innerW - 2, agents)));
       lines.push(border("├" + "─".repeat(innerW) + "┤"));
 
-      const messageAreaHeight = 10; // Fixed height for message area
+      const chromeLines = 7; // top border, empty row, tab bar, separator, separator, input bar, bottom border
+      const termRows = process.stdout.rows ?? 24;
+      const messageAreaHeight = Math.min(25, Math.max(8, termRows - chromeLines - 2));
       const messageLines = this.renderMessages(innerW - 2, messageAreaHeight, agents);
       for (const line of messageLines) {
         lines.push(row(line));
@@ -709,5 +750,9 @@ export class MessengerOverlay implements Component, Focusable {
     // No cached state to invalidate
   }
 
-  dispose(): void {}
+  dispose(): void {
+    this.stopProgressRefresh();
+    this.progressUnsubscribe?.();
+    this.progressUnsubscribe = null;
+  }
 }

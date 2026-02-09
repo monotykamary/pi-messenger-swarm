@@ -42,7 +42,8 @@ export async function executeCrewAction(
   deliverMessage: DeliverFn,
   updateStatus: UpdateStatusFn,
   appendEntry: AppendEntryFn,
-  config?: CrewActionConfig
+  config?: CrewActionConfig,
+  signal?: AbortSignal
 ) {
   // Parse action: "task.show" → group="task", op="show"
   const dotIndex = action.indexOf('.');
@@ -177,7 +178,7 @@ export async function executeCrewAction(
       ensureCrewInstalled();
       try {
         const planHandler = await import("./handlers/plan.js");
-        return planHandler.execute(params, state, dirs, ctx);
+        return planHandler.execute(params, ctx);
       } catch (e) {
         return result(`Error: plan handler failed: ${e instanceof Error ? e.message : 'unknown'}`,
           { mode: "plan", error: "handler_error" });
@@ -189,7 +190,7 @@ export async function executeCrewAction(
       ensureCrewInstalled();
       try {
         const workHandler = await import("./handlers/work.js");
-        return workHandler.execute(params, state, dirs, ctx, appendEntry);
+        return workHandler.execute(params, dirs, ctx, appendEntry, signal);
       } catch (e) {
         return result(`Error: work handler failed: ${e instanceof Error ? e.message : 'unknown'}`,
           { mode: "work", error: "handler_error" });
@@ -201,7 +202,7 @@ export async function executeCrewAction(
       ensureCrewInstalled();
       try {
         const reviewHandler = await import("./handlers/review.js");
-        return reviewHandler.execute(params, state, dirs, ctx);
+        return reviewHandler.execute(params, ctx);
       } catch (e) {
         return result(`Error: review handler failed: ${e instanceof Error ? e.message : 'unknown'}`,
           { mode: "review", error: "handler_error" });

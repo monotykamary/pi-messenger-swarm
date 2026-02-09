@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.11.0] - 2026-02-08
+
+### Added
+- **Test suite** — 53 tests across 7 Vitest suites covering store CRUD, state machine, config merging, agent discovery, model resolution, graceful shutdown, and live progress (including cwd isolation). Includes test helpers for temp directories and mock contexts.
+- **Per-agent runtime config** — Model override with 4-level priority: per-task > per-wave `model` param > config `crew.models.worker` > agent `.md` frontmatter. Environment variable override via `crew.work.env` config (not exposed as tool param to prevent API keys in logs).
+- **Graceful shutdown** — `AbortSignal` threaded from tool execute through to spawned workers. On abort: discovers worker name via PID-based registry scan, writes shutdown message to worker inbox, waits 30s grace period, SIGTERM, waits 5s, SIGKILL. Tasks reset to `todo` for retry. Workers instructed to release reservations and exit without committing.
+- **Live crew progress** — In-memory pub/sub store fed by worker JSONL events. Overlay Crew tab shows Active Workers section with tool name, call count, tokens, and elapsed time updating every second. Status bar shows active worker count during autonomous mode (`🔨N`).
+- **`shutdownGracePeriodMs` config** — Configurable grace period before SIGTERM (default: 30000).
+
+### Changed
+- **Dynamic overlay height** — Content area scales with terminal size (8-25 lines) instead of hardcoded 10. On a standard 24-row terminal, visible content goes from 10 to 15 lines.
+- **Handler signatures simplified** — Removed unused `state` and `dirs` parameters from plan and review handlers.
+
+### Fixed
+- **`deepMerge` crash** — Merging config with `models` key crashed when the target didn't have the key. Hardened for undefined target keys.
+- **Result/task association** — Worker results now matched by `taskId` field instead of array index, since `spawnAgents` returns in completion order not submission order.
+
+### Removed
+- `attemptsPerTask` field from `AutonomousState` — declared but never populated by any code.
+- `ARCHITECTURE.md` from repo (moved to external docs).
+
 ## [0.10.0] - 2026-02-05
 
 ### Fixed

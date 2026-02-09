@@ -6,10 +6,10 @@
  */
 
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import type { MessengerState, Dirs } from "../../lib.js";
+import type { Dirs } from "../../lib.js";
 import type { CrewParams, AppendEntryFn, Task } from "../types.js";
 import { result } from "../utils/result.js";
-import { spawnAgents } from "../agents.js";
+import { resolveModel, spawnAgents } from "../agents.js";
 import { loadCrewConfig } from "../utils/config.js";
 import { discoverCrewAgents } from "../utils/discover.js";
 import * as store from "../store.js";
@@ -18,10 +18,10 @@ import { autonomousState, startAutonomous, stopAutonomous, addWaveResult } from 
 
 export async function execute(
   params: CrewParams,
-  _state: MessengerState,
-  _dirs: Dirs,
+  dirs: Dirs,
   ctx: ExtensionContext,
-  appendEntry: AppendEntryFn
+  appendEntry: AppendEntryFn,
+  signal?: AbortSignal
 ) {
   const cwd = ctx.cwd ?? process.cwd();
   const config = loadCrewConfig(getCrewDir(cwd));
@@ -87,15 +87,30 @@ export async function execute(
   }
 
   // Spawn workers
-  const workerTasks = tasksToRun.map(task => ({
-    agent: "crew-worker",
-    task: buildWorkerPrompt(task, plan.prd, cwd)
-  }));
+  const workerTasks = tasksToRun.map(task => {
+    const taskModel = resolveModel(
+      task.model,
+      params.model,
+      config.models?.worker,
+      undefined,
+    );
+
+    return {
+      agent: "crew-worker",
+      task: buildWorkerPrompt(task, plan.prd, cwd),
+      taskId: task.id,
+      modelOverride: taskModel,
+    };
+  });
 
   const workerResults = await spawnAgents(
     workerTasks,
     concurrency,
-    cwd
+    cwd,
+    {
+      signal,
+      messengerDirs: { registry: dirs.registry, inbox: dirs.inbox },
+    }
   );
 
   // Process results
@@ -105,22 +120,33 @@ export async function execute(
 
   for (let i = 0; i < workerResults.length; i++) {
     const r = workerResults[i];
-    const taskId = tasksToRun[i].id;
+    const taskId = r.taskId;
+    if (!taskId) {
+      failed.push(`unknown-result-${i}`);
+      continue;
+    }
     const task = store.getTask(cwd, taskId);
 
     if (r.exitCode === 0) {
-      // Check if task was completed (worker should call task.done)
       if (task?.status === "done") {
         succeeded.push(taskId);
       } else if (task?.status === "blocked") {
         blocked.push(taskId);
+      } else if (r.wasGracefullyShutdown && task?.status === "in_progress") {
+        store.updateTask(cwd, taskId, { status: "todo", assigned_to: undefined });
       } else {
-        // Worker finished but didn't complete - treat as failure
         failed.push(taskId);
       }
     } else {
-      // Auto-block on failure if in autonomous mode
-      if (autonomous && task?.status === "in_progress") {
+      if (r.wasGracefullyShutdown) {
+        if (task?.status === "done") {
+          succeeded.push(taskId);
+        } else if (task?.status === "blocked") {
+          blocked.push(taskId);
+        } else if (task?.status === "in_progress") {
+          store.updateTask(cwd, taskId, { status: "todo", assigned_to: undefined });
+        }
+      } else if (autonomous && task?.status === "in_progress") {
         store.blockTask(cwd, taskId, `Worker failed: ${r.error ?? "Unknown error"}`);
         blocked.push(taskId);
       } else {
@@ -142,37 +168,40 @@ export async function execute(
       timestamp: new Date().toISOString()
     });
 
-    // Check if we should continue
-    const nextReady = store.getReadyTasks(cwd);
-    const allTasks = store.getTasks(cwd);
-    const allDone = allTasks.every(t => t.status === "done");
-    const allBlockedOrDone = allTasks.every(t => t.status === "done" || t.status === "blocked");
-
-    if (allDone) {
-      stopAutonomous("completed");
+    if (signal?.aborted) {
+      stopAutonomous("manual");
       appendEntry("crew-state", autonomousState);
-      appendEntry("crew_wave_complete", {
-        prd: plan.prd,
-        status: "completed",
-        totalWaves: currentWave,
-        totalTasks: allTasks.length
-      });
-    } else if (allBlockedOrDone || nextReady.length === 0) {
-      stopAutonomous("blocked");
-      appendEntry("crew-state", autonomousState);
-      appendEntry("crew_wave_blocked", {
-        prd: plan.prd,
-        status: "blocked",
-        blockedTasks: allTasks.filter(t => t.status === "blocked").map(t => t.id)
-      });
     } else {
-      // Persist state for session recovery and signal continuation
-      appendEntry("crew-state", autonomousState);
-      appendEntry("crew_wave_continue", {
-        prd: plan.prd,
-        nextWave: autonomousState.waveNumber,
-        readyTasks: nextReady.map(t => t.id)
-      });
+      const nextReady = store.getReadyTasks(cwd);
+      const allTasks = store.getTasks(cwd);
+      const allDone = allTasks.every(t => t.status === "done");
+      const allBlockedOrDone = allTasks.every(t => t.status === "done" || t.status === "blocked");
+
+      if (allDone) {
+        stopAutonomous("completed");
+        appendEntry("crew-state", autonomousState);
+        appendEntry("crew_wave_complete", {
+          prd: plan.prd,
+          status: "completed",
+          totalWaves: currentWave,
+          totalTasks: allTasks.length
+        });
+      } else if (allBlockedOrDone || nextReady.length === 0) {
+        stopAutonomous("blocked");
+        appendEntry("crew-state", autonomousState);
+        appendEntry("crew_wave_blocked", {
+          prd: plan.prd,
+          status: "blocked",
+          blockedTasks: allTasks.filter(t => t.status === "blocked").map(t => t.id)
+        });
+      } else {
+        appendEntry("crew-state", autonomousState);
+        appendEntry("crew_wave_continue", {
+          prd: plan.prd,
+          nextWave: autonomousState.waveNumber,
+          readyTasks: nextReady.map(t => t.id)
+        });
+      }
     }
   }
 
@@ -191,6 +220,11 @@ export async function execute(
   const nextText = nextReady.length > 0
     ? `\n\n**Ready for next wave:** ${nextReady.map(t => t.id).join(", ")}`
     : "";
+  const continueText = autonomous && !signal?.aborted && nextReady.length > 0
+    ? "Autonomous mode: Continuing to next wave..."
+    : signal?.aborted && autonomous
+      ? "Autonomous mode stopped (cancelled)."
+      : "";
 
   const text = `# Work Wave ${currentWave}
 
@@ -199,7 +233,7 @@ export async function execute(
 **Progress:** ${progress}
 ${statusText}${nextText}
 
-${autonomous && nextReady.length > 0 ? "Autonomous mode: Continuing to next wave..." : ""}`;
+${continueText}`;
 
   return result(text, {
     mode: "work",

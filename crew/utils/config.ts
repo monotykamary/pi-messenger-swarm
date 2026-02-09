@@ -13,6 +13,12 @@ const USER_CONFIG_PATH = path.join(os.homedir(), ".pi", "agent", "pi-messenger.j
 const PROJECT_CONFIG_FILE = "config.json";
 
 export interface CrewConfig {
+  models?: {
+    planner?: string;
+    worker?: string;
+    reviewer?: string;
+    analyst?: string;
+  };
   concurrency: {
     workers: number;
   };
@@ -30,7 +36,13 @@ export interface CrewConfig {
   planSync: { enabled: boolean };
   review: { enabled: boolean; maxIterations: number };
   planning: { maxPasses: number };
-  work: { maxAttemptsPerTask: number; maxWaves: number; stopOnBlock: boolean };
+  work: {
+    maxAttemptsPerTask: number;
+    maxWaves: number;
+    stopOnBlock: boolean;
+    env?: Record<string, string>;
+    shutdownGracePeriodMs?: number;
+  };
 }
 
 const DEFAULT_CONFIG: CrewConfig = {
@@ -48,7 +60,7 @@ const DEFAULT_CONFIG: CrewConfig = {
   planSync: { enabled: false },
   review: { enabled: true, maxIterations: 3 },
   planning: { maxPasses: 3 },
-  work: { maxAttemptsPerTask: 5, maxWaves: 50, stopOnBlock: false },
+  work: { maxAttemptsPerTask: 5, maxWaves: 50, stopOnBlock: false, shutdownGracePeriodMs: 30000 },
 };
 
 function loadJson(filePath: string): Record<string, unknown> {
@@ -60,19 +72,25 @@ function loadJson(filePath: string): Record<string, unknown> {
 }
 
 function deepMerge<T extends object>(target: T, ...sources: Partial<T>[]): T {
-  const result = { ...target };
+  const result: Record<string, unknown> = target && typeof target === "object"
+    ? { ...(target as Record<string, unknown>) }
+    : {};
   for (const source of sources) {
-    for (const key of Object.keys(source) as (keyof T)[]) {
+    const src = source as Record<string, unknown>;
+    for (const key of Object.keys(src)) {
       const targetVal = result[key];
-      const sourceVal = source[key];
+      const sourceVal = src[key];
       if (sourceVal && typeof sourceVal === "object" && !Array.isArray(sourceVal)) {
-        result[key] = deepMerge(targetVal as object, sourceVal as object) as T[keyof T];
+        const base = targetVal && typeof targetVal === "object" && !Array.isArray(targetVal)
+          ? targetVal as object
+          : {};
+        result[key] = deepMerge(base, sourceVal as object);
       } else if (sourceVal !== undefined) {
-        result[key] = sourceVal as T[keyof T];
+        result[key] = sourceVal;
       }
     }
   }
-  return result;
+  return result as T;
 }
 
 /**
@@ -90,9 +108,6 @@ export function loadCrewConfig(crewDir: string): CrewConfig {
   return deepMerge(DEFAULT_CONFIG, userCrewConfig, projectConfig);
 }
 
-/**
- * Get truncation config for a specific role.
- */
 export function getTruncationForRole(config: CrewConfig, role: string): MaxOutputConfig {
   switch (role) {
     case "planner": return config.truncation.planners;

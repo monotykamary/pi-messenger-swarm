@@ -36,6 +36,7 @@ export interface Task {
   id: string;                    // task-N format
   title: string;
   status: TaskStatus;
+  model?: string;
   depends_on: string[];          // Task IDs this depends on
   created_at: string;            // ISO timestamp
   updated_at: string;            // ISO timestamp
@@ -91,6 +92,7 @@ export interface CrewParams {
   // Work options
   autonomous?: boolean;
   concurrency?: number;
+  model?: string;
 
   // Task reset
   cascade?: boolean;
@@ -131,6 +133,8 @@ export interface ReviewResult {
 export interface AgentTask {
   agent: string;
   task: string;
+  taskId?: string;
+  modelOverride?: string;
   maxOutput?: MaxOutputConfig;
 }
 
@@ -141,6 +145,8 @@ export interface AgentResult {
   truncated: boolean;
   progress: AgentProgress;
   config?: CrewAgentConfig;
+  taskId?: string;
+  wasGracefullyShutdown?: boolean;
   error?: string;
   artifactPaths?: {
     input: string;

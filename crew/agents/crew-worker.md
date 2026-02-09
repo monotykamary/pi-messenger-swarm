@@ -85,6 +85,15 @@ pi_messenger({
 })
 ```
 
+## Shutdown Handling
+
+If you receive a message saying "SHUTDOWN REQUESTED":
+1. Stop what you're doing
+2. Release reservations: `pi_messenger({ action: "release" })`
+3. Do NOT mark the task as done — leave it as in_progress for retry
+4. Do NOT commit anything
+5. Exit immediately
+
 ## Important Rules
 
 - ALWAYS join first, before any other pi_messenger calls

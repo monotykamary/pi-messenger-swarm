@@ -10,13 +10,14 @@ export interface AgentProgress {
   currentTool?: string;
   currentToolArgs?: string;
   recentTools: Array<{ tool: string; args: string; endMs: number }>;
+  toolCallCount: number;
   tokens: number;
   durationMs: number;
   error?: string;
 }
 
 // Event types from pi's --mode json output
-interface PiEvent {
+export interface PiEvent {
   type: string;
   toolName?: string;
   args?: Record<string, unknown>;
@@ -34,6 +35,7 @@ export function createProgress(agent: string): AgentProgress {
     agent,
     status: "pending",
     recentTools: [],
+    toolCallCount: 0,
     tokens: 0,
     durationMs: 0,
   };
@@ -59,6 +61,7 @@ export function updateProgress(progress: AgentProgress, event: PiEvent, startTim
       break;
 
     case "tool_execution_end":
+      progress.toolCallCount++;
       if (progress.currentTool) {
         progress.recentTools.unshift({
           tool: progress.currentTool,

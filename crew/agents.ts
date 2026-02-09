@@ -11,13 +11,14 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { discoverCrewAgents, type CrewAgentConfig } from "./utils/discover.js";
-import { truncateOutput, type MaxOutputConfig } from "./utils/truncate.js";
+import { truncateOutput } from "./utils/truncate.js";
 import {
   createProgress,
   parseJsonlLine,
   updateProgress,
   getFinalOutput,
-  type AgentProgress
+  type AgentProgress,
+  type PiEvent,
 } from "./utils/progress.js";
 import {
   getArtifactPaths,
@@ -27,6 +28,7 @@ import {
   appendJsonl
 } from "./utils/artifacts.js";
 import { loadCrewConfig, getTruncationForRole, type CrewConfig } from "./utils/config.js";
+import { removeLiveWorker, updateLiveWorker } from "./live-progress.js";
 import type { AgentTask, AgentResult } from "./types.js";
 
 // Extension directory (parent of crew/) - passed to subagents so they can use pi_messenger
@@ -39,7 +41,54 @@ export interface SpawnOptions {
   onProgress?: (results: AgentResult[]) => void;
   crewDir?: string;
   signal?: AbortSignal;
+  messengerDirs?: { registry: string; inbox: string };
 }
+
+export function resolveModel(
+  taskModel?: string,
+  paramModel?: string,
+  configModel?: string,
+  agentModel?: string,
+): string | undefined {
+  return taskModel ?? paramModel ?? configModel ?? agentModel;
+}
+
+export function raceTimeout(promise: Promise<void>, ms: number): Promise<boolean> {
+  return new Promise<boolean>(resolve => {
+    const timer = setTimeout(() => resolve(false), ms);
+    promise.then(
+      () => {
+        clearTimeout(timer);
+        resolve(true);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(false);
+      },
+    );
+  });
+}
+
+function discoverWorkerName(
+  pid: number | undefined,
+  registryDir: string | undefined
+): string | null {
+  if (!pid || !registryDir || !fs.existsSync(registryDir)) return null;
+  try {
+    for (const file of fs.readdirSync(registryDir)) {
+      if (!file.endsWith(".json")) continue;
+      const reg = JSON.parse(fs.readFileSync(path.join(registryDir, file), "utf-8"));
+      if (reg.pid === pid) return reg.name;
+    }
+  } catch {}
+  return null;
+}
+
+const SHUTDOWN_MESSAGE = `⚠️ SHUTDOWN REQUESTED: Please wrap up your current work.
+1. Release any file reservations
+2. If the task is not complete, leave it as in_progress (do NOT mark done)
+3. Do NOT commit anything
+4. Exit`;
 
 /**
  * Spawn multiple agents in parallel with concurrency limit.
@@ -66,7 +115,10 @@ export async function spawnAgents(
   const running: Promise<void>[] = [];
 
   while (queue.length > 0 || running.length > 0) {
+    if (options.signal?.aborted && running.length === 0) break;
+
     while (running.length < concurrency && queue.length > 0) {
+      if (options.signal?.aborted) break;
       const { task, index } = queue.shift()!;
       const promise = runAgent(task, index, cwd, agents, config, runId, artifactsDir, options)
         .then(result => {
@@ -78,6 +130,7 @@ export async function spawnAgents(
     }
     if (running.length > 0) {
       await Promise.race(running);
+      if (options.signal?.aborted) continue;
     }
   }
 
@@ -117,7 +170,8 @@ async function runAgent(
   return new Promise((resolve) => {
     // Build args for pi command
     const args = ["--mode", "json", "--no-session", "-p"];
-    if (agentConfig?.model) args.push("--model", agentConfig.model);
+    const model = task.modelOverride ?? agentConfig?.model;
+    if (model) args.push("--model", model);
 
     if (agentConfig?.tools?.length) {
       const builtinTools: string[] = [];
@@ -151,10 +205,21 @@ async function runAgent(
 
     args.push(task.task);
 
-    const proc = spawn("pi", args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    const envOverrides = config.work.env ?? {};
+    const env = Object.keys(envOverrides).length > 0
+      ? { ...process.env, ...envOverrides }
+      : undefined;
+
+    const proc = spawn("pi", args, {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+      ...(env ? { env } : {}),
+    });
+    let gracefulShutdownRequested = false;
+    let discoveredWorkerName: string | null = null;
 
     let jsonlBuffer = "";
-    const events: unknown[] = [];
+    const events: PiEvent[] = [];
 
     proc.stdout?.on("data", (data) => {
       jsonlBuffer += data.toString();
@@ -167,6 +232,17 @@ async function runAgent(
           events.push(event);
           updateProgress(progress, event, startTime);
           if (artifactPaths) appendJsonl(artifactPaths.jsonlPath, line);
+          if (task.taskId) {
+            updateLiveWorker(cwd, task.taskId, {
+              taskId: task.taskId,
+              agent: task.agent,
+              progress: {
+                ...progress,
+                recentTools: progress.recentTools.map(tool => ({ ...tool })),
+              },
+              startedAt: startTime,
+            });
+          }
         }
       }
     });
@@ -175,12 +251,13 @@ async function runAgent(
     proc.stderr?.on("data", (data) => { stderr += data.toString(); });
 
     proc.on("close", (code) => {
+      if (task.taskId) removeLiveWorker(cwd, task.taskId);
       progress.status = code === 0 ? "completed" : "failed";
       progress.durationMs = Date.now() - startTime;
       if (stderr && code !== 0) progress.error = stderr;
 
       // Get final output from events
-      const fullOutput = getFinalOutput(events as any[]);
+      const fullOutput = getFinalOutput(events);
       const truncation = truncateOutput(fullOutput, maxOutput, artifactPaths?.outputPath);
 
       // Write output artifact (untruncated)
@@ -209,6 +286,8 @@ async function runAgent(
         truncated: truncation.truncated,
         progress,
         config: agentConfig,
+        taskId: task.taskId,
+        wasGracefullyShutdown: gracefulShutdownRequested,
         error: progress.error,
         artifactPaths: artifactPaths ? {
           input: artifactPaths.inputPath,
@@ -217,16 +296,66 @@ async function runAgent(
           metadata: artifactPaths.metadataPath,
         } : undefined,
       });
+
+      if (gracefulShutdownRequested && discoveredWorkerName && options.messengerDirs?.registry) {
+        try {
+          fs.unlinkSync(path.join(options.messengerDirs.registry, `${discoveredWorkerName}.json`));
+        } catch {}
+      }
     });
 
     // Handle abort signal
     if (options.signal) {
-      const kill = () => {
-        proc.kill("SIGTERM");
-        setTimeout(() => !proc.killed && proc.kill("SIGKILL"), 3000);
+      const gracefulShutdown = async () => {
+        gracefulShutdownRequested = true;
+
+        let messageSent = false;
+        discoveredWorkerName = discoverWorkerName(proc.pid, options.messengerDirs?.registry);
+        if (discoveredWorkerName && options.messengerDirs) {
+          try {
+            const inboxDir = path.join(options.messengerDirs.inbox, discoveredWorkerName);
+            if (fs.existsSync(inboxDir)) {
+              const msgFile = path.join(inboxDir, `${Date.now()}-shutdown.json`);
+              fs.writeFileSync(msgFile, JSON.stringify({
+                id: randomUUID(),
+                from: "crew-orchestrator",
+                to: discoveredWorkerName,
+                text: SHUTDOWN_MESSAGE,
+                timestamp: new Date().toISOString(),
+                replyTo: null,
+              }));
+              messageSent = true;
+            }
+          } catch {}
+        }
+
+        if (messageSent) {
+          const graceMs = config.work.shutdownGracePeriodMs ?? 30000;
+          const exitPromise = new Promise<void>(r => proc.once("exit", () => r()));
+          const exited = await raceTimeout(exitPromise, graceMs);
+          if (exited) return;
+        }
+
+        if (!proc.killed && proc.exitCode === null) {
+          proc.kill("SIGTERM");
+          const termPromise = new Promise<void>(r => proc.once("exit", () => r()));
+          const killed = await raceTimeout(termPromise, 5000);
+          if (killed) return;
+        } else {
+          return;
+        }
+
+        if (!proc.killed && proc.exitCode === null) {
+          proc.kill("SIGKILL");
+        }
       };
-      if (options.signal.aborted) kill();
-      else options.signal.addEventListener("abort", kill, { once: true });
+      if (options.signal.aborted) {
+        gracefulShutdown().catch(() => {});
+      } else {
+        options.signal.addEventListener("abort", () => {
+          gracefulShutdown().catch(() => {});
+        }, { once: true });
+      }
     }
   });
 }

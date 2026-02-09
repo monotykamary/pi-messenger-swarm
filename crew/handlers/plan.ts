@@ -8,7 +8,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import type { MessengerState, Dirs } from "../../lib.js";
 import type { CrewParams } from "../types.js";
 import { result } from "../utils/result.js";
 import { spawnAgents } from "../agents.js";
@@ -108,8 +107,6 @@ function appendReviewToProgress(
 
 export async function execute(
   params: CrewParams,
-  _state: MessengerState,
-  _dirs: Dirs,
   ctx: ExtensionContext
 ) {
   const cwd = ctx.cwd ?? process.cwd();
@@ -185,7 +182,8 @@ export async function execute(
 
     const [plannerResult] = await spawnAgents([{
       agent: PLANNER_AGENT,
-      task: plannerPrompt
+      task: plannerPrompt,
+      modelOverride: config.models?.planner,
     }], 1, cwd);
 
     if (plannerResult.exitCode !== 0) {
@@ -219,7 +217,8 @@ export async function execute(
 
     const [reviewResult] = await spawnAgents([{
       agent: "crew-reviewer",
-      task: reviewPrompt
+      task: reviewPrompt,
+      modelOverride: config.models?.reviewer,
     }], 1, cwd);
 
     if (reviewResult.exitCode !== 0) {

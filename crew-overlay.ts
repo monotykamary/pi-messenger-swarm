@@ -10,6 +10,7 @@ import type { Theme } from "@mariozechner/pi-coding-agent";
 import * as crewStore from "./crew/store.js";
 import { autonomousState } from "./crew/state.js";
 import type { Task } from "./crew/types.js";
+import { getLiveWorkers, type LiveWorkerInfo } from "./crew/live-progress.js";
 
 // Status icons
 const STATUS_ICONS: Record<string, string> = {
@@ -49,9 +50,9 @@ export function renderCrewContent(
   }
 
   const tasks = crewStore.getTasks(cwd);
+  const workers = getLiveWorkers(cwd);
   
   // Header: PRD with progress
-  const pct = plan.task_count > 0 ? Math.round((plan.completed_count / plan.task_count) * 100) : 0;
   const progressText = `[${plan.completed_count}/${plan.task_count}]`;
   const prdLine = `📋 ${plan.prd}`;
   const prdWidth = visibleWidth(prdLine);
@@ -61,13 +62,42 @@ export function renderCrewContent(
   lines.push(prdLine + " ".repeat(padding) + theme.fg("accent", progressText));
   lines.push("");
 
+  if (workers.size > 0) {
+    lines.push(theme.fg("dim", "─".repeat(Math.min(width, 40)) + " Active Workers"));
+
+    for (const [taskId, info] of workers) {
+      const activity = info.progress.currentTool
+        ? `${info.progress.currentTool}${info.progress.currentToolArgs ? ` ${info.progress.currentToolArgs}` : ""}`
+        : "thinking...";
+      const calls = `${info.progress.toolCallCount} calls`;
+      const tokens = info.progress.tokens > 1000
+        ? `${(info.progress.tokens / 1000).toFixed(0)}k tokens`
+        : `${info.progress.tokens} tokens`;
+      const elapsed = `${Math.floor((Date.now() - info.startedAt) / 1000)}s`;
+
+      const line = ` ⚡ ${taskId}: ${activity}`;
+      const stats = `${calls}  ${tokens}  ${elapsed}`;
+      lines.push(truncateToWidth(line + "  " + theme.fg("dim", stats), width));
+    }
+
+    lines.push(theme.fg("dim", "─".repeat(Math.min(width, 40))));
+    lines.push("");
+  }
+
   // Task list
+  const taskListStartLine = lines.length;
   if (tasks.length === 0) {
     lines.push(theme.fg("dim", "  (no tasks yet)"));
   } else {
     for (let i = 0; i < tasks.length; i++) {
       const task = tasks[i];
-      const taskLine = renderTaskLine(theme, task, i === viewState.selectedTaskIndex, width);
+      const taskLine = renderTaskLine(
+        theme,
+        task,
+        i === viewState.selectedTaskIndex,
+        width,
+        workers.get(task.id),
+      );
       lines.push(taskLine);
     }
   }
@@ -83,16 +113,22 @@ export function renderCrewContent(
 
   // Handle scrolling if content exceeds height
   if (lines.length > height) {
-    const startIdx = Math.min(viewState.scrollOffset, lines.length - height);
-    return lines.slice(startIdx, startIdx + height);
+    // Auto-scroll to keep the selected task visible
+    if (tasks.length > 0) {
+      const selectedLine = taskListStartLine + Math.min(viewState.selectedTaskIndex, tasks.length - 1);
+      if (selectedLine < viewState.scrollOffset) {
+        viewState.scrollOffset = selectedLine;
+      } else if (selectedLine >= viewState.scrollOffset + height) {
+        viewState.scrollOffset = selectedLine - height + 1;
+      }
+    }
+    viewState.scrollOffset = Math.max(0, Math.min(viewState.scrollOffset, lines.length - height));
+    return lines.slice(viewState.scrollOffset, viewState.scrollOffset + height);
   }
 
   return lines.slice(0, height);
 }
 
-/**
- * Render the status bar for autonomous mode.
- */
 export function renderCrewStatusBar(theme: Theme, cwd: string, width: number): string {
   const plan = crewStore.getPlan(cwd);
   
@@ -168,7 +204,8 @@ function renderTaskLine(
   theme: Theme,
   task: Task,
   isSelected: boolean,
-  width: number
+  width: number,
+  liveWorker?: LiveWorkerInfo
 ): string {
   const icon = STATUS_ICONS[task.status] ?? "?";
   const selectIndicator = isSelected ? theme.fg("accent", "▸ ") : "  ";
@@ -191,7 +228,12 @@ function renderTaskLine(
 
   // Build task suffix (assigned agent or dependencies)
   let suffix = "";
-  if (task.status === "in_progress" && task.assigned_to) {
+  if (task.status === "in_progress" && liveWorker) {
+    const activity = liveWorker.progress.currentTool
+      ? `${liveWorker.progress.currentTool}${liveWorker.progress.currentToolArgs ? ` ${liveWorker.progress.currentToolArgs}` : ""}`
+      : "thinking...";
+    suffix = ` (${activity})`;
+  } else if (task.status === "in_progress" && task.assigned_to) {
     suffix = ` (${task.assigned_to})`;
   } else if (task.status === "todo" && task.depends_on.length > 0) {
     suffix = ` → deps: ${task.depends_on.join(", ")}`;
@@ -219,9 +261,6 @@ function renderLegend(theme: Theme, width: number): string {
   return truncateToWidth(theme.fg("dim", legend), width);
 }
 
-/**
- * Navigate to next/prev task.
- */
 export function navigateTask(viewState: CrewViewState, direction: 1 | -1, taskCount: number): void {
   if (taskCount === 0) return;
   viewState.selectedTaskIndex = Math.max(
@@ -229,5 +268,3 @@ export function navigateTask(viewState: CrewViewState, direction: 1 | -1, taskCo
     Math.min(taskCount - 1, viewState.selectedTaskIndex + direction)
   );
 }
-
-

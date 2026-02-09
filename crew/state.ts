@@ -17,7 +17,6 @@ export interface AutonomousState {
   active: boolean;
   cwd: string | null;
   waveNumber: number;
-  attemptsPerTask: Record<string, number>;
   waveHistory: WaveResult[];
   startedAt: string | null;
   stoppedAt: string | null;
@@ -33,52 +32,37 @@ export const autonomousState: AutonomousState = {
   active: false,
   cwd: null,
   waveNumber: 0,
-  attemptsPerTask: {},
   waveHistory: [],
   startedAt: null,
   stoppedAt: null,
   stopReason: null,
 };
 
-/**
- * Start autonomous mode.
- */
 export function startAutonomous(cwd: string): void {
   autonomousState.active = true;
   autonomousState.cwd = cwd;
   autonomousState.waveNumber = 1;
-  autonomousState.attemptsPerTask = {};
   autonomousState.waveHistory = [];
   autonomousState.startedAt = new Date().toISOString();
   autonomousState.stoppedAt = null;
   autonomousState.stopReason = null;
 }
 
-/**
- * Stop autonomous mode.
- */
 export function stopAutonomous(reason: "completed" | "blocked" | "manual"): void {
   autonomousState.active = false;
   autonomousState.stoppedAt = new Date().toISOString();
   autonomousState.stopReason = reason;
 }
 
-/**
- * Add a wave result to history.
- */
 export function addWaveResult(result: WaveResult): void {
   autonomousState.waveHistory.push(result);
   autonomousState.waveNumber++;
 }
 
-/**
- * Restore autonomous state from session data.
- */
 export function restoreAutonomousState(data: Partial<AutonomousState>): void {
   if (data.active !== undefined) autonomousState.active = data.active;
   if (data.cwd !== undefined) autonomousState.cwd = data.cwd;
   if (data.waveNumber !== undefined) autonomousState.waveNumber = data.waveNumber;
-  if (data.attemptsPerTask !== undefined) autonomousState.attemptsPerTask = data.attemptsPerTask;
   if (data.waveHistory !== undefined) autonomousState.waveHistory = data.waveHistory;
   if (data.startedAt !== undefined) autonomousState.startedAt = data.startedAt;
   if (data.stoppedAt !== undefined) autonomousState.stoppedAt = data.stoppedAt;
