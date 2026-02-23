@@ -92,6 +92,22 @@ describe("renderFeedSection (pure formatter)", () => {
     expect(joined).toContain("refreshTokenRotation");
   });
 
+  it("sanitizes embedded newlines in message previews", () => {
+    const events: FeedEvent[] = [{
+      ts: "2026-01-01T00:01:00Z",
+      agent: "EpicGrove",
+      type: "message",
+      target: "OakBear",
+      preview: "Step one\nStep two\nStep three",
+    }];
+    const lines = renderFeedSection(mockTheme as any, events, 50, null);
+    const joined = lines.join(" ");
+    expect(joined).toContain("Step one Step two Step three");
+    for (const line of lines) {
+      expect(line).not.toContain("\n");
+    }
+  });
+
   it("renders broadcast message events with ✦ indicator", () => {
     const events: FeedEvent[] = [{
       ts: "2026-01-01T00:01:00Z",

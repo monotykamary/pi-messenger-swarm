@@ -3,7 +3,7 @@
  */
 
 import type { Component, Focusable, TUI } from "@mariozechner/pi-tui";
-import { matchesKey, visibleWidth } from "@mariozechner/pi-tui";
+import { matchesKey, truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 import type { Theme } from "@mariozechner/pi-coding-agent";
 import {
   extractFolder,
@@ -553,7 +553,14 @@ export class MessengerOverlay implements Component, Focusable {
     const sectionW = innerW - 2;
     const border = (s: string) => this.theme.fg("dim", s);
     const pad = (s: string, len: number) => s + " ".repeat(Math.max(0, len - visibleWidth(s)));
-    const row = (content: string) => border("│") + pad(" " + content, innerW) + border("│");
+    const sanitizeRowContent = (content: string) => content
+      .replaceAll("\r", " ")
+      .replaceAll("\n", " ")
+      .replaceAll("\t", " ");
+    const row = (content: string) => {
+      const safe = truncateToWidth(sanitizeRowContent(content), sectionW);
+      return border("│") + pad(" " + safe, innerW) + border("│");
+    };
     const emptyRow = () => border("│") + " ".repeat(innerW) + border("│");
     const sectionSeparator = this.theme.fg("dim", "─".repeat(sectionW));
 

@@ -112,6 +112,23 @@ describe("feed", () => {
     expect(line.length).toBeLessThan(200);
   });
 
+  it("normalizes multiline preview text into a single line", () => {
+    logFeedEvent(cwd, "AgentOne", "message", "Peer", "Line one\nLine two\tLine three");
+
+    const events = readFeedEvents(cwd, 20);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.preview).toBe("Line one Line two Line three");
+
+    const line = formatFeedLine({
+      ts: new Date("2026-02-13T10:00:00.000Z").toISOString(),
+      agent: "AgentOne",
+      type: "commit",
+      preview: "feat(scope): add thing\n\nBody details",
+    });
+    expect(line).toContain("feat(scope): add thing Body details");
+    expect(line).not.toContain("\n");
+  });
+
   it("returns an empty array when the feed file does not exist", () => {
     const freshCwd = createTempCrewDirs().cwd;
     expect(readFeedEvents(freshCwd, 20)).toEqual([]);

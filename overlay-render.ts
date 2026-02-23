@@ -27,7 +27,7 @@ import {
 import type { Task } from "./crew/types.js";
 import { getLiveWorkers, type LiveWorkerInfo } from "./crew/live-progress.js";
 import type { ToolEntry } from "./crew/utils/progress.js";
-import { formatFeedLine as sharedFormatFeedLine, type FeedEvent } from "./feed.js";
+import { formatFeedLine as sharedFormatFeedLine, sanitizeFeedEvent, type FeedEvent } from "./feed.js";
 import { discoverCrewAgents } from "./crew/utils/discover.js";
 import { loadConfig } from "./config.js";
 import { loadCrewConfig } from "./crew/utils/config.js";
@@ -224,18 +224,19 @@ export function renderFeedSection(theme: Theme, events: FeedEvent[], width: numb
   let lastWasMessage = false;
 
   for (const event of events) {
-    const isNew = lastSeenTs === null || event.ts > lastSeenTs;
-    const isMessage = event.type === "message";
+    const sanitized = sanitizeFeedEvent(event);
+    const isNew = lastSeenTs === null || sanitized.ts > lastSeenTs;
+    const isMessage = sanitized.type === "message";
 
     if (lines.length > 0 && isMessage !== lastWasMessage) {
       lines.push(theme.fg("dim", "  ·"));
     }
 
     if (isMessage) {
-      lines.push(...renderMessageLines(theme, event, width));
+      lines.push(...renderMessageLines(theme, sanitized, width));
     } else {
-      const formatted = sharedFormatFeedLine(event);
-      const dimmed = DIM_EVENTS.has(event.type) || !isNew;
+      const formatted = sharedFormatFeedLine(sanitized);
+      const dimmed = DIM_EVENTS.has(sanitized.type) || !isNew;
       lines.push(truncateToWidth(dimmed ? theme.fg("dim", formatted) : formatted, width));
     }
     lastWasMessage = isMessage;
