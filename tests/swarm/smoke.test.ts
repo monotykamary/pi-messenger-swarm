@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { MessengerState, Dirs } from "../../lib.js";
-import { executeCrewAction } from "../../crew/index.js";
+import { executeAction } from "../../router.js";
 import { createMockContext } from "../helpers/mock-context.js";
 
 const roots = new Set<string>();
@@ -66,19 +66,19 @@ describe("swarm smoke", () => {
     const alpha = createState("Alpha");
     const beta = createState("Beta");
 
-    const created = await executeCrewAction("task.create", { title: "Smoke task", content: "End-to-end" }, alpha, dirs, ctx, () => {}, () => {}, () => {});
+    const created = await executeAction("task.create", { title: "Smoke task", content: "End-to-end" }, alpha, dirs, ctx, () => {}, () => {}, () => {});
     expect(created.content[0]?.text).toContain("task-1");
 
-    const alphaClaim = await executeCrewAction("task.claim", { id: "task-1" }, alpha, dirs, ctx, () => {}, () => {}, () => {});
+    const alphaClaim = await executeAction("task.claim", { id: "task-1" }, alpha, dirs, ctx, () => {}, () => {}, () => {});
     expect(alphaClaim.content[0]?.text).toContain("Claimed task-1");
 
-    const betaClaim = await executeCrewAction("task.claim", { id: "task-1" }, beta, dirs, ctx, () => {}, () => {}, () => {});
+    const betaClaim = await executeAction("task.claim", { id: "task-1" }, beta, dirs, ctx, () => {}, () => {}, () => {});
     expect(betaClaim.content[0]?.text).toContain("already claimed");
 
-    const done = await executeCrewAction("task.done", { id: "task-1", summary: "completed by alpha" }, alpha, dirs, ctx, () => {}, () => {}, () => {});
+    const done = await executeAction("task.done", { id: "task-1", summary: "completed by alpha" }, alpha, dirs, ctx, () => {}, () => {}, () => {});
     expect(done.content[0]?.text).toContain("Completed task-1");
 
-    const swarm = await executeCrewAction("swarm", {}, alpha, dirs, ctx, () => {}, () => {}, () => {});
+    const swarm = await executeAction("swarm", {}, alpha, dirs, ctx, () => {}, () => {}, () => {});
     expect(swarm.content[0]?.text).toContain("Summary");
     expect(swarm.content[0]?.text).toContain("1/1 done");
   });

@@ -23,11 +23,9 @@ import {
   agentHasTask,
 } from "./lib.js";
 import * as store from "./store.js";
-import * as crewStore from "./crew/store.js";
 import * as swarmStore from "./swarm/store.js";
 import { getAutoRegisterPaths, saveAutoRegisterPaths, matchesAutoRegisterPath } from "./config.js";
-import { readFeedEvents, logFeedEvent, pruneFeed, formatFeedLine, isCrewEvent, type FeedEvent } from "./feed.js";
-import { loadCrewConfig } from "./crew/utils/config.js";
+import { readFeedEvents, logFeedEvent, pruneFeed, formatFeedLine, isSwarmEvent, type FeedEvent } from "./feed.js";
 
 let messagesSentThisSession = 0;
 
@@ -271,19 +269,17 @@ export function executeSend(
     );
   }
 
-  const crewDir = crewStore.getCrewDir(cwd);
-  const crewConfig = loadCrewConfig(crewDir);
-  const budget = crewConfig.messageBudgets?.[crewConfig.coordination] ?? 10;
+  const budget = 10;
   if (messagesSentThisSession >= budget) {
     return result(
-      `Message budget reached (${messagesSentThisSession}/${budget} for ${crewConfig.coordination} level). Focus on your task.`,
+      `Message budget reached (${messagesSentThisSession}/${budget}). Focus on your current objective.`,
       { mode: "send", error: "budget_exceeded" }
     );
   }
 
   let recipients: string[];
   if (broadcast) {
-    if (process.env.PI_CREW_WORKER) {
+    if (process.env.PI_SWARM_SPAWNED) {
       messagesSentThisSession++;
       const preview = message.length > 200 ? message.slice(0, 197) + "..." : message;
       logFeedEvent(cwd, state.agentName, "message", undefined, preview);
@@ -780,13 +776,13 @@ export function executeSetStatus(
 export function executeFeed(
   cwd: string,
   limit?: number,
-  crewEventsInFeed: boolean = true
+  swarmEventsInFeed: boolean = true
 ) {
   const effectiveLimit = limit ?? 20;
   let events: FeedEvent[];
-  if (!crewEventsInFeed) {
+  if (!swarmEventsInFeed) {
     events = readFeedEvents(cwd, effectiveLimit * 2);
-    events = events.filter(e => !isCrewEvent(e.type));
+    events = events.filter(e => !isSwarmEvent(e.type));
     events = events.slice(-effectiveLimit);
   } else {
     events = readFeedEvents(cwd, effectiveLimit);

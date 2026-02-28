@@ -7,8 +7,7 @@ import { logFeedEvent } from "./feed.js";
 import * as swarmStore from "./swarm/store.js";
 import { executeTaskAction as runTaskAction } from "./swarm/task-actions.js";
 import type { SwarmTask as Task } from "./swarm/types.js";
-import { getLiveWorkers } from "./crew/live-progress.js";
-import { hasActiveWorker } from "./crew/registry.js";
+import { getLiveWorkers } from "./swarm/live-progress.js";
 
 interface ConfirmAction {
   type: "reset" | "cascade-reset" | "delete" | "archive";
@@ -16,7 +15,7 @@ interface ConfirmAction {
   label: string;
 }
 
-export interface CrewViewState {
+export interface MessengerViewState {
   scrollOffset: number;
   selectedTaskIndex: number;
   selectedSwarmIndex: number;
@@ -28,9 +27,7 @@ export interface CrewViewState {
   confirmAction: ConfirmAction | null;
   blockReasonInput: string;
   messageInput: string;
-  inputMode: "normal" | "block-reason" | "message" | "revise-prompt";
-  reviseScope: "single" | "tree";
-  revisePromptInput: string;
+  inputMode: "normal" | "block-reason" | "message";
   lastSeenEventTs: string | null;
   notification: { message: string; expiresAt: number } | null;
   notificationTimer: ReturnType<typeof setTimeout> | null;
@@ -39,7 +36,7 @@ export interface CrewViewState {
   mentionIndex: number;
 }
 
-export function createCrewViewState(): CrewViewState {
+export function createMessengerViewState(): MessengerViewState {
   return {
     scrollOffset: 0,
     selectedTaskIndex: 0,
@@ -53,8 +50,6 @@ export function createCrewViewState(): CrewViewState {
     blockReasonInput: "",
     messageInput: "",
     inputMode: "normal",
-    reviseScope: "single",
-    revisePromptInput: "",
     lastSeenEventTs: null,
     notification: null,
     notificationTimer: null,
@@ -65,7 +60,7 @@ export function createCrewViewState(): CrewViewState {
 }
 
 function hasLiveWorker(cwd: string, taskId: string): boolean {
-  return hasActiveWorker(cwd, taskId);
+  return getLiveWorkers(cwd).has(taskId);
 }
 
 function isPrintable(data: string): boolean {
@@ -98,7 +93,7 @@ function executeTaskAction(
   return { success: result.success, message: result.message };
 }
 
-export function setNotification(viewState: CrewViewState, tui: TUI, success: boolean, message: string): void {
+export function setNotification(viewState: MessengerViewState, tui: TUI, success: boolean, message: string): void {
   if (viewState.notificationTimer) clearTimeout(viewState.notificationTimer);
   viewState.notification = { message: `${success ? "✓" : "✗"} ${message}`, expiresAt: Date.now() + 2000 };
   viewState.notificationTimer = setTimeout(() => {
@@ -136,7 +131,7 @@ function previewText(text: string): string {
   return text.length > 200 ? `${text.slice(0, 197)}...` : text;
 }
 
-export function handleConfirmInput(data: string, viewState: CrewViewState, cwd: string, agentName: string, tui: TUI): void {
+export function handleConfirmInput(data: string, viewState: MessengerViewState, cwd: string, agentName: string, tui: TUI): void {
   const action = viewState.confirmAction;
   if (!action) return;
   if (matchesKey(data, "y")) {
@@ -163,7 +158,7 @@ export function handleConfirmInput(data: string, viewState: CrewViewState, cwd: 
 
 export function handleBlockReasonInput(
   data: string,
-  viewState: CrewViewState,
+  viewState: MessengerViewState,
   cwd: string,
   task: Task | undefined,
   agentName: string,
@@ -198,66 +193,7 @@ export function handleBlockReasonInput(
   }
 }
 
-export function handleRevisePromptInput(
-  data: string,
-  viewState: CrewViewState,
-  cwd: string,
-  task: Task | undefined,
-  agentName: string,
-  tui: TUI,
-): void {
-  if (matchesKey(data, "escape")) {
-    viewState.inputMode = "normal";
-    viewState.revisePromptInput = "";
-    tui.requestRender();
-    return;
-  }
-  if (matchesKey(data, "enter")) {
-    if (!task) return;
-    if (task.status === "in_progress") {
-      setNotification(viewState, tui, false, "Cannot revise in_progress task");
-      viewState.inputMode = "normal";
-      viewState.revisePromptInput = "";
-      tui.requestRender();
-      return;
-    }
-
-    const prompt = viewState.revisePromptInput.trim() || undefined;
-    const scope = viewState.reviseScope;
-    viewState.inputMode = "normal";
-    viewState.revisePromptInput = "";
-
-    const label = scope === "tree" ? `Revising ${task.id} + tree...` : `Revising ${task.id}...`;
-    setNotification(viewState, tui, true, label);
-
-    const vs = viewState;
-    const t = tui;
-    const fn = scope === "tree" ? "executeReviseTree" : "executeRevise";
-    import("./crew/handlers/revise.js")
-      .then(m => m[fn](cwd, task.id, prompt, agentName))
-      .then(result => {
-        setNotification(vs, t, result.success, result.message);
-      })
-      .catch(err => {
-        logFeedEvent(cwd, agentName, scope === "tree" ? "task.revise-tree" : "task.revise", task.id, `failed: ${err instanceof Error ? err.message : "unknown"}`);
-      });
-    tui.requestRender();
-    return;
-  }
-  if (matchesKey(data, "backspace")) {
-    if (viewState.revisePromptInput.length > 0) {
-      viewState.revisePromptInput = viewState.revisePromptInput.slice(0, -1);
-      tui.requestRender();
-    }
-    return;
-  }
-  if (isPrintable(data)) {
-    viewState.revisePromptInput += data;
-    tui.requestRender();
-  }
-}
-
-function resetMessageInput(viewState: CrewViewState): void {
+function resetMessageInput(viewState: MessengerViewState): void {
   viewState.inputMode = "normal";
   viewState.messageInput = "";
   viewState.mentionCandidates = [];
@@ -302,7 +238,7 @@ function sendDirectMessage(
   target: string,
   text: string,
   tui: TUI,
-  viewState: CrewViewState,
+  viewState: MessengerViewState,
 ): void {
   try {
     const msg = sendMessageToAgent(state, dirs, target, text);
@@ -324,7 +260,7 @@ function sendBroadcastMessage(
   cwd: string,
   text: string,
   tui: TUI,
-  viewState: CrewViewState,
+  viewState: MessengerViewState,
 ): void {
   const peers = getActiveAgents(state, dirs);
 
@@ -365,7 +301,7 @@ function sendBroadcastMessage(
 
 export function handleMessageInput(
   data: string,
-  viewState: CrewViewState,
+  viewState: MessengerViewState,
   state: MessengerState,
   dirs: Dirs,
   cwd: string,
@@ -452,10 +388,10 @@ export function handleMessageInput(
   }
 }
 
-export function handleCrewKeyBinding(
+export function handleTaskKeyBinding(
   data: string,
   task: Task,
-  viewState: CrewViewState,
+  viewState: MessengerViewState,
   cwd: string,
   agentName: string,
   tui: TUI,

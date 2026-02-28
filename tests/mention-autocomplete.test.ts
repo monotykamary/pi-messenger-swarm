@@ -13,7 +13,7 @@ vi.mock("@mariozechner/pi-tui", () => ({
   visibleWidth: (s: string) => s.length,
 }));
 
-import { createCrewViewState, handleMessageInput, type CrewViewState } from "../overlay-actions.js";
+import { createMessengerViewState, handleMessageInput, type MessengerViewState } from "../overlay-actions.js";
 import type { MessengerState, Dirs } from "../lib.js";
 import type { TUI } from "@mariozechner/pi-tui";
 
@@ -27,7 +27,7 @@ vi.mock("../store.js", () => ({
   getClaims: () => ({}),
 }));
 
-vi.mock("../crew/live-progress.js", () => ({
+vi.mock("../swarm/live-progress.js", () => ({
   getLiveWorkers: () => new Map([
     ["task-1", { name: "jade-elk", taskId: "task-1" }],
   ]),
@@ -38,10 +38,6 @@ vi.mock("../crew/live-progress.js", () => ({
 vi.mock("../feed.js", () => ({
   logFeedEvent: vi.fn(),
   readFeedEvents: () => [],
-}));
-
-vi.mock("../crew/registry.js", () => ({
-  hasActiveWorker: () => false,
 }));
 
 function makeState(): MessengerState {
@@ -56,26 +52,26 @@ function makeTui(): TUI {
   return { requestRender: vi.fn() } as unknown as TUI;
 }
 
-function sendTab(vs: CrewViewState, state: MessengerState, dirs: Dirs, tui: TUI) {
+function sendTab(vs: MessengerViewState, state: MessengerState, dirs: Dirs, tui: TUI) {
   handleMessageInput("\t", vs, state, dirs, "/tmp/cwd", tui);
 }
 
-function sendShiftTab(vs: CrewViewState, state: MessengerState, dirs: Dirs, tui: TUI) {
+function sendShiftTab(vs: MessengerViewState, state: MessengerState, dirs: Dirs, tui: TUI) {
   handleMessageInput("\x1b[Z", vs, state, dirs, "/tmp/cwd", tui);
 }
 
-function type(char: string, vs: CrewViewState, state: MessengerState, dirs: Dirs, tui: TUI) {
+function type(char: string, vs: MessengerViewState, state: MessengerState, dirs: Dirs, tui: TUI) {
   handleMessageInput(char, vs, state, dirs, "/tmp/cwd", tui);
 }
 
 describe("mention autocomplete", () => {
-  let vs: CrewViewState;
+  let vs: MessengerViewState;
   let state: MessengerState;
   let dirs: Dirs;
   let tui: TUI;
 
   beforeEach(() => {
-    vs = createCrewViewState();
+    vs = createMessengerViewState();
     vs.inputMode = "message";
     state = makeState();
     dirs = makeDirs();

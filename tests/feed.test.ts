@@ -1,14 +1,14 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import { formatFeedLine, isCrewEvent, logFeedEvent, pruneFeed, readFeedEvents } from "../feed.js";
-import { createTempCrewDirs } from "./helpers/temp-dirs.js";
+import { formatFeedLine, isSwarmEvent, logFeedEvent, pruneFeed, readFeedEvents } from "../feed.js";
+import { createTempMessengerDirs } from "./helpers/temp-dirs.js";
 
 describe("feed", () => {
   let cwd: string;
 
   beforeEach(() => {
-    cwd = createTempCrewDirs().cwd;
+    cwd = createTempMessengerDirs().cwd;
   });
 
   it("writes events to the project-scoped feed path", () => {
@@ -34,7 +34,7 @@ describe("feed", () => {
   });
 
   it("isolates feeds between project directories", () => {
-    const otherCwd = createTempCrewDirs().cwd;
+    const otherCwd = createTempMessengerDirs().cwd;
 
     logFeedEvent(cwd, "AgentOne", "join");
 
@@ -56,7 +56,7 @@ describe("feed", () => {
     expect(events[0]?.target).toBe("b.ts");
   });
 
-  it("formats planning events with previews and marks them as crew events", () => {
+  it("formats planning events with previews and marks them as swarm events", () => {
     const line = formatFeedLine({
       ts: new Date("2026-02-11T10:00:00.000Z").toISOString(),
       agent: "Planner",
@@ -65,12 +65,12 @@ describe("feed", () => {
       preview: "pass 2/3",
     });
 
-    expect(line).toContain("[Crew]");
+    expect(line).toContain("[Swarm]");
     expect(line).toContain("planning pass started");
     expect(line).toContain("pass 2/3");
-    expect(isCrewEvent("plan.pass.start")).toBe(true);
-    expect(isCrewEvent("plan.done")).toBe(true);
-    expect(isCrewEvent("message")).toBe(false);
+    expect(isSwarmEvent("plan.pass.start")).toBe(true);
+    expect(isSwarmEvent("plan.done")).toBe(true);
+    expect(isSwarmEvent("message")).toBe(false);
   });
 
   it("formats DM message events using target for direction", () => {
@@ -130,7 +130,7 @@ describe("feed", () => {
   });
 
   it("returns an empty array when the feed file does not exist", () => {
-    const freshCwd = createTempCrewDirs().cwd;
+    const freshCwd = createTempMessengerDirs().cwd;
     expect(readFeedEvents(freshCwd, 20)).toEqual([]);
   });
 });

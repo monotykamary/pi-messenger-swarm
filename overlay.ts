@@ -28,15 +28,15 @@ import {
   navigateSwarm,
 } from "./overlay-render.js";
 import {
-  createCrewViewState,
+  createMessengerViewState,
   handleConfirmInput,
   handleBlockReasonInput,
   handleMessageInput,
-  handleCrewKeyBinding,
+  handleTaskKeyBinding,
   setNotification,
-  type CrewViewState,
+  type MessengerViewState,
 } from "./overlay-actions.js";
-import { getLiveWorkers, hasLiveWorkers, onLiveWorkersChanged } from "./crew/live-progress.js";
+import { getLiveWorkers, hasLiveWorkers, onLiveWorkersChanged } from "./swarm/live-progress.js";
 import { listSpawned } from "./swarm/spawn.js";
 import { loadConfig } from "./config.js";
 
@@ -72,7 +72,7 @@ export class MessengerOverlay implements Component, Focusable {
   }
   focused = false;
 
-  private crewViewState: CrewViewState = createCrewViewState();
+  private viewState: MessengerViewState = createMessengerViewState();
   private cwd: string;
   private stuckThresholdMs: number;
   private progressTimer: ReturnType<typeof setInterval> | null = null;
@@ -143,26 +143,26 @@ export class MessengerOverlay implements Component, Focusable {
       return;
     }
 
-    if (this.crewViewState.confirmAction) {
-      handleConfirmInput(data, this.crewViewState, this.cwd, this.state.agentName, this.tui);
+    if (this.viewState.confirmAction) {
+      handleConfirmInput(data, this.viewState, this.cwd, this.state.agentName, this.tui);
       return;
     }
 
-    if (this.crewViewState.inputMode === "block-reason") {
+    if (this.viewState.inputMode === "block-reason") {
       const tasks = swarmStore.getTasks(this.cwd);
-      const task = tasks[this.crewViewState.selectedTaskIndex];
-      handleBlockReasonInput(data, this.crewViewState, this.cwd, task as Task | undefined, this.state.agentName, this.tui);
+      const task = tasks[this.viewState.selectedTaskIndex];
+      handleBlockReasonInput(data, this.viewState, this.cwd, task as Task | undefined, this.state.agentName, this.tui);
       return;
     }
 
-    if (this.crewViewState.inputMode === "message") {
-      handleMessageInput(data, this.crewViewState, this.state, this.dirs, this.cwd, this.tui);
+    if (this.viewState.inputMode === "message") {
+      handleMessageInput(data, this.viewState, this.state, this.dirs, this.cwd, this.tui);
       return;
     }
 
     if (matchesKey(data, "escape")) {
-      if (this.crewViewState.mode === "detail") {
-        this.crewViewState.mode = "list";
+      if (this.viewState.mode === "detail") {
+        this.viewState.mode = "list";
         this.tui.requestRender();
       } else {
         this.done();
@@ -171,17 +171,17 @@ export class MessengerOverlay implements Component, Focusable {
     }
 
     if (data === "@" || matchesKey(data, "m")) {
-      this.crewViewState.inputMode = "message";
-      this.crewViewState.messageInput = data === "@" ? "@" : "";
+      this.viewState.inputMode = "message";
+      this.viewState.messageInput = data === "@" ? "@" : "";
       this.tui.requestRender();
       return;
     }
 
     if (matchesKey(data, "f")) {
-      if (this.crewViewState.mode === "detail") {
-        this.crewViewState.mode = "list";
+      if (this.viewState.mode === "detail") {
+        this.viewState.mode = "list";
       }
-      this.crewViewState.mainView = this.crewViewState.mainView === "tasks" ? "swarm" : "tasks";
+      this.viewState.mainView = this.viewState.mainView === "tasks" ? "swarm" : "tasks";
       this.tui.requestRender();
       return;
     }
@@ -189,153 +189,153 @@ export class MessengerOverlay implements Component, Focusable {
     // Feed scrolling: PgUp/PgDn by chunk.
     // Mac-friendly fallbacks: ^U/^D and common terminal escape sequences.
     if (isFeedPageUpKey(data)) {
-      this.crewViewState.feedScrollOffset += 5;
+      this.viewState.feedScrollOffset += 5;
       this.tui.requestRender();
       return;
     }
     if (isFeedPageDownKey(data)) {
-      this.crewViewState.feedScrollOffset = Math.max(0, this.crewViewState.feedScrollOffset - 5);
+      this.viewState.feedScrollOffset = Math.max(0, this.viewState.feedScrollOffset - 5);
       this.tui.requestRender();
       return;
     }
 
     const tasks = swarmStore.getTasks(this.cwd);
     const spawned = listSpawned(this.cwd);
-    const task = tasks[this.crewViewState.selectedTaskIndex];
-    const swarmAgent = spawned[this.crewViewState.selectedSwarmIndex];
+    const task = tasks[this.viewState.selectedTaskIndex];
+    const swarmAgent = spawned[this.viewState.selectedSwarmIndex];
 
     if (matchesKey(data, "right")) {
-      if (this.crewViewState.mode === "detail") {
-        if (this.crewViewState.mainView === "swarm") {
-          navigateSwarm(this.crewViewState, 1, spawned.length);
-          this.crewViewState.detailAutoScroll = false;
+      if (this.viewState.mode === "detail") {
+        if (this.viewState.mainView === "swarm") {
+          navigateSwarm(this.viewState, 1, spawned.length);
+          this.viewState.detailAutoScroll = false;
         } else {
-          navigateTask(this.crewViewState, 1, tasks.length);
-          this.crewViewState.detailAutoScroll = true;
+          navigateTask(this.viewState, 1, tasks.length);
+          this.viewState.detailAutoScroll = true;
         }
-        this.crewViewState.detailScroll = 0;
+        this.viewState.detailScroll = 0;
         this.tui.requestRender();
       }
       return;
     }
 
     if (matchesKey(data, "left")) {
-      if (this.crewViewState.mode === "detail") {
-        if (this.crewViewState.mainView === "swarm") {
-          navigateSwarm(this.crewViewState, -1, spawned.length);
-          this.crewViewState.detailAutoScroll = false;
+      if (this.viewState.mode === "detail") {
+        if (this.viewState.mainView === "swarm") {
+          navigateSwarm(this.viewState, -1, spawned.length);
+          this.viewState.detailAutoScroll = false;
         } else {
-          navigateTask(this.crewViewState, -1, tasks.length);
-          this.crewViewState.detailAutoScroll = true;
+          navigateTask(this.viewState, -1, tasks.length);
+          this.viewState.detailAutoScroll = true;
         }
-        this.crewViewState.detailScroll = 0;
+        this.viewState.detailScroll = 0;
         this.tui.requestRender();
       }
       return;
     }
 
     if (matchesKey(data, "up")) {
-      if (this.crewViewState.mode === "detail") {
-        this.crewViewState.detailScroll = Math.max(0, this.crewViewState.detailScroll - 1);
-        this.crewViewState.detailAutoScroll = false;
-      } else if (this.crewViewState.mainView === "swarm") {
-        navigateSwarm(this.crewViewState, -1, spawned.length);
+      if (this.viewState.mode === "detail") {
+        this.viewState.detailScroll = Math.max(0, this.viewState.detailScroll - 1);
+        this.viewState.detailAutoScroll = false;
+      } else if (this.viewState.mainView === "swarm") {
+        navigateSwarm(this.viewState, -1, spawned.length);
       } else {
-        navigateTask(this.crewViewState, -1, tasks.length);
+        navigateTask(this.viewState, -1, tasks.length);
       }
       this.tui.requestRender();
       return;
     }
 
     if (matchesKey(data, "down")) {
-      if (this.crewViewState.mode === "detail") {
-        this.crewViewState.detailScroll++;
-        this.crewViewState.detailAutoScroll = false;
-      } else if (this.crewViewState.mainView === "swarm") {
-        navigateSwarm(this.crewViewState, 1, spawned.length);
+      if (this.viewState.mode === "detail") {
+        this.viewState.detailScroll++;
+        this.viewState.detailAutoScroll = false;
+      } else if (this.viewState.mainView === "swarm") {
+        navigateSwarm(this.viewState, 1, spawned.length);
       } else {
-        navigateTask(this.crewViewState, 1, tasks.length);
+        navigateTask(this.viewState, 1, tasks.length);
       }
       this.tui.requestRender();
       return;
     }
 
     if (matchesKey(data, "home")) {
-      if (this.crewViewState.mainView === "swarm") {
-        this.crewViewState.selectedSwarmIndex = 0;
-        this.crewViewState.swarmScrollOffset = 0;
+      if (this.viewState.mainView === "swarm") {
+        this.viewState.selectedSwarmIndex = 0;
+        this.viewState.swarmScrollOffset = 0;
       } else {
-        this.crewViewState.selectedTaskIndex = 0;
-        this.crewViewState.scrollOffset = 0;
+        this.viewState.selectedTaskIndex = 0;
+        this.viewState.scrollOffset = 0;
       }
-      if (this.crewViewState.mode === "detail") {
-        this.crewViewState.detailScroll = 0;
-        this.crewViewState.detailAutoScroll = false;
+      if (this.viewState.mode === "detail") {
+        this.viewState.detailScroll = 0;
+        this.viewState.detailAutoScroll = false;
       }
       this.tui.requestRender();
       return;
     }
 
     if (matchesKey(data, "end")) {
-      if (this.crewViewState.mainView === "swarm") {
-        this.crewViewState.selectedSwarmIndex = Math.max(0, spawned.length - 1);
+      if (this.viewState.mainView === "swarm") {
+        this.viewState.selectedSwarmIndex = Math.max(0, spawned.length - 1);
       } else {
-        this.crewViewState.selectedTaskIndex = Math.max(0, tasks.length - 1);
+        this.viewState.selectedTaskIndex = Math.max(0, tasks.length - 1);
       }
-      if (this.crewViewState.mode === "detail") {
-        this.crewViewState.detailScroll = 0;
-        this.crewViewState.detailAutoScroll = this.crewViewState.mainView !== "swarm";
+      if (this.viewState.mode === "detail") {
+        this.viewState.detailScroll = 0;
+        this.viewState.detailAutoScroll = this.viewState.mainView !== "swarm";
       }
       this.tui.requestRender();
       return;
     }
 
     if (matchesKey(data, "enter")) {
-      if (this.crewViewState.mode !== "detail") {
-        if (this.crewViewState.mainView === "swarm" && swarmAgent) {
-          this.crewViewState.mode = "detail";
-          this.crewViewState.detailScroll = 0;
-          this.crewViewState.detailAutoScroll = false;
+      if (this.viewState.mode !== "detail") {
+        if (this.viewState.mainView === "swarm" && swarmAgent) {
+          this.viewState.mode = "detail";
+          this.viewState.detailScroll = 0;
+          this.viewState.detailAutoScroll = false;
           this.tui.requestRender();
-        } else if (this.crewViewState.mainView === "tasks" && task) {
-          this.crewViewState.mode = "detail";
-          this.crewViewState.detailScroll = 0;
-          this.crewViewState.detailAutoScroll = true;
+        } else if (this.viewState.mainView === "tasks" && task) {
+          this.viewState.mode = "detail";
+          this.viewState.detailScroll = 0;
+          this.viewState.detailAutoScroll = true;
           this.tui.requestRender();
         }
       }
       return;
     }
 
-    if (this.crewViewState.mode === "detail") {
+    if (this.viewState.mode === "detail") {
       if (matchesKey(data, "[")) {
-        if (this.crewViewState.mainView === "swarm") {
-          navigateSwarm(this.crewViewState, -1, spawned.length);
-          this.crewViewState.detailAutoScroll = false;
+        if (this.viewState.mainView === "swarm") {
+          navigateSwarm(this.viewState, -1, spawned.length);
+          this.viewState.detailAutoScroll = false;
         } else {
-          navigateTask(this.crewViewState, -1, tasks.length);
-          this.crewViewState.detailAutoScroll = true;
+          navigateTask(this.viewState, -1, tasks.length);
+          this.viewState.detailAutoScroll = true;
         }
-        this.crewViewState.detailScroll = 0;
+        this.viewState.detailScroll = 0;
         this.tui.requestRender();
         return;
       }
       if (matchesKey(data, "]")) {
-        if (this.crewViewState.mainView === "swarm") {
-          navigateSwarm(this.crewViewState, 1, spawned.length);
-          this.crewViewState.detailAutoScroll = false;
+        if (this.viewState.mainView === "swarm") {
+          navigateSwarm(this.viewState, 1, spawned.length);
+          this.viewState.detailAutoScroll = false;
         } else {
-          navigateTask(this.crewViewState, 1, tasks.length);
-          this.crewViewState.detailAutoScroll = true;
+          navigateTask(this.viewState, 1, tasks.length);
+          this.viewState.detailAutoScroll = true;
         }
-        this.crewViewState.detailScroll = 0;
+        this.viewState.detailScroll = 0;
         this.tui.requestRender();
         return;
       }
     }
 
-    if (this.crewViewState.mainView === "tasks" && task) {
-      handleCrewKeyBinding(data, task as Task, this.crewViewState, this.cwd, this.state.agentName, this.tui);
+    if (this.viewState.mainView === "tasks" && task) {
+      handleTaskKeyBinding(data, task as Task, this.viewState, this.cwd, this.state.agentName, this.tui);
     }
   }
 
@@ -449,25 +449,25 @@ export class MessengerOverlay implements Component, Focusable {
     const spawned = listSpawned(this.cwd);
 
     if (tasks.length === 0) {
-      this.crewViewState.selectedTaskIndex = 0;
-      if (this.crewViewState.mainView === "tasks" && this.crewViewState.mode === "detail") {
-        this.crewViewState.mode = "list";
+      this.viewState.selectedTaskIndex = 0;
+      if (this.viewState.mainView === "tasks" && this.viewState.mode === "detail") {
+        this.viewState.mode = "list";
       }
     } else {
-      this.crewViewState.selectedTaskIndex = Math.max(0, Math.min(this.crewViewState.selectedTaskIndex, tasks.length - 1));
+      this.viewState.selectedTaskIndex = Math.max(0, Math.min(this.viewState.selectedTaskIndex, tasks.length - 1));
     }
 
     if (spawned.length === 0) {
-      this.crewViewState.selectedSwarmIndex = 0;
-      if (this.crewViewState.mainView === "swarm" && this.crewViewState.mode === "detail") {
-        this.crewViewState.mode = "list";
+      this.viewState.selectedSwarmIndex = 0;
+      if (this.viewState.mainView === "swarm" && this.viewState.mode === "detail") {
+        this.viewState.mode = "list";
       }
     } else {
-      this.crewViewState.selectedSwarmIndex = Math.max(0, Math.min(this.crewViewState.selectedSwarmIndex, spawned.length - 1));
+      this.viewState.selectedSwarmIndex = Math.max(0, Math.min(this.viewState.selectedSwarmIndex, spawned.length - 1));
     }
 
-    const selectedTask = tasks[this.crewViewState.selectedTaskIndex] ?? null;
-    const selectedSwarmAgent = spawned[this.crewViewState.selectedSwarmIndex] ?? null;
+    const selectedTask = tasks[this.viewState.selectedTaskIndex] ?? null;
+    const selectedSwarmAgent = spawned[this.viewState.selectedSwarmIndex] ?? null;
 
     const lines: string[] = [];
     const titleContent = this.renderTitleContent();
@@ -485,17 +485,17 @@ export class MessengerOverlay implements Component, Focusable {
     const termRows = process.stdout.rows ?? 24;
     const contentHeight = Math.max(8, termRows - chromeLines);
 
-    const prevTs = this.crewViewState.lastSeenEventTs;
+    const prevTs = this.viewState.lastSeenEventTs;
     const allEvents = readFeedEvents(this.cwd, 20);
     this.detectAndFlashEvents(allEvents, prevTs);
     this.checkCompletion(tasks);
 
     let contentLines: string[];
-    if (this.crewViewState.mode === "detail") {
-      if (this.crewViewState.mainView === "swarm" && selectedSwarmAgent) {
-        contentLines = renderSwarmDetail(selectedSwarmAgent, sectionW, contentHeight, this.crewViewState);
-      } else if (this.crewViewState.mainView === "tasks" && selectedTask) {
-        contentLines = renderDetailView(this.cwd, selectedTask as Task, sectionW, contentHeight, this.crewViewState);
+    if (this.viewState.mode === "detail") {
+      if (this.viewState.mainView === "swarm" && selectedSwarmAgent) {
+        contentLines = renderSwarmDetail(selectedSwarmAgent, sectionW, contentHeight, this.viewState);
+      } else if (this.viewState.mainView === "tasks" && selectedTask) {
+        contentLines = renderDetailView(this.cwd, selectedTask as Task, sectionW, contentHeight, this.viewState);
       } else {
         contentLines = [];
         while (contentLines.length < contentHeight) contentLines.push("");
@@ -511,7 +511,7 @@ export class MessengerOverlay implements Component, Focusable {
       let feedHeight: number;
       let mainHeight: number;
 
-      if (this.crewViewState.mainView === "tasks" && tasks.length === 0) {
+      if (this.viewState.mainView === "tasks" && tasks.length === 0) {
         const hasFeed = allEvents.length > 0;
         if (hasFeed) {
           mainHeight = Math.min(Math.max(2, available - 1), 4);
@@ -531,9 +531,9 @@ export class MessengerOverlay implements Component, Focusable {
       feedHeight = Math.max(0, feedHeight);
       mainHeight = Math.max(2, mainHeight);
 
-      const isListPanel = this.crewViewState.mainView === "swarm" || tasks.length > 0;
+      const isListPanel = this.viewState.mainView === "swarm" || tasks.length > 0;
       if (isListPanel) {
-        const listContentHeight = this.crewViewState.mainView === "swarm"
+        const listContentHeight = this.viewState.mainView === "swarm"
           ? Math.max(2, spawned.length)
           : Math.max(2, tasks.length);
         if (listContentHeight < mainHeight) {
@@ -544,8 +544,8 @@ export class MessengerOverlay implements Component, Focusable {
       }
 
       const maxFeedOffset = Math.max(0, allEvents.length - feedHeight);
-      this.crewViewState.feedScrollOffset = Math.max(0, Math.min(this.crewViewState.feedScrollOffset, maxFeedOffset));
-      const feedEnd = allEvents.length - this.crewViewState.feedScrollOffset;
+      this.viewState.feedScrollOffset = Math.max(0, Math.min(this.viewState.feedScrollOffset, maxFeedOffset));
+      const feedEnd = allEvents.length - this.viewState.feedScrollOffset;
       const feedStart = Math.max(0, feedEnd - feedHeight);
       const displayEvents = allEvents.slice(feedStart, feedEnd);
       let feedLines = renderFeedSection(this.theme, displayEvents, sectionW, prevTs);
@@ -556,12 +556,12 @@ export class MessengerOverlay implements Component, Focusable {
       }
 
       let mainLines: string[];
-      if (this.crewViewState.mainView === "swarm") {
-        mainLines = renderSwarmList(this.theme, spawned, sectionW, mainHeight, this.crewViewState);
+      if (this.viewState.mainView === "swarm") {
+        mainLines = renderSwarmList(this.theme, spawned, sectionW, mainHeight, this.viewState);
       } else if (tasks.length === 0) {
         mainLines = renderEmptyState(this.theme, this.cwd, sectionW, mainHeight);
       } else {
-        mainLines = renderTaskList(this.theme, this.cwd, sectionW, mainHeight, this.crewViewState);
+        mainLines = renderTaskList(this.theme, this.cwd, sectionW, mainHeight, this.viewState);
       }
 
       contentLines = [];
@@ -593,11 +593,11 @@ export class MessengerOverlay implements Component, Focusable {
     }
 
     lines.push(border("├" + "─".repeat(innerW) + "┤"));
-    lines.push(row(renderLegend(this.theme, this.cwd, sectionW, this.crewViewState, selectedTask as Task | null, selectedSwarmAgent)));
+    lines.push(row(renderLegend(this.theme, this.cwd, sectionW, this.viewState, selectedTask as Task | null, selectedSwarmAgent)));
     lines.push(border("╰" + "─".repeat(innerW) + "╯"));
 
     if (allEvents.length > 0) {
-      this.crewViewState.lastSeenEventTs = allEvents[allEvents.length - 1].ts;
+      this.viewState.lastSeenEventTs = allEvents[allEvents.length - 1].ts;
     }
 
     return lines;
@@ -639,7 +639,7 @@ export class MessengerOverlay implements Component, Focusable {
         `${last.agent} ${last.type}${target}`;
     }
 
-    setNotification(this.crewViewState, this.tui, true, message);
+    setNotification(this.viewState, this.tui, true, message);
   }
 
   private checkCompletion(tasks: Task[]): void {
@@ -654,7 +654,7 @@ export class MessengerOverlay implements Component, Focusable {
     }
 
     if (isIdle && this.sawIncompleteWork && !this.completionTimer && !this.completionDismissed) {
-      setNotification(this.crewViewState, this.tui, true, "All tasks complete! Closing in 3s...");
+      setNotification(this.viewState, this.tui, true, "All tasks complete! Closing in 3s...");
       this.completionTimer = setTimeout(() => {
         this.completionTimer = null;
         this.done(this.generateSnapshot());
@@ -681,9 +681,9 @@ export class MessengerOverlay implements Component, Focusable {
   dispose(): void {
     this.stopProgressRefresh();
     this.cancelCompletionTimer();
-    if (this.crewViewState.notificationTimer) {
-      clearTimeout(this.crewViewState.notificationTimer);
-      this.crewViewState.notificationTimer = null;
+    if (this.viewState.notificationTimer) {
+      clearTimeout(this.viewState.notificationTimer);
+      this.viewState.notificationTimer = null;
     }
     this.progressUnsubscribe?.();
     this.progressUnsubscribe = null;

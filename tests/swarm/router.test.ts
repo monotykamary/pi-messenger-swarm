@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MessengerState, Dirs } from "../../lib.js";
-import { executeCrewAction } from "../../crew/index.js";
+import { executeAction } from "../../router.js";
 import { createMockContext } from "../helpers/mock-context.js";
 
 const roots = new Set<string>();
@@ -64,7 +64,7 @@ describe("swarm router", () => {
     const state = createState("AgentOne");
     const ctx = createMockContext(cwd);
 
-    const created = await executeCrewAction(
+    const created = await executeAction(
       "task.create",
       { title: "Fix login timeout", content: "Adjust session keepalive" },
       state,
@@ -77,7 +77,7 @@ describe("swarm router", () => {
 
     expect(created.content[0]?.text).toContain("Created task-1");
 
-    const claimed = await executeCrewAction(
+    const claimed = await executeAction(
       "task.claim",
       { id: "task-1" },
       state,
@@ -90,7 +90,7 @@ describe("swarm router", () => {
 
     expect(claimed.content[0]?.text).toContain("Claimed task-1");
 
-    const done = await executeCrewAction(
+    const done = await executeAction(
       "task.done",
       { id: "task-1", summary: "Added keepalive and tests" },
       state,
@@ -110,16 +110,16 @@ describe("swarm router", () => {
     const state = createState("AgentAlias");
     const ctx = createMockContext(cwd);
 
-    await executeCrewAction("task.create", { title: "Alias task" }, state, dirs, ctx, () => {}, () => {}, () => {});
+    await executeAction("task.create", { title: "Alias task" }, state, dirs, ctx, () => {}, () => {}, () => {});
 
-    const claim = await executeCrewAction("claim", { taskId: "task-1" }, state, dirs, ctx, () => {}, () => {}, () => {});
+    const claim = await executeAction("claim", { taskId: "task-1" }, state, dirs, ctx, () => {}, () => {}, () => {});
     expect(claim.content[0]?.text).toContain("Claimed task-1");
 
-    const unclaim = await executeCrewAction("unclaim", { taskId: "task-1" }, state, dirs, ctx, () => {}, () => {}, () => {});
+    const unclaim = await executeAction("unclaim", { taskId: "task-1" }, state, dirs, ctx, () => {}, () => {}, () => {});
     expect(unclaim.content[0]?.text).toContain("Released claim");
 
-    await executeCrewAction("claim", { taskId: "task-1" }, state, dirs, ctx, () => {}, () => {}, () => {});
-    const complete = await executeCrewAction("complete", { taskId: "task-1", summary: "done" }, state, dirs, ctx, () => {}, () => {}, () => {});
+    await executeAction("claim", { taskId: "task-1" }, state, dirs, ctx, () => {}, () => {}, () => {});
+    const complete = await executeAction("complete", { taskId: "task-1", summary: "done" }, state, dirs, ctx, () => {}, () => {}, () => {});
     expect(complete.content[0]?.text).toContain("Completed task-1");
   });
 
@@ -129,8 +129,8 @@ describe("swarm router", () => {
     const state = createState("AgentSwarm");
     const ctx = createMockContext(cwd);
 
-    await executeCrewAction("task.create", { title: "One" }, state, dirs, ctx, () => {}, () => {}, () => {});
-    const swarm = await executeCrewAction("swarm", {}, state, dirs, ctx, () => {}, () => {}, () => {});
+    await executeAction("task.create", { title: "One" }, state, dirs, ctx, () => {}, () => {}, () => {});
+    const swarm = await executeAction("swarm", {}, state, dirs, ctx, () => {}, () => {}, () => {});
 
     expect(swarm.content[0]?.text).toContain("# Agent Swarm");
     expect(swarm.content[0]?.text).toContain("task-1");
@@ -142,17 +142,17 @@ describe("swarm router", () => {
     const state = createState("AgentArchive");
     const ctx = createMockContext(cwd);
 
-    await executeCrewAction("task.create", { title: "Archive me" }, state, dirs, ctx, () => {}, () => {}, () => {});
-    await executeCrewAction("task.claim", { id: "task-1" }, state, dirs, ctx, () => {}, () => {}, () => {});
-    await executeCrewAction("task.done", { id: "task-1", summary: "done" }, state, dirs, ctx, () => {}, () => {}, () => {});
+    await executeAction("task.create", { title: "Archive me" }, state, dirs, ctx, () => {}, () => {}, () => {});
+    await executeAction("task.claim", { id: "task-1" }, state, dirs, ctx, () => {}, () => {}, () => {});
+    await executeAction("task.done", { id: "task-1", summary: "done" }, state, dirs, ctx, () => {}, () => {}, () => {});
 
-    const archive = await executeCrewAction("task.archive_done", {}, state, dirs, ctx, () => {}, () => {}, () => {});
+    const archive = await executeAction("task.archive_done", {}, state, dirs, ctx, () => {}, () => {}, () => {});
     expect(archive.content[0]?.text).toContain("Archived 1 done task");
 
-    const listed = await executeCrewAction("task.list", {}, state, dirs, ctx, () => {}, () => {}, () => {});
+    const listed = await executeAction("task.list", {}, state, dirs, ctx, () => {}, () => {}, () => {});
     expect(listed.content[0]?.text).toContain("No tasks yet");
 
-    const none = await executeCrewAction("task.archive_done", {}, state, dirs, ctx, () => {}, () => {}, () => {});
+    const none = await executeAction("task.archive_done", {}, state, dirs, ctx, () => {}, () => {}, () => {});
     expect(none.content[0]?.text).toContain("No done tasks to archive");
   });
 
@@ -162,7 +162,7 @@ describe("swarm router", () => {
     const state = createState("AgentSpawn");
     const ctx = createMockContext(cwd);
 
-    const res = await executeCrewAction("spawn", { role: "Researcher" }, state, dirs, ctx, () => {}, () => {}, () => {});
+    const res = await executeAction("spawn", { role: "Researcher" }, state, dirs, ctx, () => {}, () => {}, () => {});
     expect(res.content[0]?.text).toContain("spawn requires mission text");
   });
 
@@ -172,11 +172,11 @@ describe("swarm router", () => {
     const state = createState("AgentSpawn");
     const ctx = createMockContext(cwd);
 
-    const res = await executeCrewAction("spawn.list", {}, state, dirs, ctx, () => {}, () => {}, () => {});
+    const res = await executeAction("spawn.list", {}, state, dirs, ctx, () => {}, () => {}, () => {});
     expect(res.content[0]?.text).toContain("No spawned agents");
   });
 
-  it("disables legacy crew orchestration actions", async () => {
+  it("disables legacy orchestration actions", async () => {
     const cwd = createTempCwd();
     const dirs = createDirs(cwd);
     const state = createState("AgentLegacy");
@@ -185,8 +185,8 @@ describe("swarm router", () => {
     const actions = ["plan", "work", "review", "crew.status"];
 
     for (const action of actions) {
-      const res = await executeCrewAction(action, {}, state, dirs, ctx, () => {}, () => {}, vi.fn());
-      expect(res.content[0]?.text).toContain("Legacy crew action");
+      const res = await executeAction(action, {}, state, dirs, ctx, () => {}, () => {}, vi.fn());
+      expect(res.content[0]?.text).toContain("Legacy action");
       expect(res.content[0]?.text).toContain("disabled in swarm mode");
     }
   });

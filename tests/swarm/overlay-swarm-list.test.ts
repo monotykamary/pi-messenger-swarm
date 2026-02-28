@@ -4,7 +4,7 @@ vi.mock("@mariozechner/pi-tui", () => ({
   truncateToWidth: (s: string) => s,
 }));
 
-import { createCrewViewState } from "../../overlay-actions.js";
+import { createMessengerViewState } from "../../overlay-actions.js";
 import { renderLegend, renderSwarmList } from "../../overlay-render.js";
 import type { SpawnedAgent } from "../../swarm/types.js";
 
@@ -14,7 +14,7 @@ const theme = {
 
 describe("overlay swarm list view", () => {
   it("renders spawned agent name + role lines", () => {
-    const viewState = createCrewViewState();
+    const viewState = createMessengerViewState();
     viewState.mainView = "swarm";
 
     const agents: SpawnedAgent[] = [
@@ -47,7 +47,7 @@ describe("overlay swarm list view", () => {
   });
 
   it("shows f:Tasks legend in swarm list mode", () => {
-    const viewState = createCrewViewState();
+    const viewState = createMessengerViewState();
     viewState.mainView = "swarm";
 
     const legend = renderLegend(

@@ -5,8 +5,8 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { generateMemorableName } from "../lib.js";
-import { createProgress, parseJsonlLine, updateProgress } from "../crew/utils/progress.js";
-import { removeLiveWorker, updateLiveWorker } from "../crew/live-progress.js";
+import { createProgress, parseJsonlLine, updateProgress } from "./progress.js";
+import { removeLiveWorker, updateLiveWorker } from "./live-progress.js";
 import type { SpawnRequest, SpawnedAgent } from "./types.js";
 
 interface SpawnRuntime {

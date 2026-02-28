@@ -126,7 +126,7 @@ export function pruneFeed(cwd: string, maxEvents: number): void {
   }
 }
 
-const CREW_EVENT_TYPES = new Set<FeedEventType>([
+const SWARM_EVENT_TYPES = new Set<FeedEventType>([
   "task.start",
   "task.done",
   "task.block",
@@ -150,8 +150,8 @@ const CREW_EVENT_TYPES = new Set<FeedEventType>([
 export function formatFeedLine(event: FeedEvent): string {
   const sanitized = sanitizeFeedEvent(event);
   const time = new Date(sanitized.ts).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
-  const isCrew = CREW_EVENT_TYPES.has(sanitized.type);
-  const prefix = isCrew ? "[Crew] " : "";
+  const isSwarm = SWARM_EVENT_TYPES.has(sanitized.type);
+  const prefix = isSwarm ? "[Swarm] " : "";
   let line = `${time} ${prefix}${sanitized.agent}`;
 
   const rawPreview = sanitized.preview;
@@ -206,8 +206,8 @@ export function formatFeedLine(event: FeedEvent): string {
   return line;
 }
 
-export function isCrewEvent(type: FeedEventType): boolean {
-  return CREW_EVENT_TYPES.has(type);
+export function isSwarmEvent(type: FeedEventType): boolean {
+  return SWARM_EVENT_TYPES.has(type);
 }
 
 export function logFeedEvent(

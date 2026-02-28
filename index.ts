@@ -41,14 +41,12 @@ import * as handlers from "./handlers.js";
 import { MessengerOverlay, type OverlayCallbacks } from "./overlay.js";
 import { MessengerConfigOverlay } from "./config-overlay.js";
 import { loadConfig, matchesAutoRegisterPath, type MessengerConfig } from "./config.js";
-import { executeCrewAction } from "./crew/index.js";
+import { executeAction } from "./router.js";
 import { logFeedEvent, pruneFeed } from "./feed.js";
-import type { CrewParams } from "./crew/types.js";
+import type { MessengerActionParams } from "./action-types.js";
 import * as swarmStore from "./swarm/store.js";
-import { runLegacyAgentCleanupMigration } from "./crew/utils/install.js";
-import { getLiveWorkers, onLiveWorkersChanged } from "./crew/live-progress.js";
-import { shutdownAllWorkers } from "./crew/agents.js";
-import { shutdownLobbyWorkers } from "./crew/lobby.js";
+import { runLegacyAgentCleanup } from "./migrations/legacy-agents.js";
+import { getLiveWorkers, onLiveWorkersChanged } from "./swarm/live-progress.js";
 import { getRunningSpawnCount, stopAllSpawned } from "./swarm/spawn.js";
 
 let overlayTui: TUI | null = null;
@@ -56,9 +54,8 @@ let overlayHandle: OverlayHandle | null = null;
 let overlayOpening = false;
 
 export default function piMessengerExtension(pi: ExtensionAPI) {
-  // One-time migration: remove stale crew agents from shared ~/.pi/agent/agents/
-  // (crew agents now discovered from extension-local directory)
-  runLegacyAgentCleanupMigration();
+  // One-time migration: remove stale legacy agent markdown files from ~/.pi/agent/agents/
+  runLegacyAgentCleanup();
 
   // ===========================================================================
   // State & Configuration
@@ -256,7 +253,7 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
 
     ctx.ui.setStatus("messenger", `msg: ${nameStr}${countStr}${unreadStr}${activityStr}${taskStr}${spawnStr}`);
 
-    maybeAutoOpenCrewOverlay(ctx);
+    maybeAutoOpenSwarmOverlay(ctx);
   }
 
   function clearAllUnreadCounts(): void {
@@ -390,7 +387,7 @@ Usage (swarm-first API):
     }),
 
     async execute(_toolCallId, rawParams, signal, _onUpdate, ctx) {
-      const params = rawParams as CrewParams;
+      const params = rawParams as MessengerActionParams;
       latestCtx = ctx;
 
       const action = params.action;
@@ -398,7 +395,7 @@ Usage (swarm-first API):
         return handlers.executeStatus(state, dirs, ctx.cwd ?? process.cwd());
       }
 
-      const result = await executeCrewAction(
+      const result = await executeAction(
         action,
         params,
         state,
@@ -407,7 +404,7 @@ Usage (swarm-first API):
         deliverMessage,
         updateStatus,
         (type, data) => pi.appendEntry(type, data),
-        { stuckThreshold: config.stuckThreshold, crewEventsInFeed: config.crewEventsInFeed, nameTheme, feedRetention: config.feedRetention },
+        { stuckThreshold: config.stuckThreshold, swarmEventsInFeed: config.swarmEventsInFeed, nameTheme, feedRetention: config.feedRetention },
         signal
       );
 
@@ -724,7 +721,7 @@ Usage (swarm-first API):
       matchesAutoRegisterPath(process.cwd(), config.autoRegisterPaths);
 
     if (!shouldAutoRegister) {
-      maybeAutoOpenCrewOverlay(ctx);
+      maybeAutoOpenSwarmOverlay(ctx);
       return;
     }
 
@@ -740,7 +737,7 @@ Usage (swarm-first API):
       }
     }
 
-    maybeAutoOpenCrewOverlay(ctx);
+    maybeAutoOpenSwarmOverlay(ctx);
   });
 
   function recoverWatcherIfNeeded(): void {
@@ -750,7 +747,7 @@ Usage (swarm-first API):
     }
   }
 
-  function maybeAutoOpenCrewOverlay(_ctx: ExtensionContext): void {
+  function maybeAutoOpenSwarmOverlay(_ctx: ExtensionContext): void {
     // Swarm mode intentionally disables planning/autonomous auto-overlay behavior.
   }
 
@@ -758,18 +755,18 @@ Usage (swarm-first API):
     latestCtx = ctx;
     recoverWatcherIfNeeded();
     updateStatus(ctx);
-    maybeAutoOpenCrewOverlay(ctx);
+    maybeAutoOpenSwarmOverlay(ctx);
   });
   pi.on("session_fork", async (_event, ctx) => {
     latestCtx = ctx;
     recoverWatcherIfNeeded();
     updateStatus(ctx);
-    maybeAutoOpenCrewOverlay(ctx);
+    maybeAutoOpenSwarmOverlay(ctx);
   });
   pi.on("session_tree", async (_event, ctx) => {
     latestCtx = ctx;
     updateStatus(ctx);
-    maybeAutoOpenCrewOverlay(ctx);
+    maybeAutoOpenSwarmOverlay(ctx);
   });
 
   pi.on("turn_end", async (event, ctx) => {
@@ -790,7 +787,7 @@ Usage (swarm-first API):
       }
     }
 
-    maybeAutoOpenCrewOverlay(ctx);
+    maybeAutoOpenSwarmOverlay(ctx);
   });
 
   // ===========================================================================
@@ -803,8 +800,6 @@ Usage (swarm-first API):
   });
 
   pi.on("session_shutdown", async () => {
-    shutdownLobbyWorkers(process.cwd());
-    shutdownAllWorkers();
     stopAllSpawned(process.cwd());
     stopStatusHeartbeat();
     overlayOpening = false;

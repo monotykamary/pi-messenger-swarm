@@ -1,37 +1,34 @@
 /**
- * Pi Messenger - Action Router
- *
- * Swarm-first router. Legacy crew actions are disabled and return
- * migration guidance.
+ * Pi Messenger action router (swarm-first).
  */
 
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import type { MessengerState, Dirs, AgentMailMessage, NameThemeConfig } from "../lib.js";
-import * as handlers from "../handlers.js";
-import type { CrewParams, AppendEntryFn } from "./types.js";
-import { result } from "./utils/result.js";
-import { executeSpawn, executeSwarmStatus, executeTask } from "../swarm/handlers.js";
+import type { MessengerState, Dirs, AgentMailMessage, NameThemeConfig } from "./lib.js";
+import * as handlers from "./handlers.js";
+import type { MessengerActionParams } from "./action-types.js";
+import { result } from "./swarm/result.js";
+import { executeSpawn, executeSwarmStatus, executeTask } from "./swarm/handlers.js";
 
 type DeliverFn = (msg: AgentMailMessage) => void;
 type UpdateStatusFn = (ctx: ExtensionContext) => void;
 
-export interface CrewActionConfig {
+export interface RouterConfig {
   stuckThreshold?: number;
-  crewEventsInFeed?: boolean;
+  swarmEventsInFeed?: boolean;
   nameTheme?: NameThemeConfig;
   feedRetention?: number;
 }
 
-export async function executeCrewAction(
+export async function executeAction(
   action: string,
-  params: CrewParams,
+  params: MessengerActionParams,
   state: MessengerState,
   dirs: Dirs,
   ctx: ExtensionContext,
   deliverMessage: DeliverFn,
   updateStatus: UpdateStatusFn,
-  _appendEntry: AppendEntryFn,
-  _config?: CrewActionConfig,
+  _appendEntry?: (type: string, data: unknown) => void,
+  config?: RouterConfig,
   _signal?: AbortSignal,
 ) {
   const dotIndex = action.indexOf(".");
@@ -40,7 +37,7 @@ export async function executeCrewAction(
   const cwd = ctx.cwd ?? process.cwd();
 
   if (group === "join") {
-    return handlers.executeJoin(state, dirs, ctx, deliverMessage, updateStatus, params.spec, _config?.nameTheme, _config?.feedRetention);
+    return handlers.executeJoin(state, dirs, ctx, deliverMessage, updateStatus, params.spec, config?.nameTheme, config?.feedRetention);
   }
 
   if (group === "autoRegisterPath") {
@@ -62,20 +59,20 @@ export async function executeCrewAction(
       return handlers.executeStatus(state, dirs, cwd);
 
     case "list":
-      return handlers.executeList(state, dirs, cwd, { stuckThreshold: _config?.stuckThreshold });
+      return handlers.executeList(state, dirs, cwd, { stuckThreshold: config?.stuckThreshold });
 
     case "whois": {
       if (!params.name) {
         return result("Error: name required for whois action.", { mode: "whois", error: "missing_name" });
       }
-      return handlers.executeWhois(state, dirs, cwd, params.name, { stuckThreshold: _config?.stuckThreshold });
+      return handlers.executeWhois(state, dirs, cwd, params.name, { stuckThreshold: config?.stuckThreshold });
     }
 
     case "set_status":
       return handlers.executeSetStatus(state, dirs, ctx, params.message);
 
     case "feed":
-      return handlers.executeFeed(cwd, params.limit, _config?.crewEventsInFeed ?? true);
+      return handlers.executeFeed(cwd, params.limit, config?.swarmEventsInFeed ?? true);
 
     case "send":
       return handlers.executeSend(state, dirs, cwd, params.to, false, params.message, params.replyTo);
@@ -134,14 +131,14 @@ export async function executeCrewAction(
     case "spawn":
       return executeSpawn(op, params, state, cwd);
 
-    // Legacy crew orchestration actions are intentionally disabled in swarm mode.
+    // Legacy orchestration actions are intentionally disabled in swarm mode.
     case "plan":
     case "work":
     case "review":
     case "sync":
     case "crew":
       return result(
-        `Legacy crew action "${action}" is disabled in swarm mode.\n\nUse:\n- pi_messenger({ action: "task.create", ... })\n- pi_messenger({ action: "task.claim", id: "task-N" })\n- pi_messenger({ action: "spawn", role: "...", message: "..." })\n- pi_messenger({ action: "swarm" })`,
+        `Legacy action "${action}" is disabled in swarm mode.\n\nUse:\n- pi_messenger({ action: \"task.create\", ... })\n- pi_messenger({ action: \"task.claim\", id: \"task-N\" })\n- pi_messenger({ action: \"spawn\", role: \"...\", message: \"...\" })\n- pi_messenger({ action: \"swarm\" })`,
         {
           mode: "legacy_disabled",
           action,

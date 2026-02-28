@@ -21,7 +21,7 @@ vi.mock("../../store.js", () => ({
   getActiveAgents: mocks.getActiveAgents,
 }));
 
-vi.mock("../../crew/live-progress.js", () => ({
+vi.mock("../../swarm/live-progress.js", () => ({
   getLiveWorkers: () => new Map(),
   hasLiveWorkers: () => false,
   onLiveWorkersChanged: () => () => {},
@@ -35,11 +35,7 @@ vi.mock("../../swarm/task-actions.js", () => ({
   executeTaskAction: () => ({ success: true, message: "ok" }),
 }));
 
-vi.mock("../../crew/registry.js", () => ({
-  hasActiveWorker: () => false,
-}));
-
-import { createCrewViewState, handleMessageInput } from "../../overlay-actions.js";
+import { createMessengerViewState, handleMessageInput } from "../../overlay-actions.js";
 import type { MessengerState, Dirs } from "../../lib.js";
 import type { TUI } from "@mariozechner/pi-tui";
 
@@ -62,7 +58,7 @@ describe("overlay chat steering behavior", () => {
   });
 
   it("falls back to steering self when broadcasting with no peers", () => {
-    const viewState = createCrewViewState();
+    const viewState = createMessengerViewState();
     viewState.inputMode = "message";
     viewState.messageInput = "Investigate auth race";
 
@@ -88,7 +84,7 @@ describe("overlay chat steering behavior", () => {
   });
 
   it("still broadcasts to peers when peers exist", () => {
-    const viewState = createCrewViewState();
+    const viewState = createMessengerViewState();
     viewState.inputMode = "message";
     viewState.messageInput = "Hello swarm";
 

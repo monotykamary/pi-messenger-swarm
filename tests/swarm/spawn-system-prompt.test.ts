@@ -10,7 +10,7 @@ vi.mock("node:child_process", () => ({
   spawn: spawnMock,
 }));
 
-vi.mock("../../crew/utils/progress.js", () => ({
+vi.mock("../../swarm/progress.js", () => ({
   createProgress: () => ({
     tokens: 0,
     toolCallCount: 0,
@@ -21,7 +21,7 @@ vi.mock("../../crew/utils/progress.js", () => ({
   updateProgress: () => {},
 }));
 
-vi.mock("../../crew/live-progress.js", () => ({
+vi.mock("../../swarm/live-progress.js", () => ({
   removeLiveWorker: () => {},
   updateLiveWorker: () => {},
 }));

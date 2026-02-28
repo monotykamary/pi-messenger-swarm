@@ -1,6 +1,6 @@
-import type { CrewParams } from "../crew/types.js";
+import type { MessengerActionParams } from "../action-types.js";
 import type { MessengerState } from "../lib.js";
-import { result } from "../crew/utils/result.js";
+import { result } from "./result.js";
 import { logFeedEvent } from "../feed.js";
 import * as store from "./store.js";
 import { cleanupExitedSpawned, listSpawned, spawnSubagent, stopSpawn } from "./spawn.js";
@@ -56,7 +56,7 @@ export function executeSwarmStatus(cwd: string) {
   });
 }
 
-export function executeTask(op: string, params: CrewParams, state: MessengerState, cwd: string) {
+export function executeTask(op: string, params: MessengerActionParams, state: MessengerState, cwd: string) {
   switch (op) {
     case "create":
       return taskCreate(params, state, cwd);
@@ -91,7 +91,7 @@ export function executeTask(op: string, params: CrewParams, state: MessengerStat
   }
 }
 
-function taskCreate(params: CrewParams, state: MessengerState, cwd: string) {
+function taskCreate(params: MessengerActionParams, state: MessengerState, cwd: string) {
   if (!params.title) {
     return result("Error: title required for task.create", { mode: "task.create", error: "missing_title" });
   }
@@ -147,7 +147,7 @@ function taskList(cwd: string) {
   });
 }
 
-function taskShow(params: CrewParams, cwd: string) {
+function taskShow(params: MessengerActionParams, cwd: string) {
   if (!params.id) return result("Error: id required for task.show", { mode: "task.show", error: "missing_id" });
 
   const task = store.getTask(cwd, params.id);
@@ -174,7 +174,7 @@ function taskShow(params: CrewParams, cwd: string) {
   return result(lines.join("\n"), { mode: "task.show", task, hasProgress: !!progress });
 }
 
-function taskClaim(params: CrewParams, state: MessengerState, cwd: string) {
+function taskClaim(params: MessengerActionParams, state: MessengerState, cwd: string) {
   if (!params.id) return result("Error: id required for task.claim", { mode: "task.claim", error: "missing_id" });
 
   const claimed = store.claimTask(cwd, params.id, state.agentName, params.reason);
@@ -211,7 +211,7 @@ function taskClaim(params: CrewParams, state: MessengerState, cwd: string) {
   });
 }
 
-function taskUnclaim(params: CrewParams, state: MessengerState, cwd: string) {
+function taskUnclaim(params: MessengerActionParams, state: MessengerState, cwd: string) {
   if (!params.id) return result("Error: id required for task.unclaim", { mode: "task.unclaim", error: "missing_id" });
 
   const unclaimed = store.unclaimTask(cwd, params.id, state.agentName);
@@ -234,7 +234,7 @@ function taskUnclaim(params: CrewParams, state: MessengerState, cwd: string) {
   });
 }
 
-function taskDone(params: CrewParams, state: MessengerState, cwd: string) {
+function taskDone(params: MessengerActionParams, state: MessengerState, cwd: string) {
   if (!params.id) return result("Error: id required for task.done", { mode: "task.done", error: "missing_id" });
 
   const summary = params.summary ?? "Task completed";
@@ -268,7 +268,7 @@ function taskDone(params: CrewParams, state: MessengerState, cwd: string) {
   });
 }
 
-function taskBlock(params: CrewParams, state: MessengerState, cwd: string) {
+function taskBlock(params: MessengerActionParams, state: MessengerState, cwd: string) {
   if (!params.id) return result("Error: id required for task.block", { mode: "task.block", error: "missing_id" });
   if (!params.reason) return result("Error: reason required for task.block", { mode: "task.block", error: "missing_reason" });
 
@@ -283,7 +283,7 @@ function taskBlock(params: CrewParams, state: MessengerState, cwd: string) {
   });
 }
 
-function taskUnblock(params: CrewParams, state: MessengerState, cwd: string) {
+function taskUnblock(params: MessengerActionParams, state: MessengerState, cwd: string) {
   if (!params.id) return result("Error: id required for task.unblock", { mode: "task.unblock", error: "missing_id" });
 
   const task = store.unblockTask(cwd, params.id);
@@ -314,7 +314,7 @@ function taskReady(cwd: string) {
   });
 }
 
-function taskProgress(params: CrewParams, state: MessengerState, cwd: string) {
+function taskProgress(params: MessengerActionParams, state: MessengerState, cwd: string) {
   if (!params.id) return result("Error: id required for task.progress", { mode: "task.progress", error: "missing_id" });
   if (!params.message) return result("Error: message required for task.progress", { mode: "task.progress", error: "missing_message" });
 
@@ -328,7 +328,7 @@ function taskProgress(params: CrewParams, state: MessengerState, cwd: string) {
   });
 }
 
-function taskReset(params: CrewParams, state: MessengerState, cwd: string) {
+function taskReset(params: MessengerActionParams, state: MessengerState, cwd: string) {
   if (!params.id) return result("Error: id required for task.reset", { mode: "task.reset", error: "missing_id" });
 
   const cascade = params.cascade === true;
@@ -350,7 +350,7 @@ function taskReset(params: CrewParams, state: MessengerState, cwd: string) {
   });
 }
 
-function taskDelete(params: CrewParams, state: MessengerState, cwd: string) {
+function taskDelete(params: MessengerActionParams, state: MessengerState, cwd: string) {
   if (!params.id) return result("Error: id required for task.delete", { mode: "task.delete", error: "missing_id" });
 
   const task = store.getTask(cwd, params.id);
@@ -411,7 +411,7 @@ function taskArchiveDone(state: MessengerState, cwd: string) {
   );
 }
 
-export function executeSpawn(op: string | null, params: CrewParams, state: MessengerState, cwd: string) {
+export function executeSpawn(op: string | null, params: MessengerActionParams, state: MessengerState, cwd: string) {
   cleanupExitedSpawned(cwd);
 
   if (!op) {
@@ -463,7 +463,7 @@ export function executeSpawn(op: string | null, params: CrewParams, state: Messe
   });
 }
 
-function spawnCreate(params: CrewParams, state: MessengerState, cwd: string) {
+function spawnCreate(params: MessengerActionParams, state: MessengerState, cwd: string) {
   const objective = params.message?.trim() || params.prompt?.trim();
   if (!objective) {
     return result("Error: spawn requires mission text via message or prompt.", {

@@ -31,8 +31,8 @@
   "files": [
     "*.ts",
     "*.mjs",
-    "crew/**",
     "swarm/**",
+    "migrations/**",
     "skills/**",
     "README.md",
     "CHANGELOG.md"

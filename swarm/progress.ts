@@ -1,7 +1,5 @@
 /**
- * Crew - Progress Tracking
- * 
- * Real-time visibility into agent execution via --mode json event parsing.
+ * Swarm live progress tracking helpers.
  */
 
 export interface ToolEntry {
@@ -24,7 +22,6 @@ export interface AgentProgress {
   error?: string;
 }
 
-// Event types from pi's --mode json output
 export interface PiEvent {
   type: string;
   toolName?: string;

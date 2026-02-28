@@ -2,14 +2,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { homedir } from "node:os";
 
-const CREW_AGENTS = [
+const LEGACY_AGENT_FILES = [
   "crew-planner.md",
   "crew-plan-sync.md",
   "crew-worker.md",
   "crew-reviewer.md",
-];
-
-const DEPRECATED_AGENTS = [
   "crew-repo-scout.md",
   "crew-practice-scout.md",
   "crew-docs-scout.md",
@@ -19,14 +16,14 @@ const DEPRECATED_AGENTS = [
   "crew-interview-generator.md",
 ];
 
-const DEFAULT_MIGRATION_MARKER = "legacy-crew-agent-cleanup-v1.json";
+const DEFAULT_MIGRATION_MARKER = "legacy-agent-cleanup-v2.json";
 
-export interface InstallOptions {
+export interface LegacyCleanupOptions {
   homeDir?: string;
   migrationMarker?: string;
 }
 
-function getTargetAgentsDir(homeDir: string): string {
+function getSharedAgentsDir(homeDir: string): string {
   return path.join(homeDir, ".pi", "agent", "agents");
 }
 
@@ -34,28 +31,28 @@ function getMigrationMarkerPath(homeDir: string, marker: string): string {
   return path.join(homeDir, ".pi", "agent", "messenger", "migrations", marker);
 }
 
-export function uninstallAgents(options: InstallOptions = {}): { removed: string[]; errors: string[] } {
+export function cleanupLegacyAgentFiles(options: LegacyCleanupOptions = {}): { removed: string[]; errors: string[] } {
   const homeDir = options.homeDir ?? homedir();
-  const targetAgentsDir = getTargetAgentsDir(homeDir);
+  const targetAgentsDir = getSharedAgentsDir(homeDir);
   const removed: string[] = [];
   const errors: string[] = [];
 
-  for (const agent of [...CREW_AGENTS, ...DEPRECATED_AGENTS]) {
-    const target = path.join(targetAgentsDir, agent);
+  for (const file of LEGACY_AGENT_FILES) {
+    const target = path.join(targetAgentsDir, file);
     try {
       if (fs.existsSync(target)) {
         fs.unlinkSync(target);
-        removed.push(agent);
+        removed.push(file);
       }
     } catch (err) {
-      errors.push(`Failed to remove ${agent}: ${err}`);
+      errors.push(`Failed to remove ${file}: ${err}`);
     }
   }
 
   return { removed, errors };
 }
 
-export function runLegacyAgentCleanupMigration(options: InstallOptions = {}): {
+export function runLegacyAgentCleanup(options: LegacyCleanupOptions = {}): {
   ran: boolean;
   removed: string[];
   errors: string[];
@@ -68,18 +65,25 @@ export function runLegacyAgentCleanupMigration(options: InstallOptions = {}): {
     return { ran: false, removed: [], errors: [] };
   }
 
-  const uninstallResult = uninstallAgents({ homeDir });
+  const cleanupResult = cleanupLegacyAgentFiles({ homeDir });
 
   try {
     fs.mkdirSync(path.dirname(markerPath), { recursive: true });
-    fs.writeFileSync(markerPath, JSON.stringify({
-      migratedAt: new Date().toISOString(),
-      removed: uninstallResult.removed,
-      errors: uninstallResult.errors,
-    }, null, 2));
+    fs.writeFileSync(
+      markerPath,
+      JSON.stringify(
+        {
+          migratedAt: new Date().toISOString(),
+          removed: cleanupResult.removed,
+          errors: cleanupResult.errors,
+        },
+        null,
+        2,
+      ),
+    );
   } catch (err) {
-    uninstallResult.errors.push(`Failed to persist migration marker: ${err}`);
+    cleanupResult.errors.push(`Failed to persist migration marker: ${err}`);
   }
 
-  return { ran: true, removed: uninstallResult.removed, errors: uninstallResult.errors };
+  return { ran: true, removed: cleanupResult.removed, errors: cleanupResult.errors };
 }

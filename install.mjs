@@ -9,8 +9,6 @@
  * Usage:
  *   npx pi-messenger                # Install or update extension
  *   npx pi-messenger --remove       # Remove the extension
- *   npx pi-messenger --crew-install   # Show crew agent info
- *   npx pi-messenger --crew-uninstall # Remove crew agents
  */
 
 import * as fs from "node:fs";
@@ -21,32 +19,12 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const PACKAGE_DIR = path.dirname(__filename);
 const EXTENSION_DIR = path.join(os.homedir(), ".pi", "agent", "extensions", "pi-messenger");
-const AGENTS_DIR = path.join(os.homedir(), ".pi", "agent", "agents");
-
-const CREW_AGENTS = [
-	"crew-planner.md",
-	"crew-interview-generator.md",
-	"crew-plan-sync.md",
-	"crew-worker.md",
-	"crew-reviewer.md",
-];
-
-const DEPRECATED_AGENTS = [
-	"crew-repo-scout.md",
-	"crew-practice-scout.md",
-	"crew-docs-scout.md",
-	"crew-web-scout.md",
-	"crew-github-scout.md",
-	"crew-gap-analyst.md",
-];
 
 const pkg = JSON.parse(fs.readFileSync(path.join(PACKAGE_DIR, "package.json"), "utf-8"));
 const VERSION = pkg.version;
 
 const args = process.argv.slice(2);
 const isRemove = args.includes("--remove") || args.includes("-r");
-const isCrewInstall = args.includes("--crew-install");
-const isCrewUninstall = args.includes("--crew-uninstall");
 const isHelp = args.includes("--help") || args.includes("-h");
 
 if (isHelp) {
@@ -56,50 +34,10 @@ pi-messenger v${VERSION} - Multi-agent coordination for pi
 Usage:
   npx pi-messenger                Install or update extension
   npx pi-messenger --remove       Remove the extension
-  npx pi-messenger --crew-install   Show crew agent info
-  npx pi-messenger --crew-uninstall Remove crew agents
-  npx pi-messenger --help          Show this help
+  npx pi-messenger --help         Show this help
 
 Extension directory: ${EXTENSION_DIR}
 `);
-	process.exit(0);
-}
-
-// ─── Crew install ────────────────────────────────────────────────────────────
-
-if (isCrewInstall) {
-	const agentsDir = path.join(EXTENSION_DIR, "crew", "agents");
-	if (!fs.existsSync(agentsDir)) {
-		console.log("Extension not installed. Run: npx pi-messenger");
-		process.exit(1);
-	}
-
-	const agents = fs.readdirSync(agentsDir).filter(f => f.endsWith(".md"));
-	console.log(`Crew agents (${agents.length}) ship with the extension:`);
-	console.log(`  ${agentsDir}`);
-	for (const agent of agents) {
-		console.log(`  - ${agent}`);
-	}
-	console.log("\nTo customize, copy an agent to .pi/messenger/crew/agents/ and edit it.");
-	process.exit(0);
-}
-
-// ─── Crew uninstall ──────────────────────────────────────────────────────────
-
-if (isCrewUninstall) {
-	let removed = 0;
-
-	for (const agent of [...CREW_AGENTS, ...DEPRECATED_AGENTS]) {
-		const target = path.join(AGENTS_DIR, agent);
-		if (fs.existsSync(target)) {
-			fs.unlinkSync(target);
-			removed++;
-		}
-	}
-
-	console.log(removed > 0
-		? `Removed ${removed} crew agent(s) from ${AGENTS_DIR}`
-		: "Nothing to remove");
 	process.exit(0);
 }
 

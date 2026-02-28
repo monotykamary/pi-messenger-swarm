@@ -27,8 +27,7 @@ export interface MessengerConfig {
   stuckNotify: boolean;
   autoStatus: boolean;
   autoOverlay: boolean;
-  autoOverlayPlanning: boolean;
-  crewEventsInFeed: boolean;
+  swarmEventsInFeed: boolean;
 }
 
 const DEFAULT_CONFIG: MessengerConfig = {
@@ -45,8 +44,7 @@ const DEFAULT_CONFIG: MessengerConfig = {
   stuckNotify: true,
   autoStatus: true,
   autoOverlay: true,
-  autoOverlayPlanning: true,
-  crewEventsInFeed: true,
+  swarmEventsInFeed: true,
 };
 
 function readJsonFile(path: string): Record<string, unknown> | null {
@@ -160,8 +158,7 @@ export function loadConfig(cwd: string): MessengerConfig {
     stuckNotify: merged.stuckNotify !== false,
     autoStatus: merged.autoStatus !== false,
     autoOverlay: merged.autoOverlay !== false,
-    autoOverlayPlanning: merged.autoOverlayPlanning !== false,
-    crewEventsInFeed: merged.crewEventsInFeed !== false,
+    swarmEventsInFeed: (merged as Record<string, unknown>).swarmEventsInFeed !== false,
   };
 
   if (merged.contextMode === "none") {

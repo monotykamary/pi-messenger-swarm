@@ -14,11 +14,11 @@ import {
 import * as store from "./store.js";
 import * as swarmStore from "./swarm/store.js";
 import type { SwarmTask as Task, SpawnedAgent } from "./swarm/types.js";
-import { getLiveWorkers, type LiveWorkerInfo } from "./crew/live-progress.js";
-import type { ToolEntry } from "./crew/utils/progress.js";
+import { getLiveWorkers, type LiveWorkerInfo } from "./swarm/live-progress.js";
+import type { ToolEntry } from "./swarm/progress.js";
 import { formatFeedLine as sharedFormatFeedLine, sanitizeFeedEvent, type FeedEvent } from "./feed.js";
 import { loadConfig } from "./config.js";
-import type { CrewViewState } from "./overlay-actions.js";
+import type { MessengerViewState } from "./overlay-actions.js";
 
 const STATUS_ICONS: Record<string, string> = { done: "✓", in_progress: "●", todo: "○", blocked: "✗" };
 
@@ -101,7 +101,7 @@ export function renderWorkersSection(theme: Theme, cwd: string, width: number, m
   return lines;
 }
 
-export function renderTaskList(theme: Theme, cwd: string, width: number, height: number, viewState: CrewViewState): string[] {
+export function renderTaskList(theme: Theme, cwd: string, width: number, height: number, viewState: MessengerViewState): string[] {
   const tasks = swarmStore.getTasks(cwd);
   const lines: string[] = [];
 
@@ -133,7 +133,7 @@ export function renderTaskList(theme: Theme, cwd: string, width: number, height:
   return lines.slice(viewState.scrollOffset, viewState.scrollOffset + height);
 }
 
-export function renderSwarmList(theme: Theme, agents: SpawnedAgent[], width: number, height: number, viewState: CrewViewState): string[] {
+export function renderSwarmList(theme: Theme, agents: SpawnedAgent[], width: number, height: number, viewState: MessengerViewState): string[] {
   const lines: string[] = [];
 
   if (agents.length === 0) {
@@ -304,7 +304,7 @@ export function renderLegend(
   theme: Theme,
   cwd: string,
   width: number,
-  viewState: CrewViewState,
+  viewState: MessengerViewState,
   task: Task | null,
   swarmAgent: SpawnedAgent | null,
 ): string {
@@ -348,7 +348,7 @@ export function renderLegend(
   return truncateToWidth(theme.fg("dim", appendUniversalHints("m:Chat  f:Swarm  PgUp/PgDn/^U/^D:Feed  Esc:Close")), width);
 }
 
-export function renderDetailView(cwd: string, task: Task, width: number, height: number, viewState: CrewViewState): string[] {
+export function renderDetailView(cwd: string, task: Task, width: number, height: number, viewState: MessengerViewState): string[] {
   const live = getLiveWorkers(cwd).get(task.id);
 
   const lines: string[] = [];
@@ -435,7 +435,7 @@ export function renderDetailView(cwd: string, task: Task, width: number, height:
   return visible;
 }
 
-export function renderSwarmDetail(agent: SpawnedAgent, width: number, height: number, viewState: CrewViewState): string[] {
+export function renderSwarmDetail(agent: SpawnedAgent, width: number, height: number, viewState: MessengerViewState): string[] {
   const lines: string[] = [];
 
   lines.push(`${agent.name} (${agent.id})`);
@@ -557,12 +557,12 @@ function renderTaskLine(theme: Theme, task: Task, isSelected: boolean, width: nu
   return truncateToWidth(`${select}${coloredIcon} ${task.id}  ${task.title}${theme.fg("dim", suffix)}`, width);
 }
 
-export function navigateTask(viewState: CrewViewState, direction: 1 | -1, taskCount: number): void {
+export function navigateTask(viewState: MessengerViewState, direction: 1 | -1, taskCount: number): void {
   if (taskCount === 0) return;
   viewState.selectedTaskIndex = Math.max(0, Math.min(taskCount - 1, viewState.selectedTaskIndex + direction));
 }
 
-export function navigateSwarm(viewState: CrewViewState, direction: 1 | -1, swarmCount: number): void {
+export function navigateSwarm(viewState: MessengerViewState, direction: 1 | -1, swarmCount: number): void {
   if (swarmCount === 0) return;
   viewState.selectedSwarmIndex = Math.max(0, Math.min(swarmCount - 1, viewState.selectedSwarmIndex + direction));
 }

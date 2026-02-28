@@ -8,7 +8,7 @@ description: Use pi-messenger in swarm mode. Agents can create/claim tasks direc
 Pi-messenger now runs in **swarm-first mode**.
 
 - No planning agent
-- No fixed crew roles
+- No fixed planner/worker/reviewer roles
 - Any joined or spawned agent can create/claim/complete tasks
 
 ## Core protocol (all agents)

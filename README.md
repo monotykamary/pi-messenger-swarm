@@ -123,14 +123,14 @@ Project-scoped swarm/task/feed state:
     └── blocks/
 ```
 
-## Legacy Crew Actions
+## Legacy Orchestration Actions
 
 Legacy PRD planner/worker/reviewer actions are disabled in swarm mode:
 
 - `plan*`
 - `work*`
 - `review*`
-- `crew.*`
+- `crew.*` (legacy alias namespace)
 
 Use `task.*`, `spawn.*`, and `swarm` instead.
 
