@@ -5,6 +5,7 @@ import { logFeedEvent } from "../feed.js";
 import * as store from "./store.js";
 import { cleanupExitedSpawned, listSpawned, spawnSubagent, stopSpawn } from "./spawn.js";
 import type { SpawnRequest, SwarmTaskEvidence } from "./types.js";
+import { formatRoleLabel } from "./labels.js";
 
 function summaryLine(cwd: string): string {
   const s = store.getSummary(cwd);
@@ -35,7 +36,7 @@ export function executeSwarmStatus(cwd: string) {
     lines.push("## Spawned Agents");
     for (const agent of spawned.slice(0, 8)) {
       const suffix = agent.taskId ? ` → ${agent.taskId}` : "";
-      lines.push(`- ${agent.id} · ${agent.name} (${agent.role}) · ${agent.status}${suffix}`);
+      lines.push(`- ${agent.id} · ${agent.name} (${formatRoleLabel(agent.role)}) · ${agent.status}${suffix}`);
     }
     lines.push("");
   }
@@ -426,7 +427,7 @@ export function executeSpawn(op: string | null, params: MessengerActionParams, s
 
     const lines = ["# Spawned Agents", "", ...items.map(agent => {
       const tail = agent.taskId ? ` → ${agent.taskId}` : "";
-      return `- ${agent.id}: ${agent.name} (${agent.role}) · ${agent.status}${tail}`;
+      return `- ${agent.id}: ${agent.name} (${formatRoleLabel(agent.role)}) · ${agent.status}${tail}`;
     })];
 
     return result(lines.join("\n"), {
@@ -484,9 +485,10 @@ function spawnCreate(params: MessengerActionParams, state: MessengerState, cwd: 
   };
 
   const record = spawnSubagent(cwd, request);
-  logFeedEvent(cwd, state.agentName, "message", undefined, `spawned ${record.name} (${record.role})`);
+  const roleLabel = formatRoleLabel(record.role);
+  logFeedEvent(cwd, state.agentName, "message", undefined, `spawned ${record.name} (${roleLabel})`);
 
-  return result(`🚀 Spawned ${record.name} (${record.id}) as ${record.role}.`, {
+  return result(`🚀 Spawned ${record.name} (${record.id}) as ${roleLabel}.`, {
     mode: "spawn",
     agent: record,
   });

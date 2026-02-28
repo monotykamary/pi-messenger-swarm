@@ -8,6 +8,7 @@ import { generateMemorableName } from "../lib.js";
 import { createProgress, parseJsonlLine, updateProgress } from "./progress.js";
 import { removeLiveWorker, updateLiveWorker } from "./live-progress.js";
 import type { SpawnRequest, SpawnedAgent } from "./types.js";
+import { formatRoleLabel } from "./labels.js";
 
 interface SpawnRuntime {
   process: ChildProcess;
@@ -27,7 +28,7 @@ function spawnLiveKey(id: string): string {
 }
 
 function buildSystemPrompt(request: SpawnRequest): string {
-  const role = request.role.trim();
+  const role = formatRoleLabel(request.role);
   const persona = request.persona?.trim();
 
   const lines: string[] = [

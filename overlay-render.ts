@@ -14,6 +14,7 @@ import {
 import * as store from "./store.js";
 import * as swarmStore from "./swarm/store.js";
 import type { SwarmTask as Task, SpawnedAgent } from "./swarm/types.js";
+import { formatRoleLabel } from "./swarm/labels.js";
 import { getLiveWorkers, type LiveWorkerInfo } from "./swarm/live-progress.js";
 import type { ToolEntry } from "./swarm/progress.js";
 import { formatFeedLine as sharedFormatFeedLine, sanitizeFeedEvent, type FeedEvent } from "./feed.js";
@@ -155,7 +156,7 @@ export function renderSwarmList(theme: Theme, agents: SpawnedAgent[], width: num
   for (let i = 0; i < agents.length; i++) {
     const agent = agents[i];
     const select = i === viewState.selectedSwarmIndex ? theme.fg("accent", "▸ ") : "  ";
-    const tailParts: string[] = [agent.role, agent.status];
+    const tailParts: string[] = [formatRoleLabel(agent.role), agent.status];
     if (agent.taskId) tailParts.push(`→ ${agent.taskId}`);
     lines.push(truncateToWidth(`${select}${statusIcon(agent.status)} ${agent.name}  ${theme.fg("dim", tailParts.join(" · "))}`, width));
   }
@@ -439,7 +440,7 @@ export function renderSwarmDetail(agent: SpawnedAgent, width: number, height: nu
   const lines: string[] = [];
 
   lines.push(`${agent.name} (${agent.id})`);
-  lines.push(`Role: ${agent.role}  │  Status: ${agent.status}`);
+  lines.push(`Role: ${formatRoleLabel(agent.role)}  │  Status: ${agent.status}`);
   if (agent.persona?.trim()) lines.push(`Persona: ${agent.persona.trim()}`);
   lines.push(`Started: ${formatRelativeTime(agent.startedAt)}`);
   if (agent.endedAt) {
