@@ -33,7 +33,7 @@ export interface MessengerConfig {
 const DEFAULT_CONFIG: MessengerConfig = {
   autoRegister: false,
   autoRegisterPaths: [],
-  scopeToFolder: false,
+  scopeToFolder: true, // Default to project-scoped isolation for swarm safety
   contextMode: "full",
   registrationContext: true,
   replyHint: true,

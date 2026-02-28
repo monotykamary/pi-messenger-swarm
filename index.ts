@@ -90,7 +90,13 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
 
   const nameTheme = { theme: config.nameTheme, customWords: config.nameWords };
 
-  const baseDir = process.env.PI_MESSENGER_DIR || join(homedir(), ".pi/agent/messenger");
+  // Determine base directory for swarm coordination
+  // Priority: PI_MESSENGER_DIR > project-scoped (default) > global (legacy)
+  const baseDir = process.env.PI_MESSENGER_DIR || (
+    process.env.PI_MESSENGER_GLOBAL === "1"
+      ? join(homedir(), ".pi/agent/messenger")  // Legacy global mode
+      : join(ctx.cwd ?? process.cwd(), ".pi/messenger")  // Project-scoped (default)
+  );
   const dirs: Dirs = {
     base: baseDir,
     registry: join(baseDir, "registry"),

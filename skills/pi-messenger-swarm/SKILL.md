@@ -91,15 +91,28 @@ pi_messenger({ action: "broadcast", message: "Claimed task-4, touching src/auth/
 
 ## Storage layout
 
-Swarm data lives under:
+Swarm data is **project-scoped by default** (isolated per project):
 
 ```
-.pi/messenger/swarm/
-├── tasks/
-│   ├── task-1.json
-│   ├── task-1.md
-│   └── task-1.progress.md
-└── blocks/
+.pi/messenger/
+├── feed.jsonl
+├── swarm/
+│   ├── tasks/
+│   │   ├── task-1.json
+│   │   ├── task-1.md
+│   │   └── task-1.progress.md
+│   └── blocks/
+└── locks/              # Race-safe coordination locks
 ```
 
-Feed remains at `.pi/messenger/feed.jsonl`.
+This prevents cross-project agent contamination. Agents only see other agents in the same project.
+
+### Override locations
+
+```bash
+# Custom directory
+PI_MESSENGER_DIR=/path/to/dir pi
+
+# Legacy global mode (all projects share state - not recommended)
+PI_MESSENGER_GLOBAL=1 pi
+```

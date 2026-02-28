@@ -128,23 +128,45 @@ Planning UI and worker +/- controls were removed in swarm mode.
 
 ## Storage Layout
 
-Global shared mesh state:
-
-- `~/.pi/agent/messenger/registry`
-- `~/.pi/agent/messenger/inbox`
-
-Project-scoped swarm/task/feed state:
+By default, swarm state is **project-scoped** (isolated per project):
 
 ```
 .pi/messenger/
 ├── feed.jsonl
-└── swarm/
-    ├── tasks/
-    │   ├── task-1.json
-    │   ├── task-1.md
-    │   └── task-1.progress.md
-    └── blocks/
+├── swarm/
+│   ├── tasks/
+│   │   ├── task-1.json
+│   │   ├── task-1.md
+│   │   └── task-1.progress.md
+│   └── blocks/
+└── locks/           # File locks for race-safe coordination
 ```
+
+This ensures agents in different projects never interfere with each other.
+
+### Environment Variables
+
+Override the default project-scoped behavior:
+
+| Variable | Effect |
+|----------|--------|
+| `PI_MESSENGER_DIR=/path/to/dir` | Use custom directory for all state |
+| `PI_MESSENGER_GLOBAL=1` | Use legacy global mode (`~/.pi/agent/messenger`) |
+
+```bash
+# Custom location
+PI_MESSENGER_DIR=/tmp/swarm-state pi
+
+# Legacy global mode (not recommended)
+PI_MESSENGER_GLOBAL=1 pi
+```
+
+### Global Mode (Legacy)
+
+For backwards compatibility only - agents from ALL projects share state:
+
+- `~/.pi/agent/messenger/registry` - Agent registrations
+- `~/.pi/agent/messenger/inbox` - Cross-agent messaging
 
 ## Legacy Orchestration Actions
 
