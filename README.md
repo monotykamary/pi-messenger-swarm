@@ -14,7 +14,7 @@ Pi Messenger is a file-based multi-agent coordination extension for Pi.
 This swarm-first fork is inspired by and built upon the original project by Nico Bailon:
 https://github.com/nicobailon/pi-messenger
 
-[![npm version](https://img.shields.io/npm/v/pi-messenger?style=for-the-badge)](https://www.npmjs.com/package/pi-messenger)
+[![npm version](https://img.shields.io/npm/v/pi-messenger-swarm?style=for-the-badge)](https://www.npmjs.com/package/pi-messenger-swarm)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
 ## Screenshots
@@ -25,9 +25,23 @@ https://github.com/nicobailon/pi-messenger
 
 ## Install
 
+From npm:
+
 ```bash
-pi install npm:pi-messenger
+pi install npm:pi-messenger-swarm
 ```
+
+From git (Pi package settings):
+
+```json
+{
+  "packages": [
+    "git:github.com/monotykamary/pi-messenger-swarm@main"
+  ]
+}
+```
+
+> Tip: after release tags are published, pin to a version tag instead of `main` (for example `@vX.Y.Z`).
 
 ## Quick Start
 
