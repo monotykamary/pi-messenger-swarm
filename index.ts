@@ -90,18 +90,25 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
 
   const nameTheme = { theme: config.nameTheme, customWords: config.nameWords };
 
-  // Determine base directory for swarm coordination
-  // Priority: PI_MESSENGER_DIR > project-scoped (default) > global (legacy)
-  const baseDir = process.env.PI_MESSENGER_DIR || (
-    process.env.PI_MESSENGER_GLOBAL === "1"
-      ? join(homedir(), ".pi/agent/messenger")  // Legacy global mode
-      : join(ctx.cwd ?? process.cwd(), ".pi/messenger")  // Project-scoped (default)
-  );
-  const dirs: Dirs = {
-    base: baseDir,
-    registry: join(baseDir, "registry"),
-    inbox: join(baseDir, "inbox")
-  };
+  // ===========================================================================
+  // Directory setup (project-scoped by default)
+  // ===========================================================================
+  // Note: This runs at extension load time with process.cwd().
+  // The actual project path is set correctly when pi starts in a project.
+  function getMessengerDirs(): Dirs {
+    // Priority: PI_MESSENGER_DIR > project-scoped (default) > global (legacy)
+    const baseDir = process.env.PI_MESSENGER_DIR || (
+      process.env.PI_MESSENGER_GLOBAL === "1"
+        ? join(homedir(), ".pi/agent/messenger")  // Legacy global mode
+        : join(process.cwd(), ".pi/messenger")  // Project-scoped (default)
+    );
+    return {
+      base: baseDir,
+      registry: join(baseDir, "registry"),
+      inbox: join(baseDir, "inbox")
+    };
+  }
+  const dirs = getMessengerDirs();
 
   // ===========================================================================
   // Message Delivery
