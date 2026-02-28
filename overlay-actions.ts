@@ -4,15 +4,14 @@ import type { AgentMailMessage, Dirs, MessengerState } from "./lib.js";
 import { MAX_CHAT_HISTORY } from "./lib.js";
 import { sendMessageToAgent, getActiveAgents } from "./store.js";
 import { logFeedEvent } from "./feed.js";
-import * as crewStore from "./crew/store.js";
-import { executeTaskAction as runTaskAction } from "./crew/task-actions.js";
-import type { Task } from "./crew/types.js";
+import * as swarmStore from "./swarm/store.js";
+import { executeTaskAction as runTaskAction } from "./swarm/task-actions.js";
+import type { SwarmTask as Task } from "./swarm/types.js";
 import { getLiveWorkers } from "./crew/live-progress.js";
 import { hasActiveWorker } from "./crew/registry.js";
-import { cancelPlanningRun } from "./crew/state.js";
 
 interface ConfirmAction {
-  type: "reset" | "cascade-reset" | "delete" | "cancel-planning";
+  type: "reset" | "cascade-reset" | "delete";
   taskId: string;
   label: string;
 }
@@ -33,6 +32,7 @@ export interface CrewViewState {
   notification: { message: string; expiresAt: number } | null;
   notificationTimer: ReturnType<typeof setTimeout> | null;
   feedFocus: boolean;
+  feedScrollOffset: number;
   mentionCandidates: string[];
   mentionIndex: number;
 }
@@ -54,6 +54,7 @@ export function createCrewViewState(): CrewViewState {
     notification: null,
     notificationTimer: null,
     feedFocus: false,
+    feedScrollOffset: 0,
     mentionCandidates: [],
     mentionIndex: -1,
   };
@@ -134,17 +135,9 @@ export function handleConfirmInput(data: string, viewState: CrewViewState, cwd: 
   const action = viewState.confirmAction;
   if (!action) return;
   if (matchesKey(data, "y")) {
-    if (action.type === "cancel-planning") {
-      cancelPlanningRun(cwd);
-      logFeedEvent(cwd, agentName, "plan.cancel");
-      viewState.confirmAction = null;
-      setNotification(viewState, tui, true, "Planning cancelled");
-      tui.requestRender();
-      return;
-    }
     const result = executeTaskAction(cwd, action.type, action.taskId, agentName);
     if (action.type === "delete") {
-      const tasks = crewStore.getTasks(cwd);
+      const tasks = swarmStore.getTasks(cwd);
       if (tasks.length > 0) {
         viewState.selectedTaskIndex = Math.max(0, Math.min(viewState.selectedTaskIndex, tasks.length - 1));
       } else {
@@ -329,11 +322,6 @@ function sendBroadcastMessage(
   viewState: CrewViewState,
 ): void {
   const peers = getActiveAgents(state, dirs);
-  if (peers.length === 0) {
-    setNotification(viewState, tui, false, "No peers available for @all");
-    tui.requestRender();
-    return;
-  }
 
   let sentCount = 0;
   for (const peer of peers) {
@@ -345,10 +333,22 @@ function sendBroadcastMessage(
     }
   }
 
+  // If no peers are active, treat chat input as local steering.
   if (sentCount === 0) {
-    setNotification(viewState, tui, false, "Broadcast failed");
-    tui.requestRender();
-    return;
+    try {
+      const selfMsg = sendMessageToAgent(state, dirs, state.agentName, text);
+      addToChatHistory(state, state.agentName, selfMsg);
+      addToBroadcastHistory(state, text);
+      logFeedEvent(cwd, state.agentName, "message", "self", previewText(text));
+      resetMessageInput(viewState);
+      setNotification(viewState, tui, true, "Steered current agent (no peers)");
+      tui.requestRender();
+      return;
+    } catch {
+      setNotification(viewState, tui, false, "Broadcast/steer failed");
+      tui.requestRender();
+      return;
+    }
   }
 
   addToBroadcastHistory(state, text);
@@ -455,6 +455,12 @@ export function handleCrewKeyBinding(
   agentName: string,
   tui: TUI,
 ): void {
+  if (matchesKey(data, "s") && task.status === "todo") {
+    const result = executeTaskAction(cwd, "start", task.id, agentName);
+    setNotification(viewState, tui, result.success, result.message);
+    tui.requestRender();
+    return;
+  }
   if (matchesKey(data, "r") && ["done", "blocked", "in_progress"].includes(task.status)) {
     viewState.confirmAction = { type: "reset", taskId: task.id, label: task.title };
     tui.requestRender();
@@ -468,11 +474,6 @@ export function handleCrewKeyBinding(
   if (matchesKey(data, "u") && task.status === "blocked") {
     const result = executeTaskAction(cwd, "unblock", task.id, agentName);
     setNotification(viewState, tui, result.success, result.message);
-    tui.requestRender();
-    return;
-  }
-  if (matchesKey(data, "shift+s") && task.status !== "done" && !task.milestone) {
-    setNotification(viewState, tui, true, `Split: pi_messenger({ action: "task.split", id: "${task.id}" })`);
     tui.requestRender();
     return;
   }
@@ -491,20 +492,6 @@ export function handleCrewKeyBinding(
   if (matchesKey(data, "x")) {
     if (task.status === "in_progress" && hasLiveWorker(cwd, task.id)) return;
     viewState.confirmAction = { type: "delete", taskId: task.id, label: task.title };
-    tui.requestRender();
-    return;
-  }
-  if (matchesKey(data, "p") && task.status !== "in_progress" && !task.milestone) {
-    viewState.inputMode = "revise-prompt";
-    viewState.reviseScope = "single";
-    viewState.revisePromptInput = "";
-    tui.requestRender();
-    return;
-  }
-  if (matchesKey(data, "shift+p") && task.status !== "in_progress" && !task.milestone) {
-    viewState.inputMode = "revise-prompt";
-    viewState.reviseScope = "tree";
-    viewState.revisePromptInput = "";
     tui.requestRender();
     return;
   }

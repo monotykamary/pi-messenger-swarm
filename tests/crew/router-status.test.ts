@@ -65,7 +65,7 @@ describe("crew action router status behavior", () => {
     expect(text).not.toContain("# Crew Status");
   });
 
-  it("routes action=crew.status to crew status handler", async () => {
+  it("returns legacy-disabled guidance for crew.status", async () => {
     const { cwd } = createTempCrewDirs();
     const state = createTestState("AgentOne");
     const dirs = createDirs(cwd);
@@ -83,6 +83,7 @@ describe("crew action router status behavior", () => {
     );
 
     const text = response.content[0].text;
-    expect(text).toContain("# Crew Status");
+    expect(text).toContain("Legacy crew action");
+    expect(text).toContain("swarm");
   });
 });

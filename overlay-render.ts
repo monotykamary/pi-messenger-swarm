@@ -1,5 +1,3 @@
-import * as fs from "node:fs";
-import * as path from "node:path";
 import { truncateToWidth } from "@mariozechner/pi-tui";
 import type { Theme } from "@mariozechner/pi-coding-agent";
 import {
@@ -14,24 +12,12 @@ import {
   type MessengerState,
 } from "./lib.js";
 import * as store from "./store.js";
-import * as crewStore from "./crew/store.js";
-import {
-  autonomousState,
-  getPlanningUpdateAgeMs,
-  isAutonomousForCwd,
-  isPlanningForCwd,
-  isPlanningStalled,
-  planningState,
-  PLANNING_STALE_TIMEOUT_MS,
-} from "./crew/state.js";
-import type { Task } from "./crew/types.js";
+import * as swarmStore from "./swarm/store.js";
+import type { SwarmTask as Task } from "./swarm/types.js";
 import { getLiveWorkers, type LiveWorkerInfo } from "./crew/live-progress.js";
 import type { ToolEntry } from "./crew/utils/progress.js";
 import { formatFeedLine as sharedFormatFeedLine, sanitizeFeedEvent, type FeedEvent } from "./feed.js";
-import { discoverCrewAgents } from "./crew/utils/discover.js";
 import { loadConfig } from "./config.js";
-import { loadCrewConfig } from "./crew/utils/config.js";
-import { getLobbyWorkerCount } from "./crew/lobby.js";
 import type { CrewViewState } from "./overlay-actions.js";
 
 const STATUS_ICONS: Record<string, string> = { done: "✓", in_progress: "●", todo: "○", blocked: "✗" };
@@ -60,7 +46,7 @@ function renderActivityLog(
     const args = currentToolArgs ? ` ${currentToolArgs}` : "";
     lines.push(truncateToWidth(`  → [${elapsed}] ${currentTool}${args}`, width));
   } else {
-    lines.push(`  → thinking...`);
+    lines.push("  → thinking...");
   }
   return lines;
 }
@@ -69,20 +55,8 @@ function hasLiveWorker(cwd: string, taskId: string): boolean {
   return getLiveWorkers(cwd).has(taskId);
 }
 
-function readPlanningTail(cwd: string, maxLines: number): string[] {
-  const progressPath = path.join(crewStore.getCrewDir(cwd), "planning-progress.md");
-  if (!fs.existsSync(progressPath)) return [];
-  try {
-    const lines = fs.readFileSync(progressPath, "utf-8").split("\n").map(l => l.trim()).filter(Boolean);
-    if (lines.length === 0) return [];
-    return lines.slice(-maxLines);
-  } catch {
-    return [];
-  }
-}
-
 function appendUniversalHints(text: string): string {
-  return `${text}  [^T] [^B]`;
+  return `${text}  [T:snap] [B:bg]`;
 }
 
 function idleLabel(timestamp: string | undefined): string {
@@ -92,52 +66,22 @@ function idleLabel(timestamp: string | undefined): string {
   return `idle ${formatDuration(ageMs)}`;
 }
 
-export function renderStatusBar(theme: Theme, cwd: string, width: number): string {
-  const plan = crewStore.getPlan(cwd);
-  const autonomousActive = isAutonomousForCwd(cwd);
-  const crewDir = crewStore.getCrewDir(cwd);
-  const crewConfig = loadCrewConfig(crewDir);
-
-  if (isPlanningForCwd(cwd)) {
-    const updated = planningState.updatedAt ? formatRelativeTime(planningState.updatedAt) : "unknown";
-    const stalled = isPlanningStalled(cwd);
-    const label = stalled ? "Planning stalled" : "Planning";
-    const lobbyCount = getLobbyWorkerCount(cwd);
-    const workerNote = lobbyCount > 0 ? ` │ ${lobbyCount} in lobby` : "";
-    const coordLevel = crewConfig.coordination;
-    return truncateToWidth(`${label} ${planningState.pass}/${planningState.maxPasses} │ ${planningState.phase} │ ${updated}${workerNote} │ ${crewConfig.dependencies} │ ${coordLevel}`, width);
-  }
-
-  if (!plan) {
-    const liveCount = getLiveWorkers(cwd).size;
-    return truncateToWidth(`No active plan │ ⚙ ${liveCount}/${autonomousState.concurrency} workers`, width);
-  }
-
-  const ready = crewStore.getReadyTasks(cwd, { advisory: crewConfig.dependencies === "advisory" });
-  const progress = `${plan.completed_count}/${plan.task_count}`;
-  const planLabel = crewStore.getPlanLabel(plan, 40);
-  let base = `📋 ${planLabel}: ${progress}`;
-  if (ready.length > 0) {
-    const readyLabel = crewConfig.dependencies === "advisory" ? "available" : "ready";
-    base += ` │ ${ready.length} ${readyLabel}`;
-  }
+export function renderStatusBar(_theme: Theme, cwd: string, width: number): string {
+  const summary = swarmStore.getSummary(cwd);
+  const ready = swarmStore.getReadyTasks(cwd);
   const liveCount = getLiveWorkers(cwd).size;
-  base += ` │ ⚙ ${liveCount}/${autonomousState.concurrency} workers`;
-  const coordLevel = crewConfig.coordination;
-  base += ` │ ${crewConfig.dependencies} │ ${coordLevel}`;
 
-  if (!autonomousActive) {
-    return truncateToWidth(base, width);
+  if (summary.total === 0) {
+    return truncateToWidth(`No swarm tasks │ ⚙ ${liveCount} live`, width);
   }
 
-  const parts = ["● AUTO", `W${autonomousState.waveNumber}`];
-  if (autonomousState.startedAt) {
-    const elapsedMs = Date.now() - new Date(autonomousState.startedAt).getTime();
-    const mm = Math.floor(elapsedMs / 60000).toString();
-    const ss = Math.floor((elapsedMs % 60000) / 1000).toString().padStart(2, "0");
-    parts.push(`⏱ ${mm}:${ss}`);
-  }
-  return truncateToWidth(`${base} │ ${theme.fg("accent", parts.join(" "))}`, width);
+  let line = `Swarm ${summary.done}/${summary.total}`;
+  line += ` │ ready ${ready.length}`;
+  line += ` │ in progress ${summary.in_progress}`;
+  line += ` │ blocked ${summary.blocked}`;
+  line += ` │ ⚙ ${liveCount} live`;
+
+  return truncateToWidth(line, width);
 }
 
 export function renderWorkersSection(theme: Theme, cwd: string, width: number, maxLines: number): string[] {
@@ -155,14 +99,14 @@ export function renderWorkersSection(theme: Theme, cwd: string, width: number, m
     const tokens = info.progress.tokens > 1000
       ? `${(info.progress.tokens / 1000).toFixed(0)}k`
       : `${info.progress.tokens}`;
-    const line = `⚡ ${info.name} ${formatTaskLabel(info.taskId)}  ${activity}  ${theme.fg("dim", `${elapsed}  ${tokens} tok`)}`;
+    const line = `⚡ ${info.name} (${info.taskId})  ${activity}  ${theme.fg("dim", `${elapsed}  ${tokens} tok`)}`;
     lines.push(truncateToWidth(line, width));
   }
   return lines;
 }
 
 export function renderTaskList(theme: Theme, cwd: string, width: number, height: number, viewState: CrewViewState): string[] {
-  const tasks = crewStore.getTasks(cwd);
+  const tasks = swarmStore.getTasks(cwd);
   const lines: string[] = [];
 
   if (tasks.length === 0) {
@@ -194,29 +138,33 @@ export function renderTaskList(theme: Theme, cwd: string, width: number, height:
 }
 
 export function renderTaskSummary(theme: Theme, cwd: string, width: number, height: number): string[] {
-  const tasks = crewStore.getTasks(cwd);
+  const tasks = swarmStore.getTasks(cwd);
   const counts: Record<string, number> = { done: 0, in_progress: 0, blocked: 0, todo: 0 };
   const activeNames: string[] = [];
-  for (const t of tasks) {
-    counts[t.status] = (counts[t.status] || 0) + 1;
-    if (t.status === "in_progress" && t.assigned_to) activeNames.push(t.assigned_to);
+
+  for (const task of tasks) {
+    counts[task.status] = (counts[task.status] || 0) + 1;
+    if (task.status === "in_progress" && task.claimed_by) activeNames.push(task.claimed_by);
   }
+
   const parts: string[] = [];
   if (counts.done > 0) parts.push(theme.fg("accent", `${counts.done} done`));
   if (counts.in_progress > 0) parts.push(theme.fg("warning", `${counts.in_progress} active`));
   if (counts.blocked > 0) parts.push(theme.fg("error", `${counts.blocked} blocked`));
   if (counts.todo > 0) parts.push(theme.fg("dim", `${counts.todo} todo`));
+
   const line1 = truncateToWidth(`Tasks: ${parts.join("  ")}  (${tasks.length} total)`, width);
   const line2 = activeNames.length > 0
     ? truncateToWidth(theme.fg("dim", `  Active: ${activeNames.join(", ")}`), width)
     : "";
+
   const lines = [line1];
   if (line2) lines.push(line2);
   while (lines.length < height) lines.push("");
   return lines.slice(0, height);
 }
 
-const DIM_EVENTS = new Set(["join", "leave", "reserve", "release", "plan.pass.start", "plan.pass.done", "plan.review.start", "plan.review.done"]);
+const DIM_EVENTS = new Set(["join", "leave", "reserve", "release"]);
 
 export function renderFeedSection(theme: Theme, events: FeedEvent[], width: number, lastSeenTs: string | null): string[] {
   if (events.length === 0) return [];
@@ -244,13 +192,6 @@ export function renderFeedSection(theme: Theme, events: FeedEvent[], width: numb
   return lines;
 }
 
-function formatTaskLabel(taskId: string): string {
-  if (taskId === "__planner__") return "(planner)";
-  if (taskId === "__reviser__") return "(reviser)";
-  if (taskId.startsWith("__lobby-") && taskId.endsWith("__")) return "(lobby)";
-  return taskId;
-}
-
 function wrapText(text: string, maxWidth: number): string[] {
   if (text.length <= maxWidth) return [text];
   const lines: string[] = [];
@@ -273,7 +214,7 @@ function renderMessageLines(theme: Theme, event: FeedEvent, width: number): stri
   const agentStyled = coloredAgentName(event.agent);
   const rawPreview = event.preview?.trim() ?? "";
 
-  const direction = event.target ? `\u2192 ${event.target}` : "\u2726";
+  const direction = event.target ? `→ ${event.target}` : "✦";
   const singleLen = time.length + 1 + event.agent.length + 1 + (event.target ? 2 + event.target.length : 1) + (rawPreview ? 1 + rawPreview.length : 0);
 
   if (singleLen <= width && rawPreview) {
@@ -312,7 +253,7 @@ export function renderAgentsRow(
     if (seen.has(agent.name)) continue;
     const computed = computeStatus(
       agent.activity?.lastActivityAt ?? agent.startedAt,
-      agentHasTask(agent.name, allClaims, crewStore.getTasks(agent.cwd)),
+      agentHasTask(agent.name, allClaims, swarmStore.getTasks(agent.cwd)),
       (agent.reservations?.length ?? 0) > 0,
       stuckThresholdMs,
     );
@@ -324,7 +265,7 @@ export function renderAgentsRow(
 
   for (const worker of getLiveWorkers(cwd).values()) {
     if (seen.has(worker.taskId)) continue;
-    rowParts.push(`🔵 ${worker.name} ${formatTaskLabel(worker.taskId)}`);
+    rowParts.push(`🔵 ${worker.name} (${worker.taskId})`);
     seen.add(worker.taskId);
   }
 
@@ -333,79 +274,15 @@ export function renderAgentsRow(
 
 export function renderEmptyState(theme: Theme, cwd: string, width: number, height: number): string[] {
   const lines: string[] = [];
-  const agents = discoverCrewAgents(cwd);
   const config = loadConfig(cwd);
-  const crewConfig = loadCrewConfig(crewStore.getCrewDir(cwd));
 
-  lines.push("Crew agents:");
-  if (agents.length === 0) {
-    lines.push(theme.fg("dim", "  (none discovered)"));
-  } else {
-    for (const agent of agents) {
-      const effectiveModel = crewConfig.models?.[agent.crewRole ?? "worker"] ?? agent.model;
-      const model = effectiveModel ? ` (model: ${effectiveModel})` : "";
-      lines.push(`  ${agent.name}${model}`);
-    }
-  }
-
-  lines.push("");
-  lines.push("Config:");
-  lines.push(`  Workers: ${crewConfig.concurrency.workers}  │  Stuck threshold: ${config.stuckThreshold}s`);
-  lines.push(`  Auto-overlay: ${config.autoOverlay ? "on" : "off"}  │  Feed retention: ${config.feedRetention}`);
-  lines.push("");
-  lines.push("Create a plan:");
-  lines.push("  pi_messenger({ action: \"plan\", prd: \"docs/PRD.md\" })");
+  lines.push("No swarm tasks yet — create one or spawn a specialist.");
+  lines.push("task.create: pi_messenger({ action: \"task.create\", title: \"Investigate bug\" })");
+  lines.push("spawn: pi_messenger({ action: \"spawn\", role: \"Researcher\", message: \"Analyze issue\" })");
+  lines.push(`stuck ${config.stuckThreshold}s · feed ${config.feedRetention}`);
 
   if (lines.length > height) {
     return lines.slice(0, height).map(line => truncateToWidth(line, width));
-  }
-  while (lines.length < height) lines.push("");
-  return lines.map(line => truncateToWidth(line, width));
-}
-
-export function renderPlanningState(theme: Theme, cwd: string, width: number, height: number): string[] {
-  const lines: string[] = [];
-  const updated = planningState.updatedAt ? formatRelativeTime(planningState.updatedAt) : "unknown";
-  const stalled = isPlanningStalled(cwd);
-  const ageMs = getPlanningUpdateAgeMs(cwd);
-
-  const plannerWorker = getLiveWorkers(cwd).get("__planner__");
-  const reviewerWorker = getLiveWorkers(cwd).get("__reviewer__");
-  const activeWorker = plannerWorker ?? reviewerWorker;
-
-  lines.push(stalled ? theme.fg("warning", "Planning stalled") : "Planning in progress");
-  lines.push(`  Pass: ${planningState.pass}/${planningState.maxPasses}  │  Phase: ${planningState.phase}  │  ${updated}`);
-
-  if (stalled) {
-    const staleFor = ageMs === null ? "unknown" : formatDuration(ageMs);
-    lines.push(theme.fg("warning", `  Health: stalled (${staleFor}, timeout ${formatDuration(PLANNING_STALE_TIMEOUT_MS)})`));
-  }
-
-  lines.push("");
-
-  if (activeWorker) {
-    const p = activeWorker.progress;
-    const tokens = p.tokens > 1000 ? `${(p.tokens / 1000).toFixed(0)}k` : `${p.tokens}`;
-    const elapsed = formatElapsed(Date.now() - activeWorker.startedAt);
-    lines.push(`  ${activeWorker.agent}  │  ${p.toolCallCount} calls  ${tokens} tokens  ${elapsed}`);
-    lines.push("");
-    const activityLines = renderActivityLog(p.recentTools, p.currentTool, p.currentToolArgs, activeWorker.startedAt, width);
-    lines.push(...activityLines);
-  } else {
-    const tail = readPlanningTail(cwd, 5);
-    if (tail.length > 0) {
-      lines.push(theme.fg("dim", "  recent:"));
-      for (const item of tail) {
-        lines.push(theme.fg("dim", `    ${item}`));
-      }
-    }
-    lines.push("");
-    lines.push(theme.fg("dim", "  progress: .pi/messenger/crew/planning-progress.md"));
-    lines.push(theme.fg("dim", "  outline: .pi/messenger/crew/planning-outline.md"));
-  }
-
-  if (lines.length > height) {
-    return lines.slice(-height).map(line => truncateToWidth(line, width));
   }
   while (lines.length < height) lines.push("");
   return lines.map(line => truncateToWidth(line, width));
@@ -433,12 +310,6 @@ export function renderLegend(
     return truncateToWidth(theme.fg("accent", text + "  [^T] [^B]"), width);
   }
 
-  if (viewState.inputMode === "revise-prompt") {
-    const label = viewState.reviseScope === "tree" ? "Revise tree" : "Revise";
-    const text = `${label}: ${viewState.revisePromptInput}█  [Enter] Send  [Esc] Cancel`;
-    return truncateToWidth(theme.fg("accent", appendUniversalHints(text)), width);
-  }
-
   if (viewState.notification) {
     if (Date.now() < viewState.notification.expiresAt) {
       return truncateToWidth(appendUniversalHints(viewState.notification.message), width);
@@ -454,14 +325,8 @@ export function renderLegend(
     return truncateToWidth(theme.fg("dim", appendUniversalHints(renderListStatusBar(cwd, task))), width);
   }
 
-  if (isPlanningForCwd(cwd)) {
-    return truncateToWidth(
-      theme.fg("dim", appendUniversalHints(`c:Cancel  v:${coordHint(cwd)}  +/-:Wkrs  Esc:Close`)),
-      width,
-    );
-  }
-
-  return truncateToWidth(theme.fg("dim", appendUniversalHints(`m:Chat  v:${coordHint(cwd)}  +/-:Wkrs  Esc:Close`)), width);
+  const feedHint = viewState.feedFocus ? "PgUp/PgDn:Scroll" : "f:Feed";
+  return truncateToWidth(theme.fg("dim", appendUniversalHints(`m:Chat  ${feedHint}  Esc:Close`)), width);
 }
 
 export function renderDetailView(cwd: string, task: Task, width: number, height: number, viewState: CrewViewState): string[] {
@@ -475,15 +340,14 @@ export function renderDetailView(cwd: string, task: Task, width: number, height:
   if (live) {
     lines.push(`Status: ${task.status}  │  ${live.name}  │  ${live.progress.toolCallCount} calls  ${tokens} tokens  ${elapsed}`);
   } else {
-    const typeText = task.milestone ? "  │  Type: milestone" : "";
-    const assignedText = task.assigned_to ? `  │  Assigned: ${task.assigned_to}` : "";
-    lines.push(`Status: ${task.status}  │  Attempts: ${task.attempt_count}  │  Created: ${formatRelativeTime(task.created_at)}${typeText}${assignedText}`);
+    const claimedText = task.claimed_by ? `  │  Claimed: ${task.claimed_by}` : "";
+    lines.push(`Status: ${task.status}  │  Attempts: ${task.attempt_count}  │  Created: ${formatRelativeTime(task.created_at)}${claimedText}`);
   }
   lines.push("");
 
   if (task.status === "in_progress" && !live) {
-    const startedText = task.started_at ? ` (started ${formatRelativeTime(task.started_at)})` : "";
-    lines.push(`⚠ Worker not running${startedText} — press [q] to stop and unassign`);
+    const startedText = task.claimed_at ? ` (claimed ${formatRelativeTime(task.claimed_at)})` : "";
+    lines.push(`⚠ Claimed but no live worker${startedText}`);
     lines.push("");
   }
 
@@ -500,14 +364,14 @@ export function renderDetailView(cwd: string, task: Task, width: number, height:
     if (task.depends_on.length > 0) {
       lines.push("Dependencies:");
       for (const depId of task.depends_on) {
-        const dep = crewStore.getTask(cwd, depId);
+        const dep = swarmStore.getTask(cwd, depId);
         if (!dep) lines.push(`  ○ ${depId}: (missing)`);
         else lines.push(`  ${dep.status === "done" ? "✓" : "○"} ${dep.id}: ${dep.title} (${dep.status})`);
       }
       lines.push("");
     }
 
-    const progress = crewStore.getTaskProgress(cwd, task.id);
+    const progress = swarmStore.getTaskProgress(cwd, task.id);
     if (progress) {
       lines.push("Progress:");
       for (const line of progress.trimEnd().split("\n")) lines.push(`  ${line}`);
@@ -516,24 +380,10 @@ export function renderDetailView(cwd: string, task: Task, width: number, height:
 
     if (task.status === "blocked") {
       lines.push(`Block Reason: ${task.blocked_reason ?? "Unknown"}`);
-      const blockContext = crewStore.getBlockContext(cwd, task.id);
+      const blockContext = swarmStore.getBlockContext(cwd, task.id);
       if (blockContext) {
         lines.push("", "Block Context:");
         for (const line of blockContext.trimEnd().split("\n")) lines.push(`  ${line}`);
-      }
-      lines.push("");
-    }
-
-    if (task.last_review) {
-      const icon = task.last_review.verdict === "SHIP" ? "✓" : task.last_review.verdict === "NEEDS_WORK" ? "✗" : "⚠";
-      lines.push(`Last Review: ${icon} ${task.last_review.verdict} (${formatRelativeTime(task.last_review.reviewed_at)})`);
-      if (task.last_review.issues.length > 0) {
-        lines.push("  Issues:");
-        for (const issue of task.last_review.issues) lines.push(`    - ${issue}`);
-      }
-      if (task.last_review.suggestions.length > 0) {
-        lines.push("  Suggestions:");
-        for (const suggestion of task.last_review.suggestions) lines.push(`    - ${suggestion}`);
       }
       lines.push("");
     }
@@ -551,7 +401,7 @@ export function renderDetailView(cwd: string, task: Task, width: number, height:
     }
 
     lines.push("Spec:");
-    const spec = crewStore.getTaskSpec(cwd, task.id);
+    const spec = swarmStore.getTaskSpec(cwd, task.id);
     if (!spec || spec.trimEnd().length === 0) lines.push("  *No spec available*");
     else for (const line of spec.trimEnd().split("\n")) lines.push(`  ${line}`);
   }
@@ -566,23 +416,15 @@ export function renderDetailView(cwd: string, task: Task, width: number, height:
   return visible;
 }
 
-function coordHint(cwd: string): string {
-  return loadCrewConfig(crewStore.getCrewDir(cwd)).coordination ?? "chatty";
-}
-
 function renderDetailStatusBar(cwd: string, task: Task): string {
   const hints: string[] = [];
   if (task.status === "in_progress") hints.push("q:Stop");
   if (["done", "blocked", "in_progress"].includes(task.status)) hints.push("r:Reset");
   if (task.status === "blocked") hints.push("u:Unblock");
-  if (task.status !== "done" && !task.milestone) hints.push("S:Split");
-  if (task.status === "todo" && !task.milestone) hints.push("s:Start");
+  if (task.status === "todo") hints.push("s:Claim");
   if (task.status === "in_progress") hints.push("b:Block");
-  if (task.status !== "in_progress" && !task.milestone) hints.push("p:Revise");
-  if (task.status !== "in_progress" && !task.milestone) hints.push("P:Tree");
   if (!(task.status === "in_progress" && hasLiveWorker(cwd, task.id))) hints.push("x:Del");
-  if (!isPlanningForCwd(cwd)) hints.push("m:Chat");
-  hints.push(`v:${coordHint(cwd)}`, "f:Feed", "+/-:Wkrs", "←→:Nav");
+  hints.push("m:Chat", "f:Feed", "PgUp/PgDn:Scroll", "←→:Nav");
   return hints.join("  ");
 }
 
@@ -591,21 +433,17 @@ function renderListStatusBar(cwd: string, task: Task): string {
   if (task.status === "in_progress") hints.push("q:Stop");
   if (["done", "blocked", "in_progress"].includes(task.status)) hints.push("r:Reset");
   if (task.status === "blocked") hints.push("u:Unblock");
-  if (task.status !== "done" && !task.milestone) hints.push("S:Split");
-  if (task.status === "todo" && !task.milestone) hints.push("s:Start");
+  if (task.status === "todo") hints.push("s:Claim");
   if (task.status === "in_progress") hints.push("b:Block");
-  if (task.status !== "in_progress" && !task.milestone) hints.push("p:Revise");
   if (!(task.status === "in_progress" && hasLiveWorker(cwd, task.id))) hints.push("x:Del");
-  if (!isPlanningForCwd(cwd)) hints.push("m:Chat");
-  hints.push(`v:${coordHint(cwd)}`, "f:Feed", "+/-:Wkrs");
+  hints.push("m:Chat", "f:Feed", "PgUp/PgDn:Scroll");
   return hints.join("  ");
 }
 
-function renderConfirmBar(taskId: string, label: string, type: "reset" | "cascade-reset" | "delete" | "cancel-planning"): string {
-  if (type === "cancel-planning") return "⚠ Cancel planning? [y] Confirm  [n] Cancel";
-  if (type === "reset") return `⚠ Reset ${taskId} \"${label}\"? [y] Confirm  [n] Cancel`;
+function renderConfirmBar(taskId: string, label: string, type: "reset" | "cascade-reset" | "delete"): string {
+  if (type === "reset") return `⚠ Reset ${taskId} "${label}"? [y] Confirm  [n] Cancel`;
   if (type === "cascade-reset") return `⚠ Cascade reset ${taskId} and dependents? [y] Confirm  [n] Cancel`;
-  return `⚠ Delete ${taskId} \"${label}\"? [y] Confirm  [n] Cancel`;
+  return `⚠ Delete ${taskId} "${label}"? [y] Confirm  [n] Cancel`;
 }
 
 function renderBlockReasonBar(input: string): string {
@@ -633,8 +471,8 @@ function renderTaskLine(theme: Theme, task: Task, isSelected: boolean, width: nu
   let suffix = "";
   if (task.status === "in_progress" && liveWorker) {
     suffix = ` (${liveWorker.name})`;
-  } else if (task.status === "in_progress" && task.assigned_to) {
-    suffix = ` (${task.assigned_to})`;
+  } else if (task.status === "in_progress" && task.claimed_by) {
+    suffix = ` (${task.claimed_by})`;
   } else if (task.status === "todo" && task.depends_on.length > 0) {
     suffix = ` → ${task.depends_on.join(", ")}`;
   } else if (task.status === "blocked" && task.blocked_reason) {
@@ -642,7 +480,6 @@ function renderTaskLine(theme: Theme, task: Task, isSelected: boolean, width: nu
     suffix = ` [${reason}${task.blocked_reason.length > 28 ? "…" : ""}]`;
   }
 
-  if (task.milestone) suffix += `${suffix ? " " : ""}· milestone`;
   return truncateToWidth(`${select}${coloredIcon} ${task.id}  ${task.title}${theme.fg("dim", suffix)}`, width);
 }
 

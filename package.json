@@ -32,6 +32,7 @@
     "*.ts",
     "*.mjs",
     "crew/**",
+    "swarm/**",
     "skills/**",
     "README.md",
     "CHANGELOG.md"

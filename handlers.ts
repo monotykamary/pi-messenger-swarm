@@ -24,6 +24,7 @@ import {
 } from "./lib.js";
 import * as store from "./store.js";
 import * as crewStore from "./crew/store.js";
+import * as swarmStore from "./swarm/store.js";
 import { getAutoRegisterPaths, saveAutoRegisterPaths, matchesAutoRegisterPath } from "./config.js";
 import { readFeedEvents, logFeedEvent, pruneFeed, formatFeedLine, isCrewEvent, type FeedEvent } from "./feed.js";
 import { loadCrewConfig } from "./crew/utils/config.js";
@@ -135,17 +136,12 @@ export function executeStatus(state: MessengerState, dirs: Dirs, cwd: string = p
   const agents = store.getActiveAgents(state, dirs);
   const folder = extractFolder(cwd);
   const location = state.gitBranch ? `${folder} (${state.gitBranch})` : folder;
-  const myClaim = store.getAgentCurrentClaim(dirs, state.agentName);
+  const myClaim = swarmStore.getTasks(cwd).find(task => task.status === "in_progress" && task.claimed_by === state.agentName);
 
   let text = `You: ${state.agentName}\n`;
   text += `Location: ${location}\n`;
-
-  if (state.spec) {
-    const specDisplay = displaySpecPath(state.spec, cwd);
-    text += `Spec: ${specDisplay}\n`;
-    if (myClaim) {
-      text += `Claim: ${myClaim.taskId}${myClaim.reason ? ` - ${myClaim.reason}` : ""}\n`;
-    }
+  if (myClaim) {
+    text += `Claim: ${myClaim.id}${myClaim.blocked_reason ? ` - ${myClaim.blocked_reason}` : ""}\n`;
   }
 
   text += `Peers: ${agents.length}\n`;
@@ -162,11 +158,11 @@ export function executeStatus(state: MessengerState, dirs: Dirs, cwd: string = p
     folder,
     gitBranch: state.gitBranch,
     peerCount: agents.length,
-    spec: state.spec ? displaySpecPath(state.spec, cwd) : undefined,
     claim: myClaim
       ? {
-        ...myClaim,
-        spec: displaySpecPath(myClaim.spec, cwd)
+        id: myClaim.id,
+        title: myClaim.title,
+        claimedBy: myClaim.claimed_by,
       }
       : undefined,
     reservations: state.reservations
@@ -235,10 +231,10 @@ export function executeList(state: MessengerState, dirs: Dirs, cwd: string = pro
 
   const allClaims = store.getClaims(dirs);
 
-  lines.push(formatAgentLine(buildSelfRegistration(state), true, agentHasTask(state.agentName, allClaims, crewStore.getTasks(cwd))));
+  lines.push(formatAgentLine(buildSelfRegistration(state), true, agentHasTask(state.agentName, allClaims, swarmStore.getTasks(cwd))));
 
   for (const a of peers) {
-    lines.push(formatAgentLine(a, false, agentHasTask(a.name, allClaims, crewStore.getTasks(a.cwd))));
+    lines.push(formatAgentLine(a, false, agentHasTask(a.name, allClaims, swarmStore.getTasks(a.cwd))));
   }
 
   const recentEvents = readFeedEvents(cwd, 5);
@@ -856,7 +852,7 @@ function formatWhoisOutput(
   thresholdMs: number
 ) {
   const allClaims = store.getClaims(dirs);
-  const hasTask = agentHasTask(agent.name, allClaims, crewStore.getTasks(agent.cwd));
+  const hasTask = agentHasTask(agent.name, allClaims, swarmStore.getTasks(agent.cwd));
 
   const computed = computeStatus(
     agent.activity?.lastActivityAt ?? agent.startedAt,

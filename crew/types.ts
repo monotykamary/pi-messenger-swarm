@@ -120,6 +120,10 @@ export interface CrewParams {
   name?: string;
   notes?: string;
   autoRegisterPath?: "add" | "remove" | "list";
+
+  // Swarm subagent spawning
+  role?: string;
+  persona?: string;
 }
 
 // =============================================================================

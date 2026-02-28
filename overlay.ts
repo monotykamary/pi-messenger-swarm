@@ -1,5 +1,5 @@
 /**
- * Pi Messenger - Chat Overlay Component
+ * Pi Messenger - Swarm Overlay Component
  */
 
 import type { Component, Focusable, TUI } from "@mariozechner/pi-tui";
@@ -11,11 +11,9 @@ import {
   type MessengerState,
   type Dirs,
 } from "./lib.js";
-import * as crewStore from "./crew/store.js";
-import { adjustConcurrency, autonomousState, isAutonomousForCwd, isPlanningForCwd, planningState } from "./crew/state.js";
-import { loadCrewConfig, cycleCoordinationLevel, setCoordinationOverride } from "./crew/utils/config.js";
+import * as swarmStore from "./swarm/store.js";
 import { readFeedEvents, type FeedEvent, type FeedEventType } from "./feed.js";
-import type { Task } from "./crew/types.js";
+import type { SwarmTask as Task } from "./swarm/types.js";
 import {
   renderStatusBar,
   renderWorkersSection,
@@ -25,7 +23,6 @@ import {
   renderAgentsRow,
   renderLegend,
   renderEmptyState,
-  renderPlanningState,
   renderDetailView,
   navigateTask,
 } from "./overlay-render.js";
@@ -34,16 +31,12 @@ import {
   handleConfirmInput,
   handleBlockReasonInput,
   handleMessageInput,
-  handleRevisePromptInput,
   handleCrewKeyBinding,
   setNotification,
   type CrewViewState,
 } from "./overlay-actions.js";
 import { getLiveWorkers, hasLiveWorkers, onLiveWorkersChanged } from "./crew/live-progress.js";
 import { loadConfig } from "./config.js";
-import { discoverCrewAgents } from "./crew/utils/discover.js";
-import { spawnSingleWorker, spawnWorkersForReadyTasks } from "./crew/spawn.js";
-import { spawnLobbyWorker, removeLobbyWorkerByIndex, cleanupUnassignedAliveFiles } from "./crew/lobby.js";
 
 export interface OverlayCallbacks {
   onBackground?: (snapshot: string) => void;
@@ -59,13 +52,10 @@ export class MessengerOverlay implements Component, Focusable {
   private cwd: string;
   private stuckThresholdMs: number;
   private progressTimer: ReturnType<typeof setInterval> | null = null;
-  private planningTimer: ReturnType<typeof setInterval> | null = null;
   private progressUnsubscribe: (() => void) | null = null;
   private sawIncompleteWork = false;
   private completionTimer: ReturnType<typeof setTimeout> | null = null;
   private completionDismissed = false;
-  private wasPlanning: boolean;
-  private prevInProgressCount = 0;
 
   constructor(
     private tui: TUI,
@@ -83,101 +73,17 @@ export class MessengerOverlay implements Component, Focusable {
       this.state.unreadCounts.set(key, 0);
     }
 
-    this.wasPlanning = isPlanningForCwd(this.cwd);
-
     this.progressUnsubscribe = onLiveWorkersChanged(() => {
-      this.syncCrewRefreshTimers();
+      this.syncRefreshTimers();
       this.tui.requestRender();
     });
 
-    this.syncCrewRefreshTimers();
+    this.syncRefreshTimers();
   }
 
-  private hasPlan(): boolean {
-    return crewStore.hasPlan(this.cwd);
-  }
-
-  private handleTaskStart(task: Task): void {
-    const config = loadCrewConfig(crewStore.getCrewDir(this.cwd));
-    if (config.dependencies !== "advisory") {
-      const unmet = task.depends_on.filter(depId => crewStore.getTask(this.cwd, depId)?.status !== "done");
-      if (unmet.length > 0) {
-        setNotification(this.crewViewState, this.tui, false, `Unmet deps: ${unmet.join(", ")}`);
-        this.tui.requestRender();
-        return;
-      }
-    }
-    const worker = spawnSingleWorker(this.cwd, task.id);
-    if (worker) {
-      setNotification(this.crewViewState, this.tui, true, `${worker.name} → ${task.id}`);
-    } else {
-      setNotification(this.crewViewState, this.tui, false, `Failed to spawn worker for ${task.id}`);
-    }
-    this.tui.requestRender();
-  }
-
-  private spawnWorkerForReadyTask(task: Task, newConcurrency: number): void {
-    const worker = spawnSingleWorker(this.cwd, task.id);
-    const label = worker
-      ? `${worker.name} → ${task.id} (${newConcurrency}w)`
-      : `Workers → ${newConcurrency}`;
-    setNotification(this.crewViewState, this.tui, true, label);
-    this.tui.requestRender();
-  }
-
-  private isPlanningActiveForCurrentProject(): boolean {
-    return isPlanningForCwd(this.cwd);
-  }
-
-  private checkAutoSpawnOnPlanComplete(planning: boolean): void {
-    const wasPlanningBefore = this.wasPlanning;
-    this.wasPlanning = planning;
-
-    if (!wasPlanningBefore || planning) return;
-
-    const config = loadCrewConfig(crewStore.getCrewDir(this.cwd));
-    const readyTasks = crewStore.getReadyTasks(this.cwd, { advisory: config.dependencies === "advisory" });
-    if (readyTasks.length > 0) {
-      const target = Math.min(readyTasks.length, autonomousState.concurrency);
-      const { assigned } = spawnWorkersForReadyTasks(this.cwd, target);
-      if (assigned > 0) {
-        setNotification(this.crewViewState, this.tui, true, `Plan ready — ${assigned} worker${assigned > 1 ? "s" : ""} started`);
-        this.tui.requestRender();
-      }
-    }
-
-    cleanupUnassignedAliveFiles(this.cwd);
-  }
-
-  private checkAutoRefillWorkers(): void {
-    const inProgressCount = crewStore.getTasks(this.cwd).filter(t => t.status === "in_progress").length;
-    const prev = this.prevInProgressCount;
-    this.prevInProgressCount = inProgressCount;
-
-    if (inProgressCount >= prev || inProgressCount >= autonomousState.concurrency) return;
-    if (!crewStore.hasPlan(this.cwd)) return;
-
-    const config = loadCrewConfig(crewStore.getCrewDir(this.cwd));
-    const readyTasks = crewStore.getReadyTasks(this.cwd, { advisory: config.dependencies === "advisory" });
-    if (readyTasks.length === 0) return;
-
-    const slots = autonomousState.concurrency - inProgressCount;
-    const target = Math.min(readyTasks.length, slots);
-    if (target <= 0) return;
-
-    const { assigned } = spawnWorkersForReadyTasks(this.cwd, target);
-    if (assigned > 0) {
-      setNotification(this.crewViewState, this.tui, true, `${assigned} worker${assigned > 1 ? "s" : ""} → ready tasks`);
-      this.tui.requestRender();
-    }
-  }
-
-  private syncCrewRefreshTimers(): void {
+  private syncRefreshTimers(): void {
     if (hasLiveWorkers(this.cwd)) this.startProgressRefresh();
     else this.stopProgressRefresh();
-
-    if (this.isPlanningActiveForCurrentProject()) this.startPlanningRefresh();
-    else this.stopPlanningRefresh();
   }
 
   private startProgressRefresh(): void {
@@ -198,33 +104,17 @@ export class MessengerOverlay implements Component, Focusable {
     }
   }
 
-  private startPlanningRefresh(): void {
-    if (this.planningTimer) return;
-    this.planningTimer = setInterval(() => {
-      if (this.isPlanningActiveForCurrentProject()) {
-        this.tui.requestRender();
-      } else {
-        this.stopPlanningRefresh();
-      }
-    }, 15_000);
-  }
-
-  private stopPlanningRefresh(): void {
-    if (this.planningTimer) {
-      clearInterval(this.planningTimer);
-      this.planningTimer = null;
-    }
-  }
-
   handleInput(data: string): void {
     this.cancelCompletionTimer();
 
-    if (data === "\x14") {
+    // Snapshot transfer: Ctrl+T (legacy) or Shift+T
+    if (data === "\x14" || data === "T" || matchesKey(data, "shift+t")) {
       this.done(this.generateSnapshot());
       return;
     }
 
-    if (data === "\x02") {
+    // Background overlay: Ctrl+B (legacy) or Shift+B
+    if (data === "\x02" || data === "B" || matchesKey(data, "shift+b")) {
       this.callbacks.onBackground?.(this.generateSnapshot());
       return;
     }
@@ -235,21 +125,14 @@ export class MessengerOverlay implements Component, Focusable {
     }
 
     if (this.crewViewState.inputMode === "block-reason") {
-      const tasks = crewStore.getTasks(this.cwd);
+      const tasks = swarmStore.getTasks(this.cwd);
       const task = tasks[this.crewViewState.selectedTaskIndex];
-      handleBlockReasonInput(data, this.crewViewState, this.cwd, task, this.state.agentName, this.tui);
+      handleBlockReasonInput(data, this.crewViewState, this.cwd, task as Task | undefined, this.state.agentName, this.tui);
       return;
     }
 
     if (this.crewViewState.inputMode === "message") {
       handleMessageInput(data, this.crewViewState, this.state, this.dirs, this.cwd, this.tui);
-      return;
-    }
-
-    if (this.crewViewState.inputMode === "revise-prompt") {
-      const tasks = crewStore.getTasks(this.cwd);
-      const task = tasks[this.crewViewState.selectedTaskIndex];
-      handleRevisePromptInput(data, this.crewViewState, this.cwd, task, this.state.agentName, this.tui);
       return;
     }
 
@@ -263,41 +146,7 @@ export class MessengerOverlay implements Component, Focusable {
       return;
     }
 
-    if (data === "+" || matchesKey(data, "=") || matchesKey(data, "shift+=") || matchesKey(data, "-")) {
-      const delta = matchesKey(data, "-") ? -1 : 1;
-      const crewDir = crewStore.getCrewDir(this.cwd);
-      const config = loadCrewConfig(crewDir);
-      const prev = autonomousState.concurrency;
-      const next = adjustConcurrency(delta, config.concurrency.max);
-      if (prev === next) {
-        this.tui.requestRender();
-        return;
-      }
-
-      if (next > prev) {
-        const readyTasks = crewStore.getReadyTasks(this.cwd, { advisory: config.dependencies === "advisory" });
-        if (readyTasks.length === 0) {
-          const worker = spawnLobbyWorker(this.cwd);
-          const label = worker ? `Lobby worker ${worker.name} spawned (${next}w)` : `Workers → ${next}`;
-          setNotification(this.crewViewState, this.tui, true, label);
-        } else {
-          this.spawnWorkerForReadyTask(readyTasks[0], next);
-        }
-      } else {
-        const killed = removeLobbyWorkerByIndex(this.cwd);
-        const label = killed ? `Lobby worker removed (${next}w)` : `Workers: ${prev} → ${next}`;
-        setNotification(this.crewViewState, this.tui, true, label);
-      }
-      this.tui.requestRender();
-      return;
-    }
-
     if (data === "@" || matchesKey(data, "m")) {
-      if (isPlanningForCwd(this.cwd)) {
-        setNotification(this.crewViewState, this.tui, false, "Chat unavailable during planning");
-        this.tui.requestRender();
-        return;
-      }
       this.crewViewState.inputMode = "message";
       this.crewViewState.messageInput = data === "@" ? "@" : "";
       this.tui.requestRender();
@@ -306,31 +155,26 @@ export class MessengerOverlay implements Component, Focusable {
 
     if (matchesKey(data, "f")) {
       this.crewViewState.feedFocus = !this.crewViewState.feedFocus;
+      if (!this.crewViewState.feedFocus) {
+        this.crewViewState.feedScrollOffset = 0;
+      }
       this.tui.requestRender();
       return;
     }
 
-    if (matchesKey(data, "v")) {
-      const crewDir = crewStore.getCrewDir(this.cwd);
-      const config = loadCrewConfig(crewDir);
-      const next = cycleCoordinationLevel(config.coordination);
-      setCoordinationOverride(next);
-      setNotification(this.crewViewState, this.tui, true, `Coordination: ${next}`);
+    // Feed scrolling (when focused): PgUp/PgDn by chunk, Up/Down by line.
+    if (matchesKey(data, "pageup")) {
+      this.crewViewState.feedScrollOffset += 5;
+      this.tui.requestRender();
+      return;
+    }
+    if (matchesKey(data, "pagedown")) {
+      this.crewViewState.feedScrollOffset = Math.max(0, this.crewViewState.feedScrollOffset - 5);
       this.tui.requestRender();
       return;
     }
 
-    if (matchesKey(data, "c") && this.isPlanningActiveForCurrentProject()) {
-      this.crewViewState.confirmAction = {
-        type: "cancel-planning",
-        taskId: "",
-        label: "planning",
-      };
-      this.tui.requestRender();
-      return;
-    }
-
-    const tasks = crewStore.getTasks(this.cwd);
+    const tasks = swarmStore.getTasks(this.cwd);
     const task = tasks[this.crewViewState.selectedTaskIndex];
 
     if (matchesKey(data, "right")) {
@@ -357,6 +201,8 @@ export class MessengerOverlay implements Component, Focusable {
       if (this.crewViewState.mode === "detail") {
         this.crewViewState.detailScroll = Math.max(0, this.crewViewState.detailScroll - 1);
         this.crewViewState.detailAutoScroll = false;
+      } else if (this.crewViewState.feedFocus) {
+        this.crewViewState.feedScrollOffset += 1;
       } else {
         navigateTask(this.crewViewState, -1, tasks.length);
       }
@@ -368,6 +214,8 @@ export class MessengerOverlay implements Component, Focusable {
       if (this.crewViewState.mode === "detail") {
         this.crewViewState.detailScroll++;
         this.crewViewState.detailAutoScroll = false;
+      } else if (this.crewViewState.feedFocus) {
+        this.crewViewState.feedScrollOffset = Math.max(0, this.crewViewState.feedScrollOffset - 1);
       } else {
         navigateTask(this.crewViewState, 1, tasks.length);
       }
@@ -424,11 +272,7 @@ export class MessengerOverlay implements Component, Focusable {
     }
 
     if (task) {
-      if (matchesKey(data, "s") && task.status === "todo" && !task.milestone) {
-        this.handleTaskStart(task);
-        return;
-      }
-      handleCrewKeyBinding(data, task, this.crewViewState, this.cwd, this.state.agentName, this.tui);
+      handleCrewKeyBinding(data, task as Task, this.crewViewState, this.cwd, this.state.agentName, this.tui);
     }
   }
 
@@ -444,7 +288,7 @@ export class MessengerOverlay implements Component, Focusable {
     }
     if (task.status === "in_progress") {
       const parts = [task.title];
-      if (task.assigned_to) parts.push(task.assigned_to);
+      if (task.claimed_by) parts.push(task.claimed_by);
       if (liveTaskIds.has(task.id)) parts.push("live");
       return `${task.id} (${parts.join(", ")})`;
     }
@@ -473,45 +317,27 @@ export class MessengerOverlay implements Component, Focusable {
   }
 
   private generateSnapshot(): string {
-    const plan = crewStore.getPlan(this.cwd);
-    const tasks = crewStore.getTasks(this.cwd);
+    const tasks = swarmStore.getTasks(this.cwd);
     const liveWorkers = getLiveWorkers(this.cwd);
 
-    if (this.isPlanningActiveForCurrentProject() && tasks.length === 0) {
-      const updated = planningState.updatedAt ? formatDuration(Math.max(0, Date.now() - new Date(planningState.updatedAt).getTime())) : "unknown";
+    if (tasks.length === 0) {
       return [
-        `Crew snapshot: planning in progress (pass ${planningState.pass}/${planningState.maxPasses}, ${planningState.phase}), ${autonomousState.concurrency}w concurrency`,
-        "",
-        `Planning: pass ${planningState.pass}/${planningState.maxPasses}, phase: ${planningState.phase}, updated ${updated} ago`,
-        "",
-        `Agents: You (${this.snapshotIdleLabel()})`,
-      ].join("\n");
-    }
-
-    if (!plan) {
-      const discovered = discoverCrewAgents(this.cwd);
-      const configLine = discovered.length === 0
-        ? "Config: no crew agents discovered"
-        : `Config: ${discovered.map(agent => `${agent.name}${agent.model ? ` (${agent.model})` : ""}`).join(", ")}`;
-
-      return [
-        `Crew snapshot: no active plan, ${autonomousState.concurrency}w concurrency`,
+        "Swarm snapshot: no tasks",
         "",
         `Agents: You (${this.snapshotIdleLabel()})`,
         "",
-        configLine,
+        "Create task: pi_messenger({ action: \"task.create\", title: \"...\" })",
       ].join("\n");
     }
 
-    const config = loadCrewConfig(crewStore.getCrewDir(this.cwd));
-    const readyTasks = crewStore.getReadyTasks(this.cwd, { advisory: config.dependencies === "advisory" });
+    const readyTasks = swarmStore.getReadyTasks(this.cwd);
     const readyIds = new Set(readyTasks.map(task => task.id));
     const liveTaskIds = new Set(Array.from(liveWorkers.keys()));
     const activeLines = Array.from(liveWorkers.values()).map(worker => {
       const activity = worker.progress.currentTool
         ? `${worker.progress.currentTool}${worker.progress.currentToolArgs ? ` ${worker.progress.currentToolArgs}` : ""}`
         : "thinking";
-      return `${worker.taskId} (${worker.agent}, ${activity}, ${formatDuration(Date.now() - worker.startedAt)})`;
+      return `${worker.taskId} (${worker.name}, ${activity}, ${formatDuration(Date.now() - worker.startedAt)})`;
     });
 
     const doneTasks = tasks.filter(task => task.status === "done");
@@ -519,17 +345,9 @@ export class MessengerOverlay implements Component, Focusable {
     const blockedTasks = tasks.filter(task => task.status === "blocked");
     const waitingTasks = tasks.filter(task => task.status === "todo" && !readyIds.has(task.id));
     const recentEvents = readFeedEvents(this.cwd, 2);
-    const headerParts = [
-      `Crew snapshot: ${plan.completed_count}/${plan.task_count} tasks done`,
-      `${readyTasks.length} ready`,
-      `${autonomousState.concurrency}w`,
-    ];
-    if (isAutonomousForCwd(this.cwd)) {
-      headerParts.push(`autonomous wave ${autonomousState.waveNumber}`);
-    }
 
     const lines = [
-      headerParts.join(", "),
+      `Swarm snapshot: ${doneTasks.length}/${tasks.length} tasks done, ${readyTasks.length} ready`,
       "",
       `Active: ${activeLines.length > 0 ? activeLines.join(", ") : "none"}`,
       `Done: ${doneTasks.length > 0 ? doneTasks.map(task => this.formatTaskSnapshotLine(task, liveTaskIds)).join(", ") : "none"}`,
@@ -564,7 +382,7 @@ export class MessengerOverlay implements Component, Focusable {
     const emptyRow = () => border("│") + " ".repeat(innerW) + border("│");
     const sectionSeparator = this.theme.fg("dim", "─".repeat(sectionW));
 
-    const tasks = crewStore.getTasks(this.cwd);
+    const tasks = swarmStore.getTasks(this.cwd);
     if (tasks.length === 0) {
       this.crewViewState.selectedTaskIndex = 0;
       if (this.crewViewState.mode === "detail") this.crewViewState.mode = "list";
@@ -573,10 +391,6 @@ export class MessengerOverlay implements Component, Focusable {
     }
 
     const selectedTask = tasks[this.crewViewState.selectedTaskIndex] ?? null;
-    const hasPlan = this.hasPlan();
-    const planning = this.isPlanningActiveForCurrentProject();
-    this.checkAutoSpawnOnPlanComplete(planning);
-    this.checkAutoRefillWorkers();
 
     const lines: string[] = [];
     const titleContent = this.renderTitleContent();
@@ -597,15 +411,13 @@ export class MessengerOverlay implements Component, Focusable {
     const prevTs = this.crewViewState.lastSeenEventTs;
     const allEvents = readFeedEvents(this.cwd, 20);
     this.detectAndFlashEvents(allEvents, prevTs);
-    this.checkCompletion(tasks, planning);
+    this.checkCompletion(tasks);
 
     let contentLines: string[];
     if (this.crewViewState.mode === "detail" && selectedTask) {
-      contentLines = renderDetailView(this.cwd, selectedTask, sectionW, contentHeight, this.crewViewState);
+      contentLines = renderDetailView(this.cwd, selectedTask as Task, sectionW, contentHeight, this.crewViewState);
     } else {
       const workersLimit = termRows <= 26 ? 2 : 5;
-      const hasWorkers = hasLiveWorkers(this.cwd);
-
       let workerLines = renderWorkersSection(this.theme, this.cwd, sectionW, workersLimit);
       const agentsLine = renderAgentsRow(this.cwd, sectionW, this.state, this.dirs, this.stuckThresholdMs);
       const agentsHeight = 2;
@@ -616,14 +428,25 @@ export class MessengerOverlay implements Component, Focusable {
       let feedHeight: number;
       let mainHeight: number;
 
-      if (!hasPlan && !planning) {
-        feedHeight = Math.min(allEvents.length, Math.max(2, Math.floor(available * 0.4)));
-        mainHeight = available - feedHeight - (feedHeight > 0 ? 1 : 0);
+      if (tasks.length === 0) {
+        const hasFeed = allEvents.length > 0;
+        if (hasFeed) {
+          // Empty swarm + feed view:
+          // - normal: compact instructions (4 rows)
+          // - feed focus: tiny instructions (2 rows), more chat visible
+          mainHeight = isFeedFocus
+            ? Math.min(Math.max(2, available - 1), 2)
+            : Math.min(Math.max(2, available - 1), 4);
+          feedHeight = Math.max(2, available - mainHeight - 1);
+        } else {
+          mainHeight = Math.min(10, Math.max(5, available));
+          feedHeight = 0;
+        }
       } else if (isFeedFocus) {
         const summaryLines = 2;
         mainHeight = summaryLines;
         feedHeight = available - summaryLines - 1;
-      } else if (hasWorkers) {
+      } else if (workerLines.length > 0) {
         feedHeight = Math.max(6, Math.floor(available * 0.7));
         mainHeight = available - feedHeight - 1;
       } else {
@@ -634,8 +457,7 @@ export class MessengerOverlay implements Component, Focusable {
       feedHeight = Math.max(0, feedHeight);
       mainHeight = Math.max(2, mainHeight);
 
-      // Cap task list to actual content height — surplus goes to feed
-      const isTaskList = hasPlan && !isFeedFocus && tasks.length > 0;
+      const isTaskList = !isFeedFocus && tasks.length > 0;
       if (isTaskList) {
         const taskContentHeight = Math.max(2, tasks.length);
         if (taskContentHeight < mainHeight) {
@@ -645,7 +467,14 @@ export class MessengerOverlay implements Component, Focusable {
         }
       }
 
-      const displayEvents = allEvents.slice(-feedHeight);
+      if (!this.crewViewState.feedFocus) {
+        this.crewViewState.feedScrollOffset = 0;
+      }
+      const maxFeedOffset = Math.max(0, allEvents.length - feedHeight);
+      this.crewViewState.feedScrollOffset = Math.max(0, Math.min(this.crewViewState.feedScrollOffset, maxFeedOffset));
+      const feedEnd = allEvents.length - this.crewViewState.feedScrollOffset;
+      const feedStart = Math.max(0, feedEnd - feedHeight);
+      const displayEvents = allEvents.slice(feedStart, feedEnd);
       let feedLines = renderFeedSection(this.theme, displayEvents, sectionW, prevTs);
       if (feedLines.length > feedHeight) feedLines = feedLines.slice(-feedHeight);
 
@@ -654,18 +483,15 @@ export class MessengerOverlay implements Component, Focusable {
       }
 
       let mainLines: string[];
-      if (!hasPlan && !planning) {
+      if (tasks.length === 0) {
         mainLines = renderEmptyState(this.theme, this.cwd, sectionW, mainHeight);
-      } else if (planning && tasks.length === 0) {
-        mainLines = renderPlanningState(this.theme, this.cwd, sectionW, mainHeight);
-      } else if (isFeedFocus && tasks.length > 0) {
+      } else if (isFeedFocus) {
         mainLines = renderTaskSummary(this.theme, this.cwd, sectionW, mainHeight);
       } else {
         mainLines = renderTaskList(this.theme, this.cwd, sectionW, mainHeight, this.crewViewState);
       }
 
       contentLines = [];
-
       contentLines.push(agentsLine);
       contentLines.push(sectionSeparator);
 
@@ -694,7 +520,7 @@ export class MessengerOverlay implements Component, Focusable {
     }
 
     lines.push(border("├" + "─".repeat(innerW) + "┤"));
-    lines.push(row(renderLegend(this.theme, this.cwd, sectionW, this.crewViewState, selectedTask)));
+    lines.push(row(renderLegend(this.theme, this.cwd, sectionW, this.crewViewState, selectedTask as Task | null)));
     lines.push(border("╰" + "─".repeat(innerW) + "╯"));
 
     if (allEvents.length > 0) {
@@ -706,7 +532,7 @@ export class MessengerOverlay implements Component, Focusable {
 
   private static readonly SIGNIFICANT_EVENTS = new Set<FeedEventType>([
     "task.done", "task.block", "task.start", "message",
-    "plan.done", "plan.failed", "task.revise", "task.revise-tree",
+    "task.reset", "task.unblock",
   ]);
 
   private detectAndFlashEvents(events: FeedEvent[], prevTs: string | null): void {
@@ -724,7 +550,7 @@ export class MessengerOverlay implements Component, Focusable {
     if (sameType.length > 1) {
       const label =
         last.type === "task.done" ? `${sameType.length} tasks completed` :
-        last.type === "task.start" ? `${sameType.length} tasks started` :
+        last.type === "task.start" ? `${sameType.length} tasks claimed` :
         last.type === "task.block" ? `${sameType.length} tasks blocked` :
         last.type === "message" ? `${sameType.length} new messages` :
         `${sameType.length} ${last.type} events`;
@@ -734,20 +560,18 @@ export class MessengerOverlay implements Component, Focusable {
       const preview = last.preview ? ` — ${last.preview.slice(0, 40)}` : "";
       message =
         last.type === "task.done" ? `${last.agent} completed${target}` :
-        last.type === "task.start" ? `${last.agent} started${target}` :
+        last.type === "task.start" ? `${last.agent} claimed${target}` :
         last.type === "task.block" ? `${last.agent} blocked${target}${preview}` :
         last.type === "message" ? `${last.agent}${preview || " sent a message"}` :
-        last.type === "plan.done" ? "Planning completed" :
-        last.type === "plan.failed" ? "Planning failed" :
         `${last.agent} ${last.type}${target}`;
     }
 
     setNotification(this.crewViewState, this.tui, true, message);
   }
 
-  private checkCompletion(tasks: Task[], planning: boolean): void {
+  private checkCompletion(tasks: Task[]): void {
     const allDone = tasks.length > 0 && tasks.every(t => t.status === "done");
-    const isIdle = !hasLiveWorkers(this.cwd) && !isAutonomousForCwd(this.cwd) && !planning;
+    const isIdle = !hasLiveWorkers(this.cwd);
 
     if (!allDone) {
       this.sawIncompleteWork = true;
@@ -774,7 +598,7 @@ export class MessengerOverlay implements Component, Focusable {
   }
 
   private renderTitleContent(): string {
-    const label = this.theme.fg("accent", "Messenger");
+    const label = this.theme.fg("accent", "Swarm Messenger");
     const folder = this.theme.fg("dim", extractFolder(this.cwd));
     return `${label} ─ ${folder}`;
   }
@@ -785,7 +609,6 @@ export class MessengerOverlay implements Component, Focusable {
 
   dispose(): void {
     this.stopProgressRefresh();
-    this.stopPlanningRefresh();
     this.cancelCompletionTimer();
     if (this.crewViewState.notificationTimer) {
       clearTimeout(this.crewViewState.notificationTimer);

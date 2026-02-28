@@ -22,6 +22,7 @@ export type FeedEventType =
   | "task.unblock"
   | "task.reset"
   | "task.delete"
+  | "task.archive"
   | "task.split"
   | "task.revise"
   | "task.revise-tree"
@@ -132,6 +133,7 @@ const CREW_EVENT_TYPES = new Set<FeedEventType>([
   "task.unblock",
   "task.reset",
   "task.delete",
+  "task.archive",
   "task.split",
   "task.revise",
   "task.revise-tree",
@@ -186,6 +188,7 @@ export function formatFeedLine(event: FeedEvent): string {
     case "task.unblock": line += withPreview(` unblocked ${target}`); break;
     case "task.reset": line += withPreview(` reset ${target}`); break;
     case "task.delete": line += withPreview(` deleted ${target}`); break;
+    case "task.archive": line += withPreview(` archived ${target || "done tasks"}`); break;
     case "task.split": line += withPreview(` split ${target}`); break;
     case "task.revise": line += withPreview(` revised ${target}`); break;
     case "task.revise-tree": line += withPreview(` revised ${target} + dependents`); break;
