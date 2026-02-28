@@ -246,7 +246,7 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
 
     const swarmSummary = swarmStore.getSummary(cwd);
     const taskStr = swarmSummary.total > 0
-      ? theme.fg("accent", ` ⚡${swarmSummary.done}/${swarmSummary.total}`)
+      ? theme.fg("accent", ` ☑ ${swarmSummary.done}/${swarmSummary.total} tasks`)
       : "";
 
     const runningSpawn = getRunningSpawnCount(cwd);
