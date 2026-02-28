@@ -13,7 +13,7 @@ import {
 } from "./lib.js";
 import * as store from "./store.js";
 import * as swarmStore from "./swarm/store.js";
-import type { SwarmTask as Task } from "./swarm/types.js";
+import type { SwarmTask as Task, SpawnedAgent } from "./swarm/types.js";
 import { getLiveWorkers, type LiveWorkerInfo } from "./crew/live-progress.js";
 import type { ToolEntry } from "./crew/utils/progress.js";
 import { formatFeedLine as sharedFormatFeedLine, sanitizeFeedEvent, type FeedEvent } from "./feed.js";
@@ -133,30 +133,47 @@ export function renderTaskList(theme: Theme, cwd: string, width: number, height:
   return lines.slice(viewState.scrollOffset, viewState.scrollOffset + height);
 }
 
-export function renderTaskSummary(theme: Theme, cwd: string, width: number, height: number): string[] {
-  const tasks = swarmStore.getTasks(cwd);
-  const counts: Record<string, number> = { done: 0, in_progress: 0, blocked: 0, todo: 0 };
-  const activeNames: string[] = [];
+export function renderSwarmList(theme: Theme, agents: SpawnedAgent[], width: number, height: number, viewState: CrewViewState): string[] {
+  const lines: string[] = [];
 
-  for (const task of tasks) {
-    counts[task.status] = (counts[task.status] || 0) + 1;
-    if (task.status === "in_progress" && task.claimed_by) activeNames.push(task.claimed_by);
+  if (agents.length === 0) {
+    lines.push(theme.fg("dim", "No spawned agents in this session."));
+    lines.push(theme.fg("dim", "spawn: pi_messenger({ action: \"spawn\", role: \"Researcher\", message: \"...\" })"));
+    while (lines.length < height) lines.push("");
+    return lines.slice(0, height);
   }
 
-  const parts: string[] = [];
-  if (counts.done > 0) parts.push(theme.fg("accent", `${counts.done} done`));
-  if (counts.in_progress > 0) parts.push(theme.fg("warning", `${counts.in_progress} active`));
-  if (counts.blocked > 0) parts.push(theme.fg("error", `${counts.blocked} blocked`));
-  if (counts.todo > 0) parts.push(theme.fg("dim", `${counts.todo} todo`));
+  viewState.selectedSwarmIndex = Math.max(0, Math.min(viewState.selectedSwarmIndex, agents.length - 1));
 
-  const line1 = truncateToWidth(`Tasks: ${parts.join("  ")}  (${tasks.length} total)`, width);
-  const line2 = activeNames.length > 0
-    ? truncateToWidth(theme.fg("dim", `  Active: ${activeNames.join(", ")}`), width)
-    : "";
+  const statusIcon = (status: SpawnedAgent["status"]): string => {
+    if (status === "running") return theme.fg("warning", "●");
+    if (status === "completed") return theme.fg("accent", "✓");
+    if (status === "failed") return theme.fg("error", "✗");
+    return theme.fg("dim", "■");
+  };
 
-  const lines = [line1];
-  if (line2) lines.push(line2);
-  return lines.slice(0, height);
+  for (let i = 0; i < agents.length; i++) {
+    const agent = agents[i];
+    const select = i === viewState.selectedSwarmIndex ? theme.fg("accent", "▸ ") : "  ";
+    const tailParts: string[] = [agent.role, agent.status];
+    if (agent.taskId) tailParts.push(`→ ${agent.taskId}`);
+    lines.push(truncateToWidth(`${select}${statusIcon(agent.status)} ${agent.name}  ${theme.fg("dim", tailParts.join(" · "))}`, width));
+  }
+
+  if (lines.length <= height) {
+    viewState.swarmScrollOffset = 0;
+    return lines;
+  }
+
+  const selectedLine = Math.min(viewState.selectedSwarmIndex, lines.length - 1);
+  if (selectedLine < viewState.swarmScrollOffset) {
+    viewState.swarmScrollOffset = selectedLine;
+  } else if (selectedLine >= viewState.swarmScrollOffset + height) {
+    viewState.swarmScrollOffset = selectedLine - height + 1;
+  }
+
+  viewState.swarmScrollOffset = Math.max(0, Math.min(viewState.swarmScrollOffset, lines.length - height));
+  return lines.slice(viewState.swarmScrollOffset, viewState.swarmScrollOffset + height);
 }
 
 const DIM_EVENTS = new Set(["join", "leave", "reserve", "release"]);
@@ -289,6 +306,7 @@ export function renderLegend(
   width: number,
   viewState: CrewViewState,
   task: Task | null,
+  swarmAgent: SpawnedAgent | null,
 ): string {
   if (viewState.confirmAction) {
     const text = renderConfirmBar(viewState.confirmAction.taskId, viewState.confirmAction.label, viewState.confirmAction.type);
@@ -312,6 +330,13 @@ export function renderLegend(
     viewState.notification = null;
   }
 
+  if (viewState.mainView === "swarm") {
+    if (viewState.mode === "detail" && swarmAgent) {
+      return truncateToWidth(theme.fg("dim", appendUniversalHints(renderSwarmDetailStatusBar())), width);
+    }
+    return truncateToWidth(theme.fg("dim", appendUniversalHints(renderSwarmListStatusBar(!!swarmAgent))), width);
+  }
+
   if (viewState.mode === "detail" && task) {
     return truncateToWidth(theme.fg("dim", appendUniversalHints(renderDetailStatusBar(cwd, task))), width);
   }
@@ -320,8 +345,7 @@ export function renderLegend(
     return truncateToWidth(theme.fg("dim", appendUniversalHints(renderListStatusBar(cwd, task))), width);
   }
 
-  const feedHint = viewState.feedFocus ? "PgUp/PgDn/^U/^D:Scroll" : "f:Feed";
-  return truncateToWidth(theme.fg("dim", appendUniversalHints(`m:Chat  ${feedHint}  Esc:Close`)), width);
+  return truncateToWidth(theme.fg("dim", appendUniversalHints("m:Chat  f:Swarm  PgUp/PgDn/^U/^D:Feed  Esc:Close")), width);
 }
 
 export function renderDetailView(cwd: string, task: Task, width: number, height: number, viewState: CrewViewState): string[] {
@@ -411,6 +435,49 @@ export function renderDetailView(cwd: string, task: Task, width: number, height:
   return visible;
 }
 
+export function renderSwarmDetail(agent: SpawnedAgent, width: number, height: number, viewState: CrewViewState): string[] {
+  const lines: string[] = [];
+
+  lines.push(`${agent.name} (${agent.id})`);
+  lines.push(`Role: ${agent.role}  │  Status: ${agent.status}`);
+  if (agent.persona?.trim()) lines.push(`Persona: ${agent.persona.trim()}`);
+  lines.push(`Started: ${formatRelativeTime(agent.startedAt)}`);
+  if (agent.endedAt) {
+    const exit = typeof agent.exitCode === "number" ? `  │  Exit: ${agent.exitCode}` : "";
+    lines.push(`Ended: ${formatRelativeTime(agent.endedAt)}${exit}`);
+  }
+  if (agent.taskId) lines.push(`Task: ${agent.taskId}`);
+  if (agent.model) lines.push(`Model: ${agent.model}`);
+
+  lines.push("", "Objective:");
+  for (const src of agent.objective.trim().split("\n")) {
+    const wrapped = wrapText(src.trim() || "", Math.max(20, width - 2));
+    for (const line of wrapped) lines.push(`  ${line}`);
+  }
+
+  if (agent.context?.trim()) {
+    lines.push("", "Context:");
+    for (const src of agent.context.trim().split("\n")) {
+      const wrapped = wrapText(src.trim() || "", Math.max(20, width - 2));
+      for (const line of wrapped) lines.push(`  ${line}`);
+    }
+  }
+
+  if (agent.error?.trim()) {
+    lines.push("", "Error:");
+    for (const src of agent.error.trim().split("\n")) {
+      const wrapped = wrapText(src.trim() || "", Math.max(20, width - 2));
+      for (const line of wrapped) lines.push(`  ${line}`);
+    }
+  }
+
+  const maxScroll = Math.max(0, lines.length - height);
+  viewState.detailScroll = Math.max(0, Math.min(viewState.detailScroll, maxScroll));
+  const visible = lines.slice(viewState.detailScroll, viewState.detailScroll + height).map(line => truncateToWidth(line, width));
+  while (visible.length < height) visible.push("");
+  return visible;
+}
+
 function renderDetailStatusBar(cwd: string, task: Task): string {
   const hints: string[] = [];
   if (task.status === "in_progress") hints.push("q:Stop");
@@ -419,7 +486,7 @@ function renderDetailStatusBar(cwd: string, task: Task): string {
   if (task.status === "todo") hints.push("s:Claim");
   if (task.status === "in_progress") hints.push("b:Block");
   if (task.status === "done") hints.push("x:Archive");
-  hints.push("m:Chat", "f:Feed", "PgUp/PgDn/^U/^D:Scroll", "←→:Nav");
+  hints.push("m:Chat", "f:Swarm", "PgUp/PgDn/^U/^D:Feed", "←→:Nav");
   return hints.join("  ");
 }
 
@@ -431,8 +498,19 @@ function renderListStatusBar(cwd: string, task: Task): string {
   if (task.status === "todo") hints.push("s:Claim");
   if (task.status === "in_progress") hints.push("b:Block");
   if (task.status === "done") hints.push("x:Archive");
-  hints.push("m:Chat", "f:Feed", "PgUp/PgDn/^U/^D:Scroll");
+  hints.push("m:Chat", "f:Swarm", "PgUp/PgDn/^U/^D:Feed");
   return hints.join("  ");
+}
+
+function renderSwarmListStatusBar(hasAgent: boolean): string {
+  const hints: string[] = [];
+  if (hasAgent) hints.push("Enter:Detail");
+  hints.push("m:Chat", "f:Tasks", "PgUp/PgDn/^U/^D:Feed");
+  return hints.join("  ");
+}
+
+function renderSwarmDetailStatusBar(): string {
+  return "Esc:Back  m:Chat  f:Tasks  PgUp/PgDn/^U/^D:Feed  ←→:Nav";
 }
 
 function renderConfirmBar(taskId: string, label: string, type: "reset" | "cascade-reset" | "delete" | "archive"): string {
@@ -482,4 +560,9 @@ function renderTaskLine(theme: Theme, task: Task, isSelected: boolean, width: nu
 export function navigateTask(viewState: CrewViewState, direction: 1 | -1, taskCount: number): void {
   if (taskCount === 0) return;
   viewState.selectedTaskIndex = Math.max(0, Math.min(taskCount - 1, viewState.selectedTaskIndex + direction));
+}
+
+export function navigateSwarm(viewState: CrewViewState, direction: 1 | -1, swarmCount: number): void {
+  if (swarmCount === 0) return;
+  viewState.selectedSwarmIndex = Math.max(0, Math.min(swarmCount - 1, viewState.selectedSwarmIndex + direction));
 }

@@ -19,6 +19,9 @@ interface ConfirmAction {
 export interface CrewViewState {
   scrollOffset: number;
   selectedTaskIndex: number;
+  selectedSwarmIndex: number;
+  swarmScrollOffset: number;
+  mainView: "tasks" | "swarm";
   mode: "list" | "detail";
   detailScroll: number;
   detailAutoScroll: boolean;
@@ -31,7 +34,6 @@ export interface CrewViewState {
   lastSeenEventTs: string | null;
   notification: { message: string; expiresAt: number } | null;
   notificationTimer: ReturnType<typeof setTimeout> | null;
-  feedFocus: boolean;
   feedScrollOffset: number;
   mentionCandidates: string[];
   mentionIndex: number;
@@ -41,6 +43,9 @@ export function createCrewViewState(): CrewViewState {
   return {
     scrollOffset: 0,
     selectedTaskIndex: 0,
+    selectedSwarmIndex: 0,
+    swarmScrollOffset: 0,
+    mainView: "tasks",
     mode: "list",
     detailScroll: 0,
     detailAutoScroll: true,
@@ -53,7 +58,6 @@ export function createCrewViewState(): CrewViewState {
     lastSeenEventTs: null,
     notification: null,
     notificationTimer: null,
-    feedFocus: false,
     feedScrollOffset: 0,
     mentionCandidates: [],
     mentionIndex: -1,
