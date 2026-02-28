@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.14.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.13.0...v0.14.0) (2026-02-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* **swarm:** Previously joined agents will need to rejoin as state
+location has changed from global to project-scoped.
+
+### Features
+
+* **swarm:** add file-based locking with await using support ([dcf9184](https://github.com/monotykamary/pi-messenger-swarm/commit/dcf91844e70c979faeb6c9261846e91888d0d2da))
+
+
+### Bug Fixes
+
+* **swarm:** make project-scoped isolation the default ([11ace61](https://github.com/monotykamary/pi-messenger-swarm/commit/11ace61cfe678e535b094bf451440736e5c17b86))
+
 ## [0.13.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.12.1...v0.13.0) (2026-02-28)
 
 
