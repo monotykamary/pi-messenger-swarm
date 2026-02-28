@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
@@ -25,40 +26,67 @@ function spawnLiveKey(id: string): string {
   return `spawn-${id}`;
 }
 
-function buildPrompt(request: SpawnRequest): string {
+function buildSystemPrompt(request: SpawnRequest): string {
+  const role = request.role.trim();
+  const persona = request.persona?.trim();
+
   const lines: string[] = [
-    "# Swarm Subagent Assignment",
+    "# Swarm Subagent Role",
     "",
-    `Role: ${request.role}`,
+    "## Role Description",
+    `You are a specialized ${role} operating as an autonomous subagent inside a collaborative swarm.`,
   ];
 
-  if (request.persona?.trim()) {
-    lines.push(`Persona: ${request.persona.trim()}`);
-  }
-
-  lines.push("", "## Objective", request.objective.trim());
-
-  if (request.context?.trim()) {
-    lines.push("", "## Context", request.context.trim());
+  if (persona) {
+    lines.push(`Persona: ${persona}`);
+    lines.push("Stay consistent with this persona in tone, prioritization, and decision-making.");
   }
 
   lines.push(
     "",
-    "## Operating Protocol",
-    "1. Call pi_messenger({ action: \"join\" }) first.",
-    "2. Coordinate via pi_messenger messaging/reservations/task tools.",
-    "3. Keep updates concise and evidence-based.",
-    "4. Use read/edit/write/bash tools as needed.",
+    "## Mission Focus",
+    request.objective.trim(),
   );
+
+  if (request.context?.trim()) {
+    lines.push("", "## Context & Constraints", request.context.trim());
+  }
+
+  if (request.taskId) {
+    lines.push("", "## Assigned Task", `Primary task: ${request.taskId}`);
+  }
+
+  lines.push(
+    "",
+    "## Swarm Operating Protocol",
+    "1. Join the mesh first: pi_messenger({ action: \"join\" }).",
+    "2. Coordinate via messaging/reservations/task actions before risky edits.",
+    "3. If assigned a task, try claim first and respect ownership conflicts.",
+    "4. Report concrete progress and outcomes, not vague status.",
+    "5. Be concise, evidence-based, and stay in role.",
+  );
+
+  return lines.join("\n");
+}
+
+function buildPrompt(request: SpawnRequest): string {
+  const lines: string[] = [
+    "# Mission Brief",
+    "",
+    request.objective.trim(),
+  ];
+
+  if (request.context?.trim()) {
+    lines.push("", "## Additional Context", request.context.trim());
+  }
 
   if (request.taskId) {
     lines.push(
       "",
-      "## Task",
-      `You are assigned to ${request.taskId}.`,
-      `Try to claim it first: pi_messenger({ action: \"task.claim\", id: \"${request.taskId}\" }).`,
-      "If claim fails, report conflict and stop.",
-      `When done, complete it: pi_messenger({ action: \"task.done\", id: \"${request.taskId}\", summary: \"...\" }).`,
+      "## Task Execution",
+      `Try to claim ${request.taskId}: pi_messenger({ action: \"task.claim\", id: \"${request.taskId}\" }).`,
+      "If claim fails, report the conflict and stop.",
+      `When complete: pi_messenger({ action: \"task.done\", id: \"${request.taskId}\", summary: \"...\" }).`,
     );
   }
 
@@ -110,10 +138,20 @@ export function spawnSubagent(cwd: string, request: SpawnRequest): SpawnedAgent 
   };
 
   const prompt = buildPrompt(request);
+  const systemPrompt = buildSystemPrompt(request);
 
   const args = ["--mode", "json", "--no-session", "-p"];
   applyModelArgs(args, request.model);
   args.push("--extension", EXTENSION_DIR);
+
+  let promptTmpDir: string | null = null;
+  if (systemPrompt.trim().length > 0) {
+    promptTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-messenger-swarm-subagent-"));
+    const promptPath = path.join(promptTmpDir, `${name.replace(/[^\w.-]/g, "_")}-${id}.md`);
+    fs.writeFileSync(promptPath, systemPrompt, { mode: 0o600 });
+    args.push("--append-system-prompt", promptPath);
+  }
+
   args.push(prompt);
 
   const env = {
@@ -159,7 +197,22 @@ export function spawnSubagent(cwd: string, request: SpawnRequest): SpawnedAgent 
     stderr += data.toString();
   });
 
+  const cleanupPromptTmpDir = () => {
+    if (!promptTmpDir) return;
+    try {
+      fs.rmSync(promptTmpDir, { recursive: true, force: true });
+    } catch {
+      // Best effort cleanup
+    }
+    promptTmpDir = null;
+  };
+
+  proc.on("error", () => {
+    cleanupPromptTmpDir();
+  });
+
   proc.on("close", (code) => {
+    cleanupPromptTmpDir();
     removeLiveWorker(cwd, record.taskId || spawnLiveKey(id));
 
     const runtime = runtimes.get(id);
