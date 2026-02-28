@@ -59,6 +59,7 @@ export interface SpawnedAgent {
   context?: string;
   taskId?: string;
   model?: string;
+  systemPrompt?: string;
   status: "running" | "completed" | "failed" | "stopped";
   startedAt: string;
   endedAt?: string;

@@ -5,7 +5,7 @@ vi.mock("@mariozechner/pi-tui", () => ({
 }));
 
 import { createMessengerViewState } from "../../overlay-actions.js";
-import { renderLegend, renderSwarmList } from "../../overlay-render.js";
+import { renderLegend, renderSwarmDetail, renderSwarmList } from "../../overlay-render.js";
 import type { SpawnedAgent } from "../../swarm/types.js";
 
 const theme = {
@@ -69,5 +69,32 @@ describe("overlay swarm list view", () => {
 
     expect(legend).toContain("f:Tasks");
     expect(legend).toContain("Enter:Detail");
+  });
+
+  it("renders full system prompt in swarm detail", () => {
+    const viewState = createMessengerViewState();
+    viewState.mainView = "swarm";
+
+    const lines = renderSwarmDetail(
+      {
+        id: "a1",
+        cwd: "/tmp",
+        name: "QuickHawk",
+        role: "Researcher",
+        objective: "Investigate",
+        status: "running",
+        startedAt: new Date().toISOString(),
+        systemPrompt: "# Swarm Subagent Role\n\n## Role Description\nYou are a specialized researcher.",
+      },
+      120,
+      40,
+      viewState,
+    );
+
+    const joined = lines.join("\n");
+    expect(joined).toContain("System Prompt:");
+    expect(joined).toContain("# Swarm Subagent Role");
+    expect(joined).toContain("## Role Description");
+    expect(joined).toContain("You are a specialized researcher.");
   });
 });

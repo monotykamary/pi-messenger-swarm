@@ -61,7 +61,7 @@ describe("swarm spawn system prompt", () => {
     const proc = new FakeProcess();
     spawnMock.mockReturnValue(proc as any);
 
-    spawnSubagent(cwd, {
+    const spawned = spawnSubagent(cwd, {
       role: "Packaging Gap Analyst",
       persona: "Skeptical market researcher",
       objective: "Analyze ideabrowser.com and identify product packaging opportunities",
@@ -82,6 +82,8 @@ describe("swarm spawn system prompt", () => {
     expect(content).toContain("Packaging Gap Analyst");
     expect(content).toContain("Skeptical market researcher");
     expect(content).toContain("Analyze ideabrowser.com and identify product packaging opportunities");
+    expect(spawned.systemPrompt).toContain("## Role Description");
+    expect(spawned.systemPrompt).toContain("Skeptical market researcher");
 
     proc.emit("close", 0);
     expect(fs.existsSync(path.dirname(promptPath))).toBe(false);

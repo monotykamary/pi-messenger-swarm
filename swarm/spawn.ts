@@ -139,6 +139,7 @@ export function spawnSubagent(cwd: string, request: SpawnRequest): SpawnedAgent 
 
   const prompt = buildPrompt(request);
   const systemPrompt = buildSystemPrompt(request);
+  record.systemPrompt = systemPrompt;
 
   const args = ["--mode", "json", "--no-session", "-p"];
   applyModelArgs(args, request.model);

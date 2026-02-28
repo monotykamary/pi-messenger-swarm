@@ -449,16 +449,22 @@ export function renderSwarmDetail(agent: SpawnedAgent, width: number, height: nu
   if (agent.taskId) lines.push(`Task: ${agent.taskId}`);
   if (agent.model) lines.push(`Model: ${agent.model}`);
 
-  lines.push("", "Objective:");
-  for (const src of agent.objective.trim().split("\n")) {
-    const wrapped = wrapText(src.trim() || "", Math.max(20, width - 2));
-    for (const line of wrapped) lines.push(`  ${line}`);
-  }
-
   if (agent.context?.trim()) {
     lines.push("", "Context:");
     for (const src of agent.context.trim().split("\n")) {
       const wrapped = wrapText(src.trim() || "", Math.max(20, width - 2));
+      for (const line of wrapped) lines.push(`  ${line}`);
+    }
+  }
+
+  if (agent.systemPrompt?.trim()) {
+    lines.push("", "System Prompt:");
+    for (const src of agent.systemPrompt.split("\n")) {
+      if (src.trim().length === 0) {
+        lines.push("");
+        continue;
+      }
+      const wrapped = wrapText(src, Math.max(20, width - 2));
       for (const line of wrapped) lines.push(`  ${line}`);
     }
   }
