@@ -53,7 +53,7 @@ describe("swarm status bar litmus", () => {
     swarmStore.claimTask(cwd, t2.id, "AgentB");
 
     const line = renderStatusBar(theme as any, cwd, 120);
-    expect(line).toContain("Swarm 1/2");
+    expect(line).toContain("☑ 1/2 tasks");
     expect(line).toContain("ready 0");
     expect(line).toContain("in progress 1");
   });

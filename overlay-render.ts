@@ -71,7 +71,7 @@ export function renderStatusBar(_theme: Theme, cwd: string, width: number): stri
     return truncateToWidth(`No swarm tasks │ ⚙ ${liveCount} live`, width);
   }
 
-  let line = `Swarm ${summary.done}/${summary.total}`;
+  let line = `☑ ${summary.done}/${summary.total} tasks`;
   line += ` │ ready ${ready.length}`;
   line += ` │ in progress ${summary.in_progress}`;
   line += ` │ blocked ${summary.blocked}`;
