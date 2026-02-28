@@ -17,6 +17,12 @@ https://github.com/nicobailon/pi-messenger
 [![npm version](https://img.shields.io/npm/v/pi-messenger?style=for-the-badge)](https://www.npmjs.com/package/pi-messenger)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
+## Screenshots
+
+| Swarm Details | Swarm Messenger |
+| --- | --- |
+| ![Swarm Details](assets/swarm_details.jpg) | ![Swarm Messenger](assets/swarm_messenger.jpg) |
+
 ## Install
 
 ```bash
