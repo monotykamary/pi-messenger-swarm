@@ -11,6 +11,9 @@ Pi Messenger is a file-based multi-agent coordination extension for Pi.
 - Main agents can spawn dynamic subagents with custom roles/personas/objectives
 - No daemon required (all state is file-backed)
 
+This swarm-first fork is inspired by and built upon the original project by Nico Bailon:
+https://github.com/nicobailon/pi-messenger
+
 [![npm version](https://img.shields.io/npm/v/pi-messenger?style=for-the-badge)](https://www.npmjs.com/package/pi-messenger)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
