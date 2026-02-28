@@ -1,32 +1,32 @@
 {
-  "name": "pi-messenger",
+  "name": "pi-messenger-swarm",
   "version": "0.12.1",
-  "description": "Inter-agent messaging and file reservation system for pi coding agent",
+  "description": "Swarm-first multi-agent messaging and task orchestration extension for Pi",
   "type": "module",
-  "author": "Nico Bailon",
+  "author": "Tom X Nguyen",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nicobailon/pi-messenger.git"
+    "url": "git+https://github.com/monotykamary/pi-messenger-swarm.git"
   },
-  "homepage": "https://github.com/nicobailon/pi-messenger#readme",
+  "homepage": "https://github.com/monotykamary/pi-messenger-swarm#readme",
   "bugs": {
-    "url": "https://github.com/nicobailon/pi-messenger/issues"
+    "url": "https://github.com/monotykamary/pi-messenger-swarm/issues"
   },
   "keywords": [
     "pi-package",
     "pi",
     "pi-coding-agent",
     "extension",
-    "messaging",
+    "swarm",
     "multi-agent",
-    "coordination",
-    "ai",
-    "agents",
+    "agent-mesh",
+    "task-orchestration",
+    "subagents",
     "cli"
   ],
   "bin": {
-    "pi-messenger": "install.mjs"
+    "pi-messenger-swarm": "install.mjs"
   },
   "files": [
     "*.ts",
@@ -39,9 +39,12 @@
   ],
   "scripts": {
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "release": "standard-version",
+    "release:dry-run": "standard-version --dry-run"
   },
   "devDependencies": {
+    "standard-version": "^9.5.0",
     "vitest": "^2.1.8"
   },
   "pi": {
