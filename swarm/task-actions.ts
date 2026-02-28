@@ -2,7 +2,7 @@ import { logFeedEvent } from "../feed.js";
 import * as store from "./store.js";
 import type { SwarmTask } from "./types.js";
 
-export type TaskAction = "start" | "block" | "unblock" | "reset" | "cascade-reset" | "delete" | "stop";
+export type TaskAction = "start" | "block" | "unblock" | "reset" | "cascade-reset" | "delete" | "archive" | "stop";
 
 export interface TaskActionOptions {
   isWorkerActive?: (taskId: string) => boolean;
@@ -95,6 +95,18 @@ export function executeTaskAction(
       }
       logFeedEvent(cwd, agentName, "task.delete", taskId, task.title);
       return { success: true, message: `Deleted ${taskId}` };
+    }
+
+    case "archive": {
+      if (task.status !== "done") {
+        return { success: false, error: "invalid_status", message: `Task ${taskId} is ${task.status}, not done` };
+      }
+      const archived = store.archiveTask(cwd, taskId);
+      if (archived.archived !== 1) {
+        return { success: false, error: "archive_failed", message: `Failed to archive ${taskId}` };
+      }
+      logFeedEvent(cwd, agentName, "task.archive", taskId, task.title);
+      return { success: true, message: `Archived ${taskId}` };
     }
 
     case "stop": {

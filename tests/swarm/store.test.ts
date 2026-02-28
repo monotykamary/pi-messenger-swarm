@@ -158,6 +158,26 @@ describe("swarm/store", () => {
     expect(swarmStore.getReadyTasks(cwd).map(task => task.id)).toContain(followup.id);
   });
 
+  it("archives a single done task only", () => {
+    const cwd = createTempCwd();
+
+    const done = swarmStore.createTask(cwd, { title: "Done" });
+    const todo = swarmStore.createTask(cwd, { title: "Todo" });
+
+    swarmStore.claimTask(cwd, done.id, "AgentA");
+    swarmStore.completeTask(cwd, done.id, "AgentA", "done");
+
+    const invalid = swarmStore.archiveTask(cwd, todo.id);
+    expect(invalid.archived).toBe(0);
+    expect(swarmStore.getTask(cwd, todo.id)).not.toBeNull();
+
+    const archived = swarmStore.archiveTask(cwd, done.id);
+    expect(archived.archived).toBe(1);
+    expect(archived.archivedIds).toEqual([done.id]);
+    expect(swarmStore.getTask(cwd, done.id)).toBeNull();
+    expect(swarmStore.getTask(cwd, todo.id)).not.toBeNull();
+  });
+
   it("summarizes swarm status counts", () => {
     const cwd = createTempCwd();
 

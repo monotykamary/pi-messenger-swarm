@@ -11,7 +11,7 @@ import { getLiveWorkers } from "./crew/live-progress.js";
 import { hasActiveWorker } from "./crew/registry.js";
 
 interface ConfirmAction {
-  type: "reset" | "cascade-reset" | "delete";
+  type: "reset" | "cascade-reset" | "delete" | "archive";
   taskId: string;
   label: string;
 }
@@ -82,6 +82,7 @@ function executeTaskAction(
     action !== "reset" &&
     action !== "cascade-reset" &&
     action !== "delete" &&
+    action !== "archive" &&
     action !== "stop"
   ) {
     return { success: false, message: `Unknown action: ${action}` };
@@ -136,7 +137,7 @@ export function handleConfirmInput(data: string, viewState: CrewViewState, cwd: 
   if (!action) return;
   if (matchesKey(data, "y")) {
     const result = executeTaskAction(cwd, action.type, action.taskId, agentName);
-    if (action.type === "delete") {
+    if (action.type === "delete" || action.type === "archive") {
       const tasks = swarmStore.getTasks(cwd);
       if (tasks.length > 0) {
         viewState.selectedTaskIndex = Math.max(0, Math.min(viewState.selectedTaskIndex, tasks.length - 1));
@@ -490,8 +491,12 @@ export function handleCrewKeyBinding(
     return;
   }
   if (matchesKey(data, "x")) {
-    if (task.status === "in_progress" && hasLiveWorker(cwd, task.id)) return;
-    viewState.confirmAction = { type: "delete", taskId: task.id, label: task.title };
+    if (task.status !== "done") {
+      setNotification(viewState, tui, false, "Only done tasks can be archived");
+      tui.requestRender();
+      return;
+    }
+    viewState.confirmAction = { type: "archive", taskId: task.id, label: task.title };
     tui.requestRender();
     return;
   }

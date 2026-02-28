@@ -51,10 +51,6 @@ function renderActivityLog(
   return lines;
 }
 
-function hasLiveWorker(cwd: string, taskId: string): boolean {
-  return getLiveWorkers(cwd).has(taskId);
-}
-
 function appendUniversalHints(text: string): string {
   return `${text}  [T:snap] [B:bg]`;
 }
@@ -160,7 +156,6 @@ export function renderTaskSummary(theme: Theme, cwd: string, width: number, heig
 
   const lines = [line1];
   if (line2) lines.push(line2);
-  while (lines.length < height) lines.push("");
   return lines.slice(0, height);
 }
 
@@ -307,7 +302,7 @@ export function renderLegend(
 
   if (viewState.inputMode === "message") {
     const text = renderMessageBar(viewState.messageInput);
-    return truncateToWidth(theme.fg("accent", text + "  [^T] [^B]"), width);
+    return truncateToWidth(theme.fg("accent", text), width);
   }
 
   if (viewState.notification) {
@@ -325,7 +320,7 @@ export function renderLegend(
     return truncateToWidth(theme.fg("dim", appendUniversalHints(renderListStatusBar(cwd, task))), width);
   }
 
-  const feedHint = viewState.feedFocus ? "PgUp/PgDn:Scroll" : "f:Feed";
+  const feedHint = viewState.feedFocus ? "PgUp/PgDn/^U/^D:Scroll" : "f:Feed";
   return truncateToWidth(theme.fg("dim", appendUniversalHints(`m:Chat  ${feedHint}  Esc:Close`)), width);
 }
 
@@ -423,8 +418,8 @@ function renderDetailStatusBar(cwd: string, task: Task): string {
   if (task.status === "blocked") hints.push("u:Unblock");
   if (task.status === "todo") hints.push("s:Claim");
   if (task.status === "in_progress") hints.push("b:Block");
-  if (!(task.status === "in_progress" && hasLiveWorker(cwd, task.id))) hints.push("x:Del");
-  hints.push("m:Chat", "f:Feed", "PgUp/PgDn:Scroll", "←→:Nav");
+  if (task.status === "done") hints.push("x:Archive");
+  hints.push("m:Chat", "f:Feed", "PgUp/PgDn/^U/^D:Scroll", "←→:Nav");
   return hints.join("  ");
 }
 
@@ -435,14 +430,15 @@ function renderListStatusBar(cwd: string, task: Task): string {
   if (task.status === "blocked") hints.push("u:Unblock");
   if (task.status === "todo") hints.push("s:Claim");
   if (task.status === "in_progress") hints.push("b:Block");
-  if (!(task.status === "in_progress" && hasLiveWorker(cwd, task.id))) hints.push("x:Del");
-  hints.push("m:Chat", "f:Feed", "PgUp/PgDn:Scroll");
+  if (task.status === "done") hints.push("x:Archive");
+  hints.push("m:Chat", "f:Feed", "PgUp/PgDn/^U/^D:Scroll");
   return hints.join("  ");
 }
 
-function renderConfirmBar(taskId: string, label: string, type: "reset" | "cascade-reset" | "delete"): string {
+function renderConfirmBar(taskId: string, label: string, type: "reset" | "cascade-reset" | "delete" | "archive"): string {
   if (type === "reset") return `⚠ Reset ${taskId} "${label}"? [y] Confirm  [n] Cancel`;
   if (type === "cascade-reset") return `⚠ Cascade reset ${taskId} and dependents? [y] Confirm  [n] Cancel`;
+  if (type === "archive") return `⚠ Archive ${taskId} "${label}"? [y] Confirm  [n] Cancel`;
   return `⚠ Delete ${taskId} "${label}"? [y] Confirm  [n] Cancel`;
 }
 

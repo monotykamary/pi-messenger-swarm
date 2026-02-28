@@ -91,6 +91,24 @@ describe("swarm/task-actions", () => {
     expect(swarmStore.getTask(cwd, task.id)).toBeNull();
   });
 
+  it("archives only done tasks", () => {
+    const cwd = createTempCwd();
+    const done = swarmStore.createTask(cwd, { title: "Done task" });
+    const todo = swarmStore.createTask(cwd, { title: "Todo task" });
+
+    executeTaskAction(cwd, "start", done.id, "AgentA");
+    swarmStore.completeTask(cwd, done.id, "AgentA", "done");
+
+    const invalid = executeTaskAction(cwd, "archive", todo.id, "AgentA");
+    expect(invalid.success).toBe(false);
+    expect(invalid.error).toBe("invalid_status");
+    expect(swarmStore.getTask(cwd, todo.id)).not.toBeNull();
+
+    const archived = executeTaskAction(cwd, "archive", done.id, "AgentA");
+    expect(archived.success).toBe(true);
+    expect(swarmStore.getTask(cwd, done.id)).toBeNull();
+  });
+
   it("reset and cascade-reset revert task tree", () => {
     const cwd = createTempCwd();
     const parent = swarmStore.createTask(cwd, { title: "Parent" });

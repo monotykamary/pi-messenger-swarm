@@ -207,21 +207,19 @@ export interface ArchiveDoneResult {
   archiveDir: string | null;
 }
 
-export function archiveDoneTasks(cwd: string): ArchiveDoneResult {
-  const tasks = getTasks(cwd);
-  const doneTasks = tasks.filter(task => task.status === "done");
-  if (doneTasks.length === 0) {
+function archiveTasks(cwd: string, tasksToArchive: SwarmTask[]): ArchiveDoneResult {
+  if (tasksToArchive.length === 0) {
     return { archived: 0, archivedIds: [], archiveDir: null };
   }
 
-  const archivedIds = doneTasks.map(task => task.id);
+  const archivedIds = tasksToArchive.map(task => task.id);
   const archiveRunDir = path.join(getArchiveDir(cwd), new Date().toISOString().replace(/[:.]/g, "-"));
   const archiveTasksDir = path.join(archiveRunDir, "tasks");
   const archiveBlocksDir = path.join(archiveRunDir, "blocks");
 
   ensureDir(archiveTasksDir);
 
-  for (const task of doneTasks) {
+  for (const task of tasksToArchive) {
     moveFile(taskJsonPath(cwd, task.id), path.join(archiveTasksDir, `${task.id}.json`));
     moveFile(taskSpecPath(cwd, task.id), path.join(archiveTasksDir, `${task.id}.md`));
     moveFile(taskProgressPath(cwd, task.id), path.join(archiveTasksDir, `${task.id}.progress.md`));
@@ -246,6 +244,19 @@ export function archiveDoneTasks(cwd: string): ArchiveDoneResult {
     archivedIds,
     archiveDir: archiveRunDir,
   };
+}
+
+export function archiveDoneTasks(cwd: string): ArchiveDoneResult {
+  const doneTasks = getTasks(cwd).filter(task => task.status === "done");
+  return archiveTasks(cwd, doneTasks);
+}
+
+export function archiveTask(cwd: string, taskId: string): ArchiveDoneResult {
+  const task = getTask(cwd, taskId);
+  if (!task || task.status !== "done") {
+    return { archived: 0, archivedIds: [], archiveDir: null };
+  }
+  return archiveTasks(cwd, [task]);
 }
 
 export function getTaskSpec(cwd: string, taskId: string): string | null {

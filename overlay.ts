@@ -6,7 +6,6 @@ import type { Component, Focusable, TUI } from "@mariozechner/pi-tui";
 import { matchesKey, truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 import type { Theme } from "@mariozechner/pi-coding-agent";
 import {
-  extractFolder,
   formatDuration,
   type MessengerState,
   type Dirs,
@@ -40,6 +39,28 @@ import { loadConfig } from "./config.js";
 
 export interface OverlayCallbacks {
   onBackground?: (snapshot: string) => void;
+}
+
+function isFeedPageUpKey(data: string): boolean {
+  // Mac terminals vary here (Fn+↑ may emit PageUp, Shift+↑ sequence, or nothing).
+  // Support canonical PageUp plus common fallbacks (^U).
+  return (
+    matchesKey(data, "pageup") ||
+    data === "\x1b[5~" ||
+    data === "\x1b[1;2A" ||
+    data === "\x15"
+  );
+}
+
+function isFeedPageDownKey(data: string): boolean {
+  // Mac terminals vary here (Fn+↓ may emit PageDown, Shift+↓ sequence, or nothing).
+  // Support canonical PageDown plus common fallbacks (^D).
+  return (
+    matchesKey(data, "pagedown") ||
+    data === "\x1b[6~" ||
+    data === "\x1b[1;2B" ||
+    data === "\x04"
+  );
 }
 
 export class MessengerOverlay implements Component, Focusable {
@@ -162,13 +183,14 @@ export class MessengerOverlay implements Component, Focusable {
       return;
     }
 
-    // Feed scrolling (when focused): PgUp/PgDn by chunk, Up/Down by line.
-    if (matchesKey(data, "pageup")) {
+    // Feed scrolling: PgUp/PgDn by chunk, Up/Down by line.
+    // Mac-friendly fallbacks: ^U/^D and common terminal escape sequences.
+    if (isFeedPageUpKey(data)) {
       this.crewViewState.feedScrollOffset += 5;
       this.tui.requestRender();
       return;
     }
-    if (matchesKey(data, "pagedown")) {
+    if (isFeedPageDownKey(data)) {
       this.crewViewState.feedScrollOffset = Math.max(0, this.crewViewState.feedScrollOffset - 5);
       this.tui.requestRender();
       return;
@@ -400,11 +422,13 @@ export class MessengerOverlay implements Component, Focusable {
     const leftBorder = Math.floor(borderLen / 2);
     const rightBorder = borderLen - leftBorder;
 
+    const compactFeedHeader = this.crewViewState.mode !== "detail" && this.crewViewState.feedFocus && tasks.length > 0;
+
     lines.push(border("╭" + "─".repeat(leftBorder)) + titleText + border("─".repeat(rightBorder) + "╮"));
     lines.push(row(renderStatusBar(this.theme, this.cwd, sectionW)));
-    lines.push(emptyRow());
+    if (!compactFeedHeader) lines.push(emptyRow());
 
-    const chromeLines = 6;
+    const chromeLines = compactFeedHeader ? 5 : 6;
     const termRows = process.stdout.rows ?? 24;
     const contentHeight = Math.max(8, termRows - chromeLines);
 
@@ -443,7 +467,7 @@ export class MessengerOverlay implements Component, Focusable {
           feedHeight = 0;
         }
       } else if (isFeedFocus) {
-        const summaryLines = 2;
+        const summaryLines = tasks.some(t => t.status === "in_progress" && !!t.claimed_by) ? 2 : 1;
         mainHeight = summaryLines;
         feedHeight = available - summaryLines - 1;
       } else if (workerLines.length > 0) {
@@ -455,7 +479,8 @@ export class MessengerOverlay implements Component, Focusable {
       }
 
       feedHeight = Math.max(0, feedHeight);
-      mainHeight = Math.max(2, mainHeight);
+      const minMainHeight = (isFeedFocus && tasks.length > 0) ? 1 : 2;
+      mainHeight = Math.max(minMainHeight, mainHeight);
 
       const isTaskList = !isFeedFocus && tasks.length > 0;
       if (isTaskList) {
@@ -598,9 +623,7 @@ export class MessengerOverlay implements Component, Focusable {
   }
 
   private renderTitleContent(): string {
-    const label = this.theme.fg("accent", "Swarm Messenger");
-    const folder = this.theme.fg("dim", extractFolder(this.cwd));
-    return `${label} ─ ${folder}`;
+    return this.theme.fg("accent", "Swarm Messenger");
   }
 
   invalidate(): void {
