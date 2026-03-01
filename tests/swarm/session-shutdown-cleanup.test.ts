@@ -356,4 +356,93 @@ describe("swarm/session-shutdown-cleanup", () => {
     // Verify the agent is now unregistered
     expect(mockState.registered).toBe(false);
   });
+
+  it("should auto-unclaim tasks from crashed agents during reconciliation", () => {
+    const dirs = createTempMessengerDirs();
+    const deadAgent = "DeadAgent";
+    const liveAgent = "LiveAgent";
+
+    // Create registry directory
+    const registryDir = path.join(dirs.cwd, ".pi", "messenger", "registry");
+    fs.mkdirSync(registryDir, { recursive: true });
+
+    // Create a task claimed by a dead agent (PID 99999 doesn't exist)
+    const deadTask = swarmStore.createTask(dirs.cwd, { title: "Dead Agent Task" });
+    swarmStore.claimTask(dirs.cwd, deadTask.id, deadAgent);
+
+    // Create registration for dead agent with invalid PID
+    const deadRegPath = path.join(registryDir, `${deadAgent}.json`);
+    fs.writeFileSync(deadRegPath, JSON.stringify({
+      name: deadAgent,
+      pid: 99999, // Non-existent PID
+      sessionId: "dead-session",
+      cwd: dirs.cwd,
+      model: "test-model",
+      startedAt: new Date().toISOString(),
+    }, null, 2));
+
+    // Create a task claimed by live agent (current process)
+    const liveTask = swarmStore.createTask(dirs.cwd, { title: "Live Agent Task" });
+    swarmStore.claimTask(dirs.cwd, liveTask.id, liveAgent);
+
+    // Create registration for live agent with valid PID
+    const liveRegPath = path.join(registryDir, `${liveAgent}.json`);
+    fs.writeFileSync(liveRegPath, JSON.stringify({
+      name: liveAgent,
+      pid: process.pid, // Valid PID
+      sessionId: "live-session",
+      cwd: dirs.cwd,
+      model: "test-model",
+      startedAt: new Date().toISOString(),
+    }, null, 2));
+
+    // Verify initial state
+    expect(swarmStore.getTask(dirs.cwd, deadTask.id)?.status).toBe("in_progress");
+    expect(swarmStore.getTask(dirs.cwd, deadTask.id)?.claimed_by).toBe(deadAgent);
+    expect(swarmStore.getTask(dirs.cwd, liveTask.id)?.status).toBe("in_progress");
+    expect(swarmStore.getTask(dirs.cwd, liveTask.id)?.claimed_by).toBe(liveAgent);
+
+    // Call cleanup directly (normally called via getTasks throttling)
+    const cleaned = swarmStore.cleanupStaleTaskClaims(dirs.cwd);
+
+    // Should clean up 1 stale claim
+    expect(cleaned).toBe(1);
+
+    // Dead agent's task should be unclaimed
+    expect(swarmStore.getTask(dirs.cwd, deadTask.id)?.status).toBe("todo");
+    expect(swarmStore.getTask(dirs.cwd, deadTask.id)?.claimed_by).toBeUndefined();
+
+    // Live agent's task should still be claimed
+    expect(swarmStore.getTask(dirs.cwd, liveTask.id)?.status).toBe("in_progress");
+    expect(swarmStore.getTask(dirs.cwd, liveTask.id)?.claimed_by).toBe(liveAgent);
+
+    // Verify feed event was logged
+    const events = readFeedEvents(dirs.cwd, 20);
+    const cleanupEvent = events.find(e => e.type === "task.reset" && e.agent === deadAgent);
+    expect(cleanupEvent).toBeDefined();
+    expect(cleanupEvent?.target).toBe(deadTask.id);
+    expect(cleanupEvent?.preview).toContain("agent crashed");
+  });
+
+  it("should not clean up tasks when registry does not exist (unknown agent state)", () => {
+    const dirs = createTempMessengerDirs();
+    const agentName = "SomeAgent";
+
+    // Create a task claimed by agent (no registry exists)
+    const task = swarmStore.createTask(dirs.cwd, { title: "Unknown Agent Task" });
+    swarmStore.claimTask(dirs.cwd, task.id, agentName);
+
+    // Verify initial state
+    expect(swarmStore.getTask(dirs.cwd, task.id)?.status).toBe("in_progress");
+
+    // Call cleanup - should skip because no registry exists
+    const cleaned = swarmStore.cleanupStaleTaskClaims(dirs.cwd);
+
+    // Should not clean up anything (unknown state, be conservative)
+    expect(cleaned).toBe(0);
+
+    // Task should still be claimed
+    expect(swarmStore.getTask(dirs.cwd, task.id)?.status).toBe("in_progress");
+    expect(swarmStore.getTask(dirs.cwd, task.id)?.claimed_by).toBe(agentName);
+  });
 });

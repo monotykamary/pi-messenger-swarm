@@ -1,5 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { isProcessAlive } from "../lib.js";
+import { logFeedEvent } from "../feed.js";
 import type { SwarmSummary, SwarmTask, SwarmTaskCreateInput, SwarmTaskEvidence } from "./types.js";
 
 function ensureDir(dir: string): void {
@@ -113,9 +115,66 @@ export function getTask(cwd: string, taskId: string): SwarmTask | null {
   return raw ? normalizeTask(raw) : null;
 }
 
+function isAgentActive(cwd: string, agentName: string): boolean | null {
+  // Check if agent has a valid registration file with a live PID
+  // Returns: true = active, false = dead/clean up, null = unknown (no registry)
+  const regPath = path.join(cwd, ".pi", "messenger", "registry", `${agentName}.json`);
+  if (!fs.existsSync(regPath)) return null; // Unknown - no registry to check
+
+  try {
+    const reg = JSON.parse(fs.readFileSync(regPath, "utf-8"));
+    if (!reg.pid || !isProcessAlive(reg.pid)) return false; // Dead - clean up
+    return true; // Active
+  } catch {
+    return false; // Invalid registration - clean up
+  }
+}
+
+/**
+ * Cleans up stale task claims from agents that have crashed or died.
+ * This is called automatically during getTasks() to ensure reconciliation.
+ * Only cleans up when we can verify the agent is dead (has dead PID in registry).
+ */
+export function cleanupStaleTaskClaims(cwd: string): number {
+  // Skip cleanup if no registry exists (tests, or fresh project)
+  const registryDir = path.join(cwd, ".pi", "messenger", "registry");
+  if (!fs.existsSync(registryDir)) return 0;
+
+  const tasks = getTasks(cwd);
+  let cleaned = 0;
+
+  for (const task of tasks) {
+    if (task.status !== "in_progress" || !task.claimed_by) continue;
+
+    // Check if the claiming agent is still active
+    const active = isAgentActive(cwd, task.claimed_by);
+    if (active === false) {
+      // Agent is confirmed dead (registry exists but PID is dead) - unclaim the task
+      unclaimTask(cwd, task.id, task.claimed_by);
+      logFeedEvent(cwd, task.claimed_by, "task.reset", task.id, "agent crashed - task auto-unclaimed");
+      cleaned++;
+    }
+    // If active === null (no registry), we don't clean up - agent might be in different
+    // registration scope or this might be a test environment
+  }
+
+  return cleaned;
+}
+
+// Last cleanup timestamp to throttle checks (max once per 30 seconds)
+let lastCleanupTime = 0;
+const CLEANUP_THROTTLE_MS = 30_000;
+
 export function getTasks(cwd: string): SwarmTask[] {
   const dir = getTasksDir(cwd);
   if (!fs.existsSync(dir)) return [];
+
+  // Throttled stale claim cleanup (reconciliation for crashed agents)
+  const now = Date.now();
+  if (now - lastCleanupTime > CLEANUP_THROTTLE_MS) {
+    lastCleanupTime = now;
+    cleanupStaleTaskClaims(cwd);
+  }
 
   const tasks: SwarmTask[] = [];
   for (const file of fs.readdirSync(dir)) {
