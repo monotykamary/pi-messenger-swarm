@@ -11,7 +11,7 @@ import {
   type Dirs,
 } from "./lib.js";
 import * as swarmStore from "./swarm/store.js";
-import { readFeedEvents, type FeedEvent, type FeedEventType } from "./feed.js";
+import { readFeedEvents, readFeedEventsWithOffset, getFeedLineCount, type FeedEvent, type FeedEventType } from "./feed.js";
 import type { SwarmTask as Task } from "./swarm/types.js";
 import {
   renderStatusBar,
@@ -198,10 +198,20 @@ export class MessengerOverlay implements Component, Focusable {
     }
     if (data === "g") {
       if (this.viewState.pendingG) {
-        // gg = jump to top (oldest events, max scroll)
+        // gg = jump to top (oldest events, max scroll) - load all remaining events first
         this.viewState.pendingG = false;
+
+        // Load all remaining older events if any
+        if (this.viewState.feedLoadedOffset > 0) {
+          const remainingEvents = readFeedEventsWithOffset(this.cwd, 0, this.viewState.feedLoadedOffset);
+          if (remainingEvents.length > 0) {
+            this.viewState.feedLoadedEvents = [...remainingEvents, ...this.viewState.feedLoadedEvents];
+            this.viewState.feedLoadedOffset = 0;
+          }
+        }
+
         const sectionWidth = this.width - 4; // inner width minus padding
-        const allFeedLines = renderFeedSection(this.theme, readFeedEvents(this.cwd), sectionWidth, this.viewState.lastSeenEventTs, this.viewState.expandFeedMessages);
+        const allFeedLines = renderFeedSection(this.theme, this.viewState.feedLoadedEvents, sectionWidth, this.viewState.lastSeenEventTs, this.viewState.expandFeedMessages);
         const termRows = process.stdout.rows ?? 24;
         const chromeLines = 8; // approximate
         const contentHeight = Math.max(8, termRows - chromeLines);
@@ -514,7 +524,29 @@ export class MessengerOverlay implements Component, Focusable {
     const termRows = process.stdout.rows ?? 24;
     const contentHeight = Math.max(8, termRows - chromeLines);
 
-    const allEvents = readFeedEvents(this.cwd);
+    // Progressive feed loading: load initial batch if empty
+    const INITIAL_LOAD_COUNT = 200;
+    const LOAD_MORE_COUNT = 100;
+    const totalFeedLines = getFeedLineCount(this.cwd);
+
+    if (this.viewState.feedLoadedEvents.length === 0 && totalFeedLines > 0) {
+      // First render: load last INITIAL_LOAD_COUNT events
+      const initialEvents = readFeedEventsWithOffset(this.cwd, 0, INITIAL_LOAD_COUNT);
+      this.viewState.feedLoadedEvents = initialEvents;
+      this.viewState.feedLoadedOffset = Math.max(0, totalFeedLines - initialEvents.length);
+      this.viewState.feedTotalLines = totalFeedLines;
+    } else if (totalFeedLines > this.viewState.feedTotalLines) {
+      // New events were added since last render: refresh from end
+      const newTotal = totalFeedLines;
+      const currentCount = this.viewState.feedLoadedEvents.length;
+      const addedCount = newTotal - this.viewState.feedTotalLines;
+      const eventsToLoad = readFeedEventsWithOffset(this.cwd, 0, currentCount + addedCount);
+      this.viewState.feedLoadedEvents = eventsToLoad;
+      this.viewState.feedLoadedOffset = Math.max(0, newTotal - eventsToLoad.length);
+      this.viewState.feedTotalLines = newTotal;
+    }
+
+    const allEvents = this.viewState.feedLoadedEvents;
     // Initialize lastSeenEventTs on first render so existing events appear dim, not highlighted
     if (this.viewState.lastSeenEventTs === null && allEvents.length > 0) {
       this.viewState.lastSeenEventTs = allEvents[allEvents.length - 1].ts;
@@ -579,8 +611,23 @@ export class MessengerOverlay implements Component, Focusable {
 
 
       // Line-based scrolling: render all events, then slice by line offset
-      const allFeedLines = renderFeedSection(this.theme, allEvents, sectionW, prevTs, this.viewState.expandFeedMessages);
+      let allFeedLines = renderFeedSection(this.theme, allEvents, sectionW, prevTs, this.viewState.expandFeedMessages);
       const maxLineOffset = Math.max(0, allFeedLines.length - feedHeight);
+
+      // Progressive loading: if scrolled near top and more events available, load more
+      const LOAD_MORE_THRESHOLD = 5; // lines remaining before triggering load
+      if (this.viewState.feedLoadedOffset > 0 &&
+          this.viewState.feedScrollOffset >= maxLineOffset - LOAD_MORE_THRESHOLD) {
+        // Load more older events
+        const moreEvents = readFeedEventsWithOffset(this.cwd, this.viewState.feedLoadedOffset, LOAD_MORE_COUNT);
+        if (moreEvents.length > 0) {
+          this.viewState.feedLoadedEvents = [...moreEvents, ...this.viewState.feedLoadedEvents];
+          this.viewState.feedLoadedOffset = Math.max(0, this.viewState.feedLoadedOffset - moreEvents.length);
+          // Re-render with new events
+          allFeedLines = renderFeedSection(this.theme, this.viewState.feedLoadedEvents, sectionW, prevTs, this.viewState.expandFeedMessages);
+        }
+      }
+
       this.viewState.feedScrollOffset = Math.max(0, Math.min(this.viewState.feedScrollOffset, maxLineOffset));
       const lineEnd = allFeedLines.length - this.viewState.feedScrollOffset;
       const lineStart = Math.max(0, lineEnd - feedHeight);

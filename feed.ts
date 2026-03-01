@@ -121,6 +121,50 @@ export function readFeedEvents(cwd: string, limit?: number): FeedEvent[] {
   }
 }
 
+export function readFeedEventsWithOffset(cwd: string, offsetFromEnd: number, limit: number): FeedEvent[] {
+  const p = feedPath(cwd);
+  if (!fs.existsSync(p)) return [];
+
+  try {
+    const content = fs.readFileSync(p, "utf-8").trim();
+    if (!content) return [];
+    const lines = content.split("\n");
+    const totalLines = lines.length;
+
+    // Calculate start and end indices from the end of the file
+    const endIndex = totalLines - offsetFromEnd;
+    const startIndex = Math.max(0, endIndex - limit);
+
+    if (startIndex >= endIndex || endIndex <= 0) return [];
+
+    const events: FeedEvent[] = [];
+    for (let i = startIndex; i < endIndex; i++) {
+      try {
+        const parsed = JSON.parse(lines[i]) as FeedEvent;
+        events.push(sanitizeFeedEvent(parsed));
+      } catch {
+        // Skip malformed lines
+      }
+    }
+    return events;
+  } catch {
+    return [];
+  }
+}
+
+export function getFeedLineCount(cwd: string): number {
+  const p = feedPath(cwd);
+  if (!fs.existsSync(p)) return 0;
+
+  try {
+    const content = fs.readFileSync(p, "utf-8").trim();
+    if (!content) return 0;
+    return content.split("\n").length;
+  } catch {
+    return 0;
+  }
+}
+
 export function pruneFeed(cwd: string, maxEvents: number): void {
   const p = feedPath(cwd);
   if (!fs.existsSync(p)) return;

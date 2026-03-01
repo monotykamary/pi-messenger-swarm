@@ -3,7 +3,7 @@ import { matchesKey, type TUI } from "@mariozechner/pi-tui";
 import type { AgentMailMessage, Dirs, MessengerState } from "./lib.js";
 import { MAX_CHAT_HISTORY } from "./lib.js";
 import { sendMessageToAgent, getActiveAgents } from "./store.js";
-import { logFeedEvent } from "./feed.js";
+import { logFeedEvent, type FeedEvent } from "./feed.js";
 import * as swarmStore from "./swarm/store.js";
 import { executeTaskAction as runTaskAction } from "./swarm/task-actions.js";
 import type { SwarmTask as Task } from "./swarm/types.js";
@@ -36,6 +36,10 @@ export interface MessengerViewState {
   mentionIndex: number;
   pendingG: boolean;
   expandFeedMessages: boolean;
+  // Progressive feed loading
+  feedLoadedEvents: FeedEvent[];
+  feedLoadedOffset: number; // offset from end (0 = all loaded, N = last N lines not yet loaded)
+  feedTotalLines: number;
 }
 
 export function createMessengerViewState(): MessengerViewState {
@@ -60,6 +64,10 @@ export function createMessengerViewState(): MessengerViewState {
     mentionIndex: -1,
     pendingG: false,
     expandFeedMessages: false,
+    // Progressive feed loading - start empty, will load initial batch on first render
+    feedLoadedEvents: [],
+    feedLoadedOffset: 0,
+    feedTotalLines: 0,
   };
 }
 
