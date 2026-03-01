@@ -10,7 +10,7 @@ import type { SwarmTask as Task } from "./swarm/types.js";
 import { getLiveWorkers } from "./swarm/live-progress.js";
 
 interface ConfirmAction {
-  type: "reset" | "cascade-reset" | "delete" | "archive";
+  type: "delete" | "archive";
   taskId: string;
   label: string;
 }
@@ -92,8 +92,6 @@ function executeTaskAction(
     action !== "start" &&
     action !== "block" &&
     action !== "unblock" &&
-    action !== "reset" &&
-    action !== "cascade-reset" &&
     action !== "delete" &&
     action !== "archive" &&
     action !== "stop"

@@ -202,4 +202,76 @@ describe("swarm/store", () => {
     expect(swarmStore.hasAnyTasks(cwd)).toBe(true);
     expect(t1.id).toBe("task-1");
   });
+
+  it("auto-unclaims tasks when agent leaves gracefully (registry deleted)", () => {
+    const cwd = createTempCwd();
+
+    // Create a task and claim it
+    const task = swarmStore.createTask(cwd, { title: "Unclaim on leave test" });
+    swarmStore.claimTask(cwd, task.id, "AgentA");
+    expect(swarmStore.getTask(cwd, task.id)?.status).toBe("in_progress");
+    expect(swarmStore.getTask(cwd, task.id)?.claimed_by).toBe("AgentA");
+
+    // Simulate AgentA joining (creating registry)
+    const registryDir = path.join(cwd, ".pi", "messenger", "registry");
+    fs.mkdirSync(registryDir, { recursive: true });
+    const agentARegistry = path.join(registryDir, "AgentA.json");
+    fs.writeFileSync(agentARegistry, JSON.stringify({ name: "AgentA", pid: process.pid, joinedAt: new Date().toISOString() }));
+
+    // AgentB also joins
+    const agentBRegistry = path.join(registryDir, "AgentB.json");
+    fs.writeFileSync(agentBRegistry, JSON.stringify({ name: "AgentB", pid: process.pid, joinedAt: new Date().toISOString() }));
+
+    // AgentA leaves gracefully (registry deleted)
+    fs.unlinkSync(agentARegistry);
+
+    // Directly trigger cleanupStaleTaskClaims (bypassing the throttle in getTasks)
+    const cleanedCount = swarmStore.cleanupStaleTaskClaims(cwd);
+    expect(cleanedCount).toBe(1);
+
+    // Task should be unclaimed
+    const updatedTask = swarmStore.getTask(cwd, task.id);
+    expect(updatedTask?.status).toBe("todo");
+    expect(updatedTask?.claimed_by).toBeUndefined();
+
+    // AgentB should now be able to claim it
+    const claimResult = swarmStore.claimTask(cwd, task.id, "AgentB");
+    expect(claimResult).not.toBeNull();
+    expect(claimResult?.status).toBe("in_progress");
+    expect(claimResult?.claimed_by).toBe("AgentB");
+  });
+
+  it("allows new agent to claim task when previous claimer has left", () => {
+    const cwd = createTempCwd();
+
+    // Setup: AgentA claims a task
+    const task = swarmStore.createTask(cwd, { title: "Handoff test" });
+    swarmStore.claimTask(cwd, task.id, "AgentA");
+
+    // Simulate registry with AgentA present
+    const registryDir = path.join(cwd, ".pi", "messenger", "registry");
+    fs.mkdirSync(registryDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(registryDir, "AgentA.json"),
+      JSON.stringify({ name: "AgentA", pid: process.pid })
+    );
+
+    // AgentA leaves (simulating the GoldFalcon scenario)
+    fs.unlinkSync(path.join(registryDir, "AgentA.json"));
+
+    // Create AgentB's registry (simulating another agent present)
+    fs.writeFileSync(
+      path.join(registryDir, "AgentB.json"),
+      JSON.stringify({ name: "AgentB", pid: process.pid })
+    );
+
+    // Directly trigger cleanupStaleTaskClaims (bypassing the throttle in getTasks)
+    const cleanedCount = swarmStore.cleanupStaleTaskClaims(cwd);
+    expect(cleanedCount).toBe(1);
+
+    // AgentB tries to claim - should succeed because AgentA left
+    const result = swarmStore.claimTask(cwd, task.id, "AgentB");
+    expect(result).not.toBeNull();
+    expect(result?.claimed_by).toBe("AgentB");
+  });
 });

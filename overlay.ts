@@ -119,6 +119,11 @@ export class MessengerOverlay implements Component, Focusable {
   handleInput(data: string): void {
     this.cancelCompletionTimer();
 
+    // Cancel pending gg if any non-g key is pressed
+    if (this.viewState.pendingG && data !== "g") {
+      this.viewState.pendingG = false;
+    }
+
     // Toggle expanded feed messages - check early to ensure it works
     if (data === "e") {
       this.viewState.expandFeedMessages = !this.viewState.expandFeedMessages;

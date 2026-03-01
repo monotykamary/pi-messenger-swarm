@@ -143,6 +143,11 @@ export function cleanupStaleTaskClaims(cwd: string): number {
   const tasks = getTasks(cwd);
   let cleaned = 0;
 
+  // Get list of all known agents for null-check logic
+  const knownAgents = fs.existsSync(registryDir) 
+    ? fs.readdirSync(registryDir).filter(f => f.endsWith(".json")).map(f => f.slice(0, -5))
+    : [];
+
   for (const task of tasks) {
     if (task.status !== "in_progress" || !task.claimed_by) continue;
 
@@ -153,9 +158,14 @@ export function cleanupStaleTaskClaims(cwd: string): number {
       unclaimTask(cwd, task.id, task.claimed_by);
       logFeedEvent(cwd, task.claimed_by, "task.reset", task.id, "agent crashed - task auto-unclaimed");
       cleaned++;
+    } else if (active === null && knownAgents.length > 0) {
+      // Agent has no registry, but other agents do - agent left gracefully, unclaim
+      // Only do this if there are known agents (to avoid false positives in test environments)
+      unclaimTask(cwd, task.id, task.claimed_by);
+      logFeedEvent(cwd, task.claimed_by, "task.reset", task.id, "agent left - task auto-unclaimed");
+      cleaned++;
     }
-    // If active === null (no registry), we don't clean up - agent might be in different
-    // registration scope or this might be a test environment
+    // If active === null and no known agents, we don't clean up - might be test environment
   }
 
   return cleaned;
