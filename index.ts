@@ -813,13 +813,33 @@ Usage (swarm-first API):
   });
 
   pi.on("session_shutdown", async () => {
-    stopAllSpawned(process.cwd());
+    const cwd = process.cwd();
+    stopAllSpawned(cwd);
     stopStatusHeartbeat();
     overlayOpening = false;
     overlayHandle = null;
     overlayTui = null;
     if (state.registered) {
-      logFeedEvent(process.cwd(), state.agentName, "leave");
+      // Release any tasks claimed by this agent before leaving
+      const claimedTasks = swarmStore.getTasks(cwd).filter(
+        t => t.status === "in_progress" && t.claimed_by === state.agentName
+      );
+      for (const task of claimedTasks) {
+        swarmStore.unclaimTask(cwd, task.id, state.agentName);
+        logFeedEvent(cwd, state.agentName, "task.reset", task.id, "agent left - task unclaimed");
+      }
+      // Also clean up any tasks claimed by our spawned agents (they may not have time to clean up)
+      const { listSpawned } = await import("./swarm/spawn.js");
+      const spawnedAgents = listSpawned(cwd);
+      const spawnedNames = new Set(spawnedAgents.map(s => s.name));
+      const spawnedClaimedTasks = swarmStore.getTasks(cwd).filter(
+        t => t.status === "in_progress" && t.claimed_by && spawnedNames.has(t.claimed_by)
+      );
+      for (const task of spawnedClaimedTasks) {
+        swarmStore.unclaimTask(cwd, task.id, task.claimed_by!);
+        logFeedEvent(cwd, task.claimed_by!, "task.reset", task.id, "parent agent left - task unclaimed");
+      }
+      logFeedEvent(cwd, state.agentName, "leave");
     }
     if (state.registryFlushTimer) {
       clearTimeout(state.registryFlushTimer);
