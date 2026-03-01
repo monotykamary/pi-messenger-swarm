@@ -307,9 +307,7 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
       : folder;
     pi.sendMessage({
       customType: "messenger_context",
-      content: `You are agent "${state.agentName}" in ${locationPart}. Use pi_messenger({ action: "swarm" }) to inspect tasks, task.* to claim/complete work, and spawn.* to manage subagents.
-
-SWARM MODE: Spawned agents are asynchronous colleagues, not blocking calls. After spawning: (1) End your response immediately, (2) Agents message results when ready, (3) Agents self-terminate when done — do not stop completed agents manually. Only use spawn.stop to cancel mid-task (e.g., stuck or off-track).`,
+      content: `You are agent "${state.agentName}" in ${locationPart}. Use pi_messenger({ action: "swarm" }) to inspect swarm tasks, task.* to claim/complete work, and spawn.* to manage subagents.`,
       display: false
     }, { triggerTurn: false });
   }
@@ -322,8 +320,6 @@ SWARM MODE: Spawned agents are asynchronous colleagues, not blocking calls. Afte
     name: "pi_messenger",
     label: "Pi Messenger",
     description: `Multi-agent coordination and task orchestration.
-
-**Async model**: Spawned agents work independently and message results when ready. Do not poll or wait. Agents self-terminate when complete — only use spawn.stop to cancel mid-task (e.g., stuck or off-track).
 
 Usage (swarm-first API):
   // Coordination

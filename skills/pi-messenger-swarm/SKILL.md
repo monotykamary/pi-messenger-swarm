@@ -11,21 +11,6 @@ Pi-messenger now runs in **swarm-first mode**.
 - No fixed planner/worker/reviewer roles
 - Any joined or spawned agent can create/claim/complete tasks
 
-## Swarm Mental Model
-
-Spawned agents are **asynchronous colleagues**, not blocking function calls.
-
-- After spawning, **end your response immediately**. Do not poll, sleep, or loop.
-- Agents **message their findings when ready** via the feed and direct messages.
-- Agents **self-terminate when their mission completes** — no cleanup needed.
-- Only use `spawn.stop` to forcibly cancel an agent mid-task (e.g., stuck, off-track, or no longer needed).
-
-**Typical flow:**
-1. Spawn agents with specific missions via `pi_messenger({ action: "spawn", ... })`
-2. End your turn — let agents work
-3. Receive messages as agents report progress/completion
-4. Synthesize findings when re-invoked
-
 ## Core protocol (all agents)
 
 1. Join first
