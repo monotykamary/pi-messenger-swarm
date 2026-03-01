@@ -27,8 +27,6 @@ import * as swarmStore from "./swarm/store.js";
 import { getAutoRegisterPaths, saveAutoRegisterPaths, matchesAutoRegisterPath } from "./config.js";
 import { readFeedEvents, logFeedEvent, pruneFeed, formatFeedLine, isSwarmEvent, type FeedEvent } from "./feed.js";
 
-let messagesSentThisSession = 0;
-
 // =============================================================================
 // Tool Result Helper
 // =============================================================================
@@ -269,22 +267,12 @@ export function executeSend(
     );
   }
 
-  const budget = 10;
-  if (messagesSentThisSession >= budget) {
-    return result(
-      `Message budget reached (${messagesSentThisSession}/${budget}). Focus on your current objective.`,
-      { mode: "send", error: "budget_exceeded" }
-    );
-  }
-
   let recipients: string[];
   if (broadcast) {
     if (process.env.PI_SWARM_SPAWNED) {
-      messagesSentThisSession++;
       logFeedEvent(cwd, state.agentName, "message", undefined, message);
-      const remaining = budget - messagesSentThisSession;
       return result(
-        `Broadcast logged. (${remaining} message${remaining === 1 ? "" : "s"} remaining)`,
+        `Broadcast logged.`,
         { mode: "send", sent: ["feed"], failed: [] }
       );
     }
@@ -350,8 +338,6 @@ export function executeSend(
     );
   }
 
-  messagesSentThisSession++;
-
   if (broadcast) {
     logFeedEvent(cwd, state.agentName, "message", undefined, message);
   } else {
@@ -360,8 +346,7 @@ export function executeSend(
     }
   }
 
-  const remaining = budget - messagesSentThisSession;
-  let text = `Message sent to ${sent.join(", ")}. (${remaining} message${remaining === 1 ? "" : "s"} remaining)`;
+  let text = `Message sent to ${sent.join(", ")}.`;
   if (failed.length > 0) {
     const failedStr = failed.map(f => `${f.name} (${f.error})`).join(", ");
     text += ` Failed: ${failedStr}`;
