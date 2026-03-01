@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import { formatFeedLine, isSwarmEvent, logFeedEvent, pruneFeed, readFeedEvents } from "../feed.js";
+import { formatFeedLine, isSwarmEvent, logFeedEvent, pruneFeed, readFeedEvents, readFeedEventsWithOffset, readFeedEventsByRange, getFeedLineCount } from "../feed.js";
 import { createTempMessengerDirs } from "./helpers/temp-dirs.js";
 
 describe("feed", () => {
@@ -136,5 +136,74 @@ describe("feed", () => {
   it("returns an empty array when the feed file does not exist", () => {
     const freshCwd = createTempMessengerDirs().cwd;
     expect(readFeedEvents(freshCwd, 20)).toEqual([]);
+  });
+
+  describe("progressive loading", () => {
+    it("reads events by offset from end", () => {
+      // Create 10 events
+      for (let i = 0; i < 10; i++) {
+        logFeedEvent(cwd, `Agent${i}`, "message", undefined, `Message ${i}`);
+      }
+
+      // Read last 3 events (offset 0, limit 3)
+      const last3 = readFeedEventsWithOffset(cwd, 0, 3);
+      expect(last3).toHaveLength(3);
+      expect(last3[0]?.preview).toBe("Message 7");
+      expect(last3[2]?.preview).toBe("Message 9");
+
+      // Read 3 events starting from offset 3 (skip last 3, get next 3)
+      const middle3 = readFeedEventsWithOffset(cwd, 3, 3);
+      expect(middle3).toHaveLength(3);
+      expect(middle3[0]?.preview).toBe("Message 4");
+      expect(middle3[2]?.preview).toBe("Message 6");
+    });
+
+    it("reads events by absolute index range", () => {
+      for (let i = 0; i < 10; i++) {
+        logFeedEvent(cwd, `Agent${i}`, "message", undefined, `Message ${i}`);
+      }
+
+      // Read events 2-5 (indices 2, 3, 4)
+      const range = readFeedEventsByRange(cwd, 2, 5);
+      expect(range).toHaveLength(3);
+      expect(range[0]?.preview).toBe("Message 2");
+      expect(range[2]?.preview).toBe("Message 4");
+    });
+
+    it("clamps range indices to valid bounds", () => {
+      for (let i = 0; i < 5; i++) {
+        logFeedEvent(cwd, `Agent${i}`, "message", undefined, `Message ${i}`);
+      }
+
+      // Range beyond file should clamp
+      const beyond = readFeedEventsByRange(cwd, 100, 200);
+      expect(beyond).toEqual([]);
+
+      // Partial overlap should return valid portion
+      const partial = readFeedEventsByRange(cwd, 3, 100);
+      expect(partial).toHaveLength(2); // events 3 and 4
+      expect(partial[0]?.preview).toBe("Message 3");
+    });
+
+    it("returns correct total line count", () => {
+      expect(getFeedLineCount(cwd)).toBe(0);
+
+      logFeedEvent(cwd, "Agent1", "join");
+      expect(getFeedLineCount(cwd)).toBe(1);
+
+      logFeedEvent(cwd, "Agent2", "leave");
+      logFeedEvent(cwd, "Agent3", "message", undefined, "hi");
+      expect(getFeedLineCount(cwd)).toBe(3);
+    });
+
+    it("returns empty array for invalid offset/range", () => {
+      logFeedEvent(cwd, "Agent", "join");
+
+      // Offset beyond file
+      expect(readFeedEventsWithOffset(cwd, 100, 10)).toEqual([]);
+
+      // Empty range
+      expect(readFeedEventsByRange(cwd, 5, 5)).toEqual([]);
+    });
   });
 });
