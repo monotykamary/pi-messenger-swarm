@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.15.4](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.15.3...v0.15.4) (2026-03-01)
+
+
+### Features
+
+* **skills:** add swarm philosophy guidance for event-driven collaboration ([4b504ef](https://github.com/monotykamary/pi-messenger-swarm/commit/4b504efa8615cc0e3b80615f2798749609db21a0))
+
 ### [0.15.3](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.15.2...v0.15.3) (2026-03-01)
 
 
