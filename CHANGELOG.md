@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.14.3](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.14.2...v0.14.3) (2026-03-01)
+
+
+### Bug Fixes
+
+* **swarm:** unclaim tasks when agents leave to prevent indefinite locks ([c3da6a6](https://github.com/monotykamary/pi-messenger-swarm/commit/c3da6a6a1821488b2afe02888950fee690e41185))
+
 ### [0.14.2](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.14.1...v0.14.2) (2026-03-01)
 
 
