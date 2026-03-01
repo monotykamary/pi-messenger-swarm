@@ -65,6 +65,7 @@ function buildSystemPrompt(request: SpawnRequest): string {
     "3. If assigned a task, try claim first and respect ownership conflicts.",
     "4. Report concrete progress and outcomes, not vague status.",
     "5. Be concise, evidence-based, and stay in role.",
+    "6. Clarify ambiguity early: if mission scope, expected output format, or framing is unclear or seems incomplete, send a brief targeted question via pi_messenger({ action: \"send\", to: \"AgentName\", message: \"...\" }) before proceeding. A 30-second alignment check prevents off-target work.",
   );
 
   return lines.join("\n");
