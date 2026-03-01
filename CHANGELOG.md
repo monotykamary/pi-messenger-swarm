@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.15.2](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.15.1...v0.15.2) (2026-03-01)
+
+
+### Features
+
+* **swarm:** add mental model guidance for async agent interaction ([6d5c001](https://github.com/monotykamary/pi-messenger-swarm/commit/6d5c00137efdfb8903171ae992bd9fcba96bfaee))
+
 ### [0.15.1](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.15.0...v0.15.1) (2026-03-01)
 
 
