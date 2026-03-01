@@ -67,8 +67,9 @@ describe("overlay swarm list view", () => {
       },
     );
 
-    expect(legend).toContain("f:Tasks");
-    expect(legend).toContain("Enter:Detail");
+    const legendText = legend.join(" ");
+    expect(legendText).toContain("f:Tasks");
+    expect(legendText).toContain("Enter:Detail");
   });
 
   it("renders full system prompt in swarm detail", () => {

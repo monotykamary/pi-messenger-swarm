@@ -1,4 +1,4 @@
-import { truncateToWidth } from "@mariozechner/pi-tui";
+import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 import type { Theme } from "@mariozechner/pi-coding-agent";
 import {
   formatDuration,
@@ -308,45 +308,45 @@ export function renderLegend(
   viewState: MessengerViewState,
   task: Task | null,
   swarmAgent: SpawnedAgent | null,
-): string {
+): string[] {
   if (viewState.confirmAction) {
     const text = renderConfirmBar(viewState.confirmAction.taskId, viewState.confirmAction.label, viewState.confirmAction.type);
-    return truncateToWidth(theme.fg("warning", appendUniversalHints(text)), width);
+    return [truncateToWidth(theme.fg("warning", appendUniversalHints(text)), width)];
   }
 
   if (viewState.inputMode === "block-reason") {
     const text = renderBlockReasonBar(viewState.blockReasonInput);
-    return truncateToWidth(theme.fg("warning", appendUniversalHints(text)), width);
+    return [truncateToWidth(theme.fg("warning", appendUniversalHints(text)), width)];
   }
 
   if (viewState.inputMode === "message") {
-    const text = renderMessageBar(viewState.messageInput);
-    return truncateToWidth(theme.fg("accent", text), width);
+    const lines = renderMessageBar(viewState.messageInput, width);
+    return lines.map(line => theme.fg("accent", line));
   }
 
   if (viewState.notification) {
     if (Date.now() < viewState.notification.expiresAt) {
-      return truncateToWidth(appendUniversalHints(viewState.notification.message), width);
+      return [truncateToWidth(appendUniversalHints(viewState.notification.message), width)];
     }
     viewState.notification = null;
   }
 
   if (viewState.mainView === "swarm") {
     if (viewState.mode === "detail" && swarmAgent) {
-      return truncateToWidth(theme.fg("dim", appendUniversalHints(renderSwarmDetailStatusBar())), width);
+      return [truncateToWidth(theme.fg("dim", appendUniversalHints(renderSwarmDetailStatusBar())), width)];
     }
-    return truncateToWidth(theme.fg("dim", appendUniversalHints(renderSwarmListStatusBar(!!swarmAgent))), width);
+    return [truncateToWidth(theme.fg("dim", appendUniversalHints(renderSwarmListStatusBar(!!swarmAgent))), width)];
   }
 
   if (viewState.mode === "detail" && task) {
-    return truncateToWidth(theme.fg("dim", appendUniversalHints(renderDetailStatusBar(cwd, task))), width);
+    return [truncateToWidth(theme.fg("dim", appendUniversalHints(renderDetailStatusBar(cwd, task))), width)];
   }
 
   if (task) {
-    return truncateToWidth(theme.fg("dim", appendUniversalHints(renderListStatusBar(cwd, task))), width);
+    return [truncateToWidth(theme.fg("dim", appendUniversalHints(renderListStatusBar(cwd, task))), width)];
   }
 
-  return truncateToWidth(theme.fg("dim", appendUniversalHints("m:Chat  f:Swarm  PgUp/PgDn/^U/^D:Feed  Esc:Close")), width);
+  return [truncateToWidth(theme.fg("dim", appendUniversalHints("m:Chat  f:Swarm  PgUp/PgDn/^U/^D:Feed  Esc:Close")), width)];
 }
 
 export function renderDetailView(cwd: string, task: Task, width: number, height: number, viewState: MessengerViewState): string[] {
@@ -488,7 +488,6 @@ export function renderSwarmDetail(agent: SpawnedAgent, width: number, height: nu
 function renderDetailStatusBar(cwd: string, task: Task): string {
   const hints: string[] = [];
   if (task.status === "in_progress") hints.push("q:Stop");
-  if (["done", "blocked", "in_progress"].includes(task.status)) hints.push("r:Reset");
   if (task.status === "blocked") hints.push("u:Unblock");
   if (task.status === "todo") hints.push("s:Claim");
   if (task.status === "in_progress") hints.push("b:Block");
@@ -500,7 +499,6 @@ function renderDetailStatusBar(cwd: string, task: Task): string {
 function renderListStatusBar(cwd: string, task: Task): string {
   const hints: string[] = ["Enter:Detail"];
   if (task.status === "in_progress") hints.push("q:Stop");
-  if (["done", "blocked", "in_progress"].includes(task.status)) hints.push("r:Reset");
   if (task.status === "blocked") hints.push("u:Unblock");
   if (task.status === "todo") hints.push("s:Claim");
   if (task.status === "in_progress") hints.push("b:Block");
@@ -531,11 +529,55 @@ function renderBlockReasonBar(input: string): string {
   return `Block reason: ${input}█  [Enter] Confirm  [Esc] Cancel`;
 }
 
-function renderMessageBar(input: string): string {
+function wrapInputToLines(input: string, width: number, hint: string): string[] {
+  const tabHint = input.startsWith("@") && !input.includes(" ") ? "  [Tab] Complete" : "";
+  const suffix = `  [Enter] Send${tabHint}  [Esc] Cancel`;
+  const prefix = `${hint}: `;
+  const cursor = "█";
+
+  const suffixWidth = visibleWidth(suffix);
+  const prefixWidth = visibleWidth(prefix);
+  const cursorWidth = 1;
+
+  // First line can use full width minus prefix
+  const firstLineMaxContent = Math.max(1, width - prefixWidth);
+  // Last line needs room for cursor + suffix
+  const lastLineMaxContent = Math.max(1, width - prefixWidth - cursorWidth - suffixWidth);
+  // Middle lines use same width as first line (just indented content)
+  const middleMaxContent = firstLineMaxContent;
+
+  // Check if everything fits on one line
+  if (input.length <= lastLineMaxContent) {
+    return [`${prefix}${input}${cursor}${suffix}`];
+  }
+
+  // Need to wrap to multiple lines
+  const lines: string[] = [];
+  let remaining = input;
+
+  // First line: prefix + content (as much as fits)
+  const firstLineContent = remaining.slice(0, firstLineMaxContent);
+  lines.push(`${prefix}${firstLineContent}`);
+  remaining = remaining.slice(firstLineMaxContent);
+
+  // Middle lines: indented content (no cursor/suffix, they go on last line)
+  const indent = " ".repeat(prefixWidth);
+  while (remaining.length > lastLineMaxContent) {
+    const chunk = remaining.slice(0, middleMaxContent);
+    lines.push(`${indent}${chunk}`);
+    remaining = remaining.slice(middleMaxContent);
+  }
+
+  // Last line: remaining content + cursor + suffix
+  lines.push(`${indent}${remaining}${cursor}${suffix}`);
+
+  return lines;
+}
+
+function renderMessageBar(input: string, width: number): string[] {
   const isAt = input.startsWith("@");
   const hint = isAt ? "DM" : "broadcast";
-  const tabHint = isAt && !input.includes(" ") ? "  [Tab] Complete" : "";
-  return `${hint}: ${input}█  [Enter] Send${tabHint}  [Esc] Cancel`;
+  return wrapInputToLines(input, width, hint);
 }
 
 function renderTaskLine(theme: Theme, task: Task, isSelected: boolean, width: number, liveWorker?: LiveWorkerInfo): string {

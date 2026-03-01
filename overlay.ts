@@ -481,7 +481,9 @@ export class MessengerOverlay implements Component, Focusable {
     lines.push(row(renderStatusBar(this.theme, this.cwd, sectionW)));
     lines.push(emptyRow());
 
-    const chromeLines = 6;
+    // Calculate legend first to determine dynamic chrome lines
+    const legendLines = renderLegend(this.theme, this.cwd, sectionW, this.viewState, selectedTask as Task | null, selectedSwarmAgent);
+    const chromeLines = 5 + legendLines.length; // title + status + empty row + separator + bottom border + legend lines
     const termRows = process.stdout.rows ?? 24;
     const contentHeight = Math.max(8, termRows - chromeLines);
 
@@ -593,7 +595,9 @@ export class MessengerOverlay implements Component, Focusable {
     }
 
     lines.push(border("├" + "─".repeat(innerW) + "┤"));
-    lines.push(row(renderLegend(this.theme, this.cwd, sectionW, this.viewState, selectedTask as Task | null, selectedSwarmAgent)));
+    for (const legendLine of legendLines) {
+      lines.push(row(legendLine));
+    }
     lines.push(border("╰" + "─".repeat(innerW) + "╯"));
 
     if (allEvents.length > 0) {
