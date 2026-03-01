@@ -488,8 +488,14 @@ function spawnCreate(params: MessengerActionParams, state: MessengerState, cwd: 
   const roleLabel = formatRoleLabel(record.role);
   logFeedEvent(cwd, state.agentName, "message", undefined, `spawned ${record.name} (${roleLabel})`);
 
-  return result(`🚀 Spawned ${record.name} (${record.id}) as ${roleLabel}.`, {
-    mode: "spawn",
-    agent: record,
-  });
+  return result(
+    `🚀 Spawned ${record.name} (${record.id}) as ${roleLabel}.\n\n` +
+    `⚠️ IMPORTANT: End your response immediately. Do not wait, poll, sleep, ` +
+    `or check on this agent. It will message results when ready. ` +
+    `Agents self-terminate when done — you will be invoked again to synthesize their findings.`,
+    {
+      mode: "spawn",
+      agent: record,
+    }
+  );
 }
