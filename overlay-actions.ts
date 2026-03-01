@@ -34,6 +34,8 @@ export interface MessengerViewState {
   feedScrollOffset: number;
   mentionCandidates: string[];
   mentionIndex: number;
+  pendingG: boolean;
+  expandFeedMessages: boolean;
 }
 
 export function createMessengerViewState(): MessengerViewState {
@@ -56,6 +58,8 @@ export function createMessengerViewState(): MessengerViewState {
     feedScrollOffset: 0,
     mentionCandidates: [],
     mentionIndex: -1,
+    pendingG: false,
+    expandFeedMessages: false,
   };
 }
 
@@ -128,7 +132,7 @@ function addToBroadcastHistory(state: MessengerState, text: string): void {
 }
 
 function previewText(text: string): string {
-  return text.length > 200 ? `${text.slice(0, 197)}...` : text;
+  return text;
 }
 
 export function handleConfirmInput(data: string, viewState: MessengerViewState, cwd: string, agentName: string, tui: TUI): void {
@@ -399,16 +403,6 @@ export function handleTaskKeyBinding(
   if (matchesKey(data, "s") && task.status === "todo") {
     const result = executeTaskAction(cwd, "start", task.id, agentName);
     setNotification(viewState, tui, result.success, result.message);
-    tui.requestRender();
-    return;
-  }
-  if (matchesKey(data, "r") && ["done", "blocked", "in_progress"].includes(task.status)) {
-    viewState.confirmAction = { type: "reset", taskId: task.id, label: task.title };
-    tui.requestRender();
-    return;
-  }
-  if (matchesKey(data, "shift+r") && ["done", "blocked", "in_progress"].includes(task.status)) {
-    viewState.confirmAction = { type: "cascade-reset", taskId: task.id, label: task.title };
     tui.requestRender();
     return;
   }

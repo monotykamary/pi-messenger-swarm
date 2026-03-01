@@ -44,26 +44,14 @@ export interface OverlayCallbacks {
   onBackground?: (snapshot: string) => void;
 }
 
-function isFeedPageUpKey(data: string): boolean {
-  // Mac terminals vary here (Fn+↑ may emit PageUp, Shift+↑ sequence, or nothing).
-  // Support canonical PageUp plus common fallbacks (^U).
-  return (
-    matchesKey(data, "pageup") ||
-    data === "\x1b[5~" ||
-    data === "\x1b[1;2A" ||
-    data === "\x15"
-  );
+function isFeedUpKey(data: string): boolean {
+  // Vim-style: k scrolls up (to older feed items)
+  return data === "k" || data === "K";
 }
 
-function isFeedPageDownKey(data: string): boolean {
-  // Mac terminals vary here (Fn+↓ may emit PageDown, Shift+↓ sequence, or nothing).
-  // Support canonical PageDown plus common fallbacks (^D).
-  return (
-    matchesKey(data, "pagedown") ||
-    data === "\x1b[6~" ||
-    data === "\x1b[1;2B" ||
-    data === "\x04"
-  );
+function isFeedDownKey(data: string): boolean {
+  // Vim-style: j scrolls down (to newer feed items)
+  return data === "j" || data === "J";
 }
 
 export class MessengerOverlay implements Component, Focusable {
@@ -131,6 +119,13 @@ export class MessengerOverlay implements Component, Focusable {
   handleInput(data: string): void {
     this.cancelCompletionTimer();
 
+    // Toggle expanded feed messages - check early to ensure it works
+    if (data === "e") {
+      this.viewState.expandFeedMessages = !this.viewState.expandFeedMessages;
+      this.tui.requestRender();
+      return;
+    }
+
     // Snapshot transfer: Ctrl+T (legacy) or Shift+T
     if (data === "\x14" || data === "T" || matchesKey(data, "shift+t")) {
       this.done(this.generateSnapshot());
@@ -186,17 +181,49 @@ export class MessengerOverlay implements Component, Focusable {
       return;
     }
 
-    // Feed scrolling: PgUp/PgDn by chunk.
-    // Mac-friendly fallbacks: ^U/^D and common terminal escape sequences.
-    if (isFeedPageUpKey(data)) {
-      this.viewState.feedScrollOffset += 5;
+    // Feed scrolling: j/k for line-by-line vim-style scrolling.
+    // k = scroll up (to older feed items), j = scroll down (to newer feed items).
+    // gg = jump to top (oldest), G = jump to bottom (newest).
+    if (isFeedUpKey(data)) {
+      this.viewState.pendingG = false;
+      this.viewState.feedScrollOffset += 1;
       this.tui.requestRender();
       return;
     }
-    if (isFeedPageDownKey(data)) {
-      this.viewState.feedScrollOffset = Math.max(0, this.viewState.feedScrollOffset - 5);
+    if (isFeedDownKey(data)) {
+      this.viewState.pendingG = false;
+      this.viewState.feedScrollOffset = Math.max(0, this.viewState.feedScrollOffset - 1);
       this.tui.requestRender();
       return;
+    }
+    if (data === "g") {
+      if (this.viewState.pendingG) {
+        // gg = jump to top (oldest events, max scroll)
+        this.viewState.pendingG = false;
+        const sectionWidth = this.width - 4; // inner width minus padding
+        const allFeedLines = renderFeedSection(this.theme, readFeedEvents(this.cwd), sectionWidth, this.viewState.lastSeenEventTs, this.viewState.expandFeedMessages);
+        const termRows = process.stdout.rows ?? 24;
+        const chromeLines = 8; // approximate
+        const contentHeight = Math.max(8, termRows - chromeLines);
+        const feedHeight = Math.max(4, Math.floor(contentHeight * 0.55));
+        this.viewState.feedScrollOffset = Math.max(0, allFeedLines.length - feedHeight);
+        this.tui.requestRender();
+        return;
+      } else {
+        this.viewState.pendingG = true;
+        // Don't render, just wait for second g
+        return;
+      }
+    }
+    if (data === "G") {
+      this.viewState.pendingG = false;
+      this.viewState.feedScrollOffset = 0;
+      this.tui.requestRender();
+      return;
+    }
+    // Any other key cancels the pending gg
+    if (this.viewState.pendingG) {
+      this.viewState.pendingG = false;
     }
 
     const tasks = swarmStore.getTasks(this.cwd);
@@ -487,8 +514,12 @@ export class MessengerOverlay implements Component, Focusable {
     const termRows = process.stdout.rows ?? 24;
     const contentHeight = Math.max(8, termRows - chromeLines);
 
+    const allEvents = readFeedEvents(this.cwd);
+    // Initialize lastSeenEventTs on first render so existing events appear dim, not highlighted
+    if (this.viewState.lastSeenEventTs === null && allEvents.length > 0) {
+      this.viewState.lastSeenEventTs = allEvents[allEvents.length - 1].ts;
+    }
     const prevTs = this.viewState.lastSeenEventTs;
-    const allEvents = readFeedEvents(this.cwd, 20);
     this.detectAndFlashEvents(allEvents, prevTs);
     this.checkCompletion(tasks);
 
@@ -545,13 +576,15 @@ export class MessengerOverlay implements Component, Focusable {
         }
       }
 
-      const maxFeedOffset = Math.max(0, allEvents.length - feedHeight);
-      this.viewState.feedScrollOffset = Math.max(0, Math.min(this.viewState.feedScrollOffset, maxFeedOffset));
-      const feedEnd = allEvents.length - this.viewState.feedScrollOffset;
-      const feedStart = Math.max(0, feedEnd - feedHeight);
-      const displayEvents = allEvents.slice(feedStart, feedEnd);
-      let feedLines = renderFeedSection(this.theme, displayEvents, sectionW, prevTs);
-      if (feedLines.length > feedHeight) feedLines = feedLines.slice(-feedHeight);
+
+
+      // Line-based scrolling: render all events, then slice by line offset
+      const allFeedLines = renderFeedSection(this.theme, allEvents, sectionW, prevTs, this.viewState.expandFeedMessages);
+      const maxLineOffset = Math.max(0, allFeedLines.length - feedHeight);
+      this.viewState.feedScrollOffset = Math.max(0, Math.min(this.viewState.feedScrollOffset, maxLineOffset));
+      const lineEnd = allFeedLines.length - this.viewState.feedScrollOffset;
+      const lineStart = Math.max(0, lineEnd - feedHeight);
+      let feedLines = allFeedLines.slice(lineStart, lineEnd);
 
       while (workerLines.length > 0 && workersHeight() + mainHeight + (feedLines.length > 0 ? feedLines.length + 1 : 0) + agentsHeight > contentHeight) {
         workerLines = workerLines.slice(0, workerLines.length - 1);

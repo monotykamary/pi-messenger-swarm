@@ -59,6 +59,17 @@ function sanitizeInlineText(value?: string): string | undefined {
   return normalized.length > 0 ? normalized : undefined;
 }
 
+function sanitizePreview(value?: string): string | undefined {
+  if (!value) return undefined;
+  // Preserve newlines for multi-line previews, but normalize other whitespace
+  const normalized = value
+    .replaceAll("\r", "\n")
+    .replaceAll("\t", " ")
+    .replace(/ +/g, " ")
+    .trim();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 function sanitizeAgentName(value: string): string {
   return sanitizeInlineText(value) ?? "unknown";
 }
@@ -69,7 +80,7 @@ export function sanitizeFeedEvent(event: FeedEvent): FeedEvent {
     type: event.type,
     agent: sanitizeAgentName(event.agent),
     target: sanitizeInlineText(event.target),
-    preview: sanitizeInlineText(event.preview),
+    preview: sanitizePreview(event.preview),
   };
 }
 
@@ -87,7 +98,7 @@ export function appendFeedEvent(cwd: string, event: FeedEvent): void {
   }
 }
 
-export function readFeedEvents(cwd: string, limit: number = 20): FeedEvent[] {
+export function readFeedEvents(cwd: string, limit?: number): FeedEvent[] {
   const p = feedPath(cwd);
   if (!fs.existsSync(p)) return [];
 
@@ -104,7 +115,7 @@ export function readFeedEvents(cwd: string, limit: number = 20): FeedEvent[] {
         // Skip malformed lines
       }
     }
-    return events.slice(-limit);
+    return limit ? events.slice(-limit) : events;
   } catch {
     return [];
   }
@@ -155,8 +166,10 @@ export function formatFeedLine(event: FeedEvent): string {
   let line = `${time} ${prefix}${sanitized.agent}`;
 
   const rawPreview = sanitized.preview;
-  const preview = rawPreview
-    ? rawPreview.length > 90 ? rawPreview.slice(0, 87) + "..." : rawPreview
+  // Normalize newlines to spaces for single-line display
+  const normalizedPreview = rawPreview?.replace(/\n/g, " ");
+  const preview = normalizedPreview
+    ? normalizedPreview.length > 90 ? normalizedPreview.slice(0, 87) + "..." : normalizedPreview
     : "";
   const withPreview = (base: string) => preview ? `${base} — ${preview}` : base;
   const target = sanitized.target ?? "";

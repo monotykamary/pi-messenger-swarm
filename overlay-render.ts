@@ -179,7 +179,7 @@ export function renderSwarmList(theme: Theme, agents: SpawnedAgent[], width: num
 
 const DIM_EVENTS = new Set(["join", "leave", "reserve", "release"]);
 
-export function renderFeedSection(theme: Theme, events: FeedEvent[], width: number, lastSeenTs: string | null): string[] {
+export function renderFeedSection(theme: Theme, events: FeedEvent[], width: number, lastSeenTs: string | null, expanded = false): string[] {
   if (events.length === 0) return [];
   const lines: string[] = [];
   let lastWasMessage = false;
@@ -194,7 +194,7 @@ export function renderFeedSection(theme: Theme, events: FeedEvent[], width: numb
     }
 
     if (isMessage) {
-      lines.push(...renderMessageLines(theme, sanitized, width));
+      lines.push(...renderMessageLines(theme, sanitized, width, expanded));
     } else {
       const formatted = sharedFormatFeedLine(sanitized);
       const dimmed = DIM_EVENTS.has(sanitized.type) || !isNew;
@@ -222,7 +222,25 @@ function wrapText(text: string, maxWidth: number): string[] {
   return lines;
 }
 
-function renderMessageLines(theme: Theme, event: FeedEvent, width: number): string[] {
+function stripAnsi(text: string): string {
+  return text.replace(/\x1b\[[0-9;]*m/g, "");
+}
+
+function renderMarkdownLine(line: string, theme: Theme): string {
+  // Basic markdown rendering using ANSI codes directly
+  let rendered = line;
+  // Bold: **text** or __text__ (using ANSI bold \x1b[1m)
+  rendered = rendered.replace(/\*\*(.+?)\*\*/g, "\x1b[1m$1\x1b[22m");
+  rendered = rendered.replace(/__(.+?)__/g, "\x1b[1m$1\x1b[22m");
+  // Italic: *text* or _text_ (using ANSI italic \x1b[3m)
+  rendered = rendered.replace(/\*(.+?)\*/g, "\x1b[3m$1\x1b[23m");
+  rendered = rendered.replace(/_(.+?)_/g, "\x1b[3m$1\x1b[23m");
+  // Code: `text` (using theme accent color)
+  rendered = rendered.replace(/`(.+?)`/g, (_, text) => theme.fg("accent", text));
+  return rendered;
+}
+
+function renderMessageLines(theme: Theme, event: FeedEvent, width: number, expanded = false): string[] {
   const time = new Date(event.ts).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
   const agentStyled = coloredAgentName(event.agent);
   const rawPreview = event.preview?.trim() ?? "";
@@ -239,11 +257,41 @@ function renderMessageLines(theme: Theme, event: FeedEvent, width: number): stri
 
   const indent = "      ";
   const maxBody = width - indent.length;
-  const wrapped = wrapText(rawPreview, maxBody);
-  const result = [truncateToWidth(header, width)];
-  for (const bodyLine of wrapped) {
-    result.push(truncateToWidth(`${indent}${bodyLine}`, width));
+
+  let allLines: string[];
+
+  if (expanded) {
+    // When expanded, respect newlines and render markdown
+    const paragraphs = rawPreview.split("\n");
+    allLines = [];
+    for (const para of paragraphs) {
+      if (para.trim() === "") {
+        allLines.push(""); // Preserve blank lines
+      } else {
+        const wrapped = wrapText(para, maxBody);
+        for (const line of wrapped) {
+          allLines.push(renderMarkdownLine(line, theme));
+        }
+      }
+    }
+  } else {
+    // Collapsed: just wrap without respecting newlines (compact view)
+    allLines = wrapText(rawPreview.replace(/\n/g, " "), maxBody);
   }
+
+  const result = [truncateToWidth(header, width)];
+
+  // When not expanded, limit to 3 lines of body text plus "..."
+  const maxLines = expanded ? allLines.length : Math.min(3, allLines.length);
+  for (let i = 0; i < maxLines; i++) {
+    const lineContent = expanded ? allLines[i] : allLines[i];
+    result.push(truncateToWidth(`${indent}${lineContent}`, width));
+  }
+  // Add ellipsis indicator if truncated and not expanded
+  if (!expanded && allLines.length > 3) {
+    result.push(truncateToWidth(`${indent}...`, width));
+  }
+
   return result;
 }
 
@@ -346,7 +394,7 @@ export function renderLegend(
     return [truncateToWidth(theme.fg("dim", appendUniversalHints(renderListStatusBar(cwd, task))), width)];
   }
 
-  return [truncateToWidth(theme.fg("dim", appendUniversalHints("m:Chat  f:Swarm  PgUp/PgDn/^U/^D:Feed  Esc:Close")), width)];
+  return [truncateToWidth(theme.fg("dim", appendUniversalHints("m:Chat  f:Swarm  j/k/gg/G:Feed  e:Expand  Esc:Close")), width)];
 }
 
 export function renderDetailView(cwd: string, task: Task, width: number, height: number, viewState: MessengerViewState): string[] {
@@ -492,7 +540,7 @@ function renderDetailStatusBar(cwd: string, task: Task): string {
   if (task.status === "todo") hints.push("s:Claim");
   if (task.status === "in_progress") hints.push("b:Block");
   if (task.status === "done") hints.push("x:Archive");
-  hints.push("m:Chat", "f:Swarm", "PgUp/PgDn/^U/^D:Feed", "←→:Nav");
+  hints.push("m:Chat", "f:Swarm", "j/k/gg/G:Feed", "e:Expand", "←→:Nav");
   return hints.join("  ");
 }
 
@@ -503,19 +551,19 @@ function renderListStatusBar(cwd: string, task: Task): string {
   if (task.status === "todo") hints.push("s:Claim");
   if (task.status === "in_progress") hints.push("b:Block");
   if (task.status === "done") hints.push("x:Archive");
-  hints.push("m:Chat", "f:Swarm", "PgUp/PgDn/^U/^D:Feed");
+  hints.push("m:Chat", "f:Swarm", "j/k/gg/G:Feed", "e:Expand");
   return hints.join("  ");
 }
 
 function renderSwarmListStatusBar(hasAgent: boolean): string {
   const hints: string[] = [];
   if (hasAgent) hints.push("Enter:Detail");
-  hints.push("m:Chat", "f:Tasks", "PgUp/PgDn/^U/^D:Feed");
+  hints.push("m:Chat", "f:Tasks", "j/k/gg/G:Feed", "e:Expand");
   return hints.join("  ");
 }
 
 function renderSwarmDetailStatusBar(): string {
-  return "Esc:Back  m:Chat  f:Tasks  PgUp/PgDn/^U/^D:Feed  ←→:Nav";
+  return "Esc:Back  m:Chat  f:Tasks  j/k/gg/G:Feed  e:Expand  ←→:Nav";
 }
 
 function renderConfirmBar(taskId: string, label: string, type: "reset" | "cascade-reset" | "delete" | "archive"): string {

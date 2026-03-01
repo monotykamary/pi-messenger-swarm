@@ -112,12 +112,13 @@ describe("feed", () => {
     expect(line.length).toBeLessThan(200);
   });
 
-  it("normalizes multiline preview text into a single line", () => {
+  it("preserves newlines in preview text for multi-line display", () => {
     logFeedEvent(cwd, "AgentOne", "message", "Peer", "Line one\nLine two\tLine three");
 
     const events = readFeedEvents(cwd, 20);
     expect(events).toHaveLength(1);
-    expect(events[0]?.preview).toBe("Line one Line two Line three");
+    // Newlines are preserved, tabs normalized to spaces
+    expect(events[0]?.preview).toBe("Line one\nLine two Line three");
 
     const line = formatFeedLine({
       ts: new Date("2026-02-13T10:00:00.000Z").toISOString(),
@@ -125,7 +126,10 @@ describe("feed", () => {
       type: "commit",
       preview: "feat(scope): add thing\n\nBody details",
     });
-    expect(line).toContain("feat(scope): add thing Body details");
+    // formatFeedLine still normalizes to single line for display
+    // Note: \n\n becomes two spaces, so we check for the content without exact spacing
+    expect(line).toContain("feat(scope): add thing");
+    expect(line).toContain("Body details");
     expect(line).not.toContain("\n");
   });
 

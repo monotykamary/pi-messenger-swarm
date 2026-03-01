@@ -281,8 +281,7 @@ export function executeSend(
   if (broadcast) {
     if (process.env.PI_SWARM_SPAWNED) {
       messagesSentThisSession++;
-      const preview = message.length > 200 ? message.slice(0, 197) + "..." : message;
-      logFeedEvent(cwd, state.agentName, "message", undefined, preview);
+      logFeedEvent(cwd, state.agentName, "message", undefined, message);
       const remaining = budget - messagesSentThisSession;
       return result(
         `Broadcast logged. (${remaining} message${remaining === 1 ? "" : "s"} remaining)`,
@@ -353,12 +352,11 @@ export function executeSend(
 
   messagesSentThisSession++;
 
-  const preview = message.length > 200 ? message.slice(0, 197) + "..." : message;
   if (broadcast) {
-    logFeedEvent(cwd, state.agentName, "message", undefined, preview);
+    logFeedEvent(cwd, state.agentName, "message", undefined, message);
   } else {
     for (const name of sent) {
-      logFeedEvent(cwd, state.agentName, "message", name, preview);
+      logFeedEvent(cwd, state.agentName, "message", name, message);
     }
   }
 
