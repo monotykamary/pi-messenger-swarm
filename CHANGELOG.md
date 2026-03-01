@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.15.3](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.15.2...v0.15.3) (2026-03-01)
+
+
+### Features
+
+* **swarm:** add explicit end-turn instruction to spawn response ([62dbdc6](https://github.com/monotykamary/pi-messenger-swarm/commit/62dbdc678c15788b75b44722a8c3af7d4d24e744))
+* **swarm:** remove 10 message budget limit ([8fb476c](https://github.com/monotykamary/pi-messenger-swarm/commit/8fb476c9ffbc444a1fc9fb833b718f3b0f0c4f9e))
+
 ### [0.15.2](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.15.1...v0.15.2) (2026-03-01)
 
 
