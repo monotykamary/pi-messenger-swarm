@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.15.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.14.4...v0.15.0) (2026-03-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* **feed:** Removed r/shift+r keybindings for task reset operations
+
+### Features
+
+* **feed:** add vim-style navigation and expandable messages ([777ad87](https://github.com/monotykamary/pi-messenger-swarm/commit/777ad87ab7331c0e3f3362a9a0e876559addfbf9))
+* **feed:** implement progressive loading for feed ([58fbb7f](https://github.com/monotykamary/pi-messenger-swarm/commit/58fbb7f27eacadd5d59e110fc0b09ca473b42432))
+* **feed:** implement sparse sliding window for memory efficiency ([77bfcc9](https://github.com/monotykamary/pi-messenger-swarm/commit/77bfcc90e8b835ec1056bd21f9ad12c4723c689c))
+* **overlay:** dynamic multi-line chat input with auto-resizing feed ([1cdbe4b](https://github.com/monotykamary/pi-messenger-swarm/commit/1cdbe4b081055ef351c073a89dc1955ee7a35d65))
+
 ### [0.14.4](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.14.3...v0.14.4) (2026-03-01)
 
 
