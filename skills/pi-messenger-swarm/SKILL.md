@@ -85,9 +85,32 @@ pi_messenger({ action: "send", to: "OtherAgent", message: "Need your API shape b
 pi_messenger({ action: "broadcast", message: "Claimed task-4, touching src/auth/session.ts" })
 ```
 
-## Overlay notes
+## Swarm Philosophy
 
-`/messenger` now surfaces swarm tasks + agents. Planning UI and worker +/- controls are removed.
+The swarm is self-organizing. Your role is participant, not manager.
+
+### Event-driven, not poll-driven
+
+State changes arrive when they happen. The system surfaces updates via the feed and task notifications. Checking repeatedly adds latency and wastes context.
+
+Good pattern: inspect once at decision points, act, move on.
+- Before claiming: check what's ready
+- After spawning: trust the agent to execute
+- On uncertainty: message the agent directly
+
+Avoid loops that poll status. The system already does this.
+
+### Spawn-and-collaborate, don't coordinate
+
+Subagents execute with full context. They report progress through task updates and messaging. Stay available for collaboration without inserting yourself into their loop.
+
+Engage when:
+- They reach out with a question or blocker
+- You have relevant context they lack (share it proactively)
+- Output reveals a misunderstanding of constraints
+- The work naturally intersects with yours
+
+Let them own their execution. Your value is in strategic context and unblocking, not status checks.
 
 ## Storage layout
 
