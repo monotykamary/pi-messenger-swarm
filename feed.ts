@@ -152,6 +152,37 @@ export function readFeedEventsWithOffset(cwd: string, offsetFromEnd: number, lim
   }
 }
 
+export function readFeedEventsByRange(cwd: string, startIndex: number, endIndex: number): FeedEvent[] {
+  const p = feedPath(cwd);
+  if (!fs.existsSync(p)) return [];
+
+  try {
+    const content = fs.readFileSync(p, "utf-8").trim();
+    if (!content) return [];
+    const lines = content.split("\n");
+    const totalLines = lines.length;
+
+    // Clamp indices to valid range
+    const clampedStart = Math.max(0, Math.min(startIndex, totalLines));
+    const clampedEnd = Math.max(0, Math.min(endIndex, totalLines));
+
+    if (clampedStart >= clampedEnd) return [];
+
+    const events: FeedEvent[] = [];
+    for (let i = clampedStart; i < clampedEnd; i++) {
+      try {
+        const parsed = JSON.parse(lines[i]) as FeedEvent;
+        events.push(sanitizeFeedEvent(parsed));
+      } catch {
+        // Skip malformed lines
+      }
+    }
+    return events;
+  } catch {
+    return [];
+  }
+}
+
 export function getFeedLineCount(cwd: string): number {
   const p = feedPath(cwd);
   if (!fs.existsSync(p)) return 0;

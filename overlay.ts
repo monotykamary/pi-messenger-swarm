@@ -11,7 +11,7 @@ import {
   type Dirs,
 } from "./lib.js";
 import * as swarmStore from "./swarm/store.js";
-import { readFeedEvents, readFeedEventsWithOffset, getFeedLineCount, type FeedEvent, type FeedEventType } from "./feed.js";
+import { readFeedEvents, readFeedEventsWithOffset, readFeedEventsByRange, getFeedLineCount, type FeedEvent, type FeedEventType } from "./feed.js";
 import type { SwarmTask as Task } from "./swarm/types.js";
 import {
   renderStatusBar,
@@ -198,16 +198,18 @@ export class MessengerOverlay implements Component, Focusable {
     }
     if (data === "g") {
       if (this.viewState.pendingG) {
-        // gg = jump to top (oldest events, max scroll) - load all remaining events first
+        // gg = jump to top (oldest events) - load only oldest 100 instead of everything
         this.viewState.pendingG = false;
+        const GG_LOAD_SIZE = 100; // sparse load - only oldest 100 events
 
-        // Load all remaining older events if any
-        if (this.viewState.feedLoadedOffset > 0) {
-          const remainingEvents = readFeedEventsWithOffset(this.cwd, 0, this.viewState.feedLoadedOffset);
-          if (remainingEvents.length > 0) {
-            this.viewState.feedLoadedEvents = [...remainingEvents, ...this.viewState.feedLoadedEvents];
-            this.viewState.feedLoadedOffset = 0;
-          }
+        // If there are older events not in window, load oldest GG_LOAD_SIZE
+        if (this.viewState.feedWindowStart > 0) {
+          const newStart = 0;
+          const newEnd = Math.min(GG_LOAD_SIZE, this.viewState.feedTotalLines);
+          const oldestEvents = readFeedEventsByRange(this.cwd, newStart, newEnd);
+          this.viewState.feedLoadedEvents = oldestEvents;
+          this.viewState.feedWindowStart = newStart;
+          this.viewState.feedWindowEnd = newEnd;
         }
 
         const sectionWidth = this.width - 4; // inner width minus padding
@@ -524,26 +526,32 @@ export class MessengerOverlay implements Component, Focusable {
     const termRows = process.stdout.rows ?? 24;
     const contentHeight = Math.max(8, termRows - chromeLines);
 
-    // Progressive feed loading: load initial batch if empty
-    const INITIAL_LOAD_COUNT = 200;
-    const LOAD_MORE_COUNT = 100;
+    // Progressive feed loading with sparse sliding window
+    const WINDOW_SIZE = 200; // max events to keep in memory
+    const LOAD_CHUNK = 100;  // events to load when scrolling beyond window
     const totalFeedLines = getFeedLineCount(this.cwd);
 
+    // Initialize window if empty and feed exists
     if (this.viewState.feedLoadedEvents.length === 0 && totalFeedLines > 0) {
-      // First render: load last INITIAL_LOAD_COUNT events
-      const initialEvents = readFeedEventsWithOffset(this.cwd, 0, INITIAL_LOAD_COUNT);
-      this.viewState.feedLoadedEvents = initialEvents;
-      this.viewState.feedLoadedOffset = Math.max(0, totalFeedLines - initialEvents.length);
+      const startIdx = Math.max(0, totalFeedLines - WINDOW_SIZE);
+      const endIdx = totalFeedLines;
+      this.viewState.feedLoadedEvents = readFeedEventsByRange(this.cwd, startIdx, endIdx);
+      this.viewState.feedWindowStart = startIdx;
+      this.viewState.feedWindowEnd = endIdx;
       this.viewState.feedTotalLines = totalFeedLines;
     } else if (totalFeedLines > this.viewState.feedTotalLines) {
-      // New events were added since last render: refresh from end
-      const newTotal = totalFeedLines;
-      const currentCount = this.viewState.feedLoadedEvents.length;
-      const addedCount = newTotal - this.viewState.feedTotalLines;
-      const eventsToLoad = readFeedEventsWithOffset(this.cwd, 0, currentCount + addedCount);
-      this.viewState.feedLoadedEvents = eventsToLoad;
-      this.viewState.feedLoadedOffset = Math.max(0, newTotal - eventsToLoad.length);
-      this.viewState.feedTotalLines = newTotal;
+      // New events added: extend window at the end
+      const addedCount = totalFeedLines - this.viewState.feedTotalLines;
+      const newEvents = readFeedEventsByRange(this.cwd, this.viewState.feedTotalLines, totalFeedLines);
+      this.viewState.feedLoadedEvents = [...this.viewState.feedLoadedEvents, ...newEvents];
+      // Trim if exceeding window size (remove from start/old end)
+      if (this.viewState.feedLoadedEvents.length > WINDOW_SIZE) {
+        const toRemove = this.viewState.feedLoadedEvents.length - WINDOW_SIZE;
+        this.viewState.feedLoadedEvents = this.viewState.feedLoadedEvents.slice(toRemove);
+        this.viewState.feedWindowStart += toRemove;
+      }
+      this.viewState.feedWindowEnd = totalFeedLines;
+      this.viewState.feedTotalLines = totalFeedLines;
     }
 
     const allEvents = this.viewState.feedLoadedEvents;
@@ -614,15 +622,22 @@ export class MessengerOverlay implements Component, Focusable {
       let allFeedLines = renderFeedSection(this.theme, allEvents, sectionW, prevTs, this.viewState.expandFeedMessages);
       const maxLineOffset = Math.max(0, allFeedLines.length - feedHeight);
 
-      // Progressive loading: if scrolled near top and more events available, load more
+      // Progressive loading: if scrolled near top and more older events exist, load more
       const LOAD_MORE_THRESHOLD = 5; // lines remaining before triggering load
-      if (this.viewState.feedLoadedOffset > 0 &&
+      if (this.viewState.feedWindowStart > 0 &&
           this.viewState.feedScrollOffset >= maxLineOffset - LOAD_MORE_THRESHOLD) {
-        // Load more older events
-        const moreEvents = readFeedEventsWithOffset(this.cwd, this.viewState.feedLoadedOffset, LOAD_MORE_COUNT);
-        if (moreEvents.length > 0) {
-          this.viewState.feedLoadedEvents = [...moreEvents, ...this.viewState.feedLoadedEvents];
-          this.viewState.feedLoadedOffset = Math.max(0, this.viewState.feedLoadedOffset - moreEvents.length);
+        // Load LOAD_CHUNK older events
+        const newStart = Math.max(0, this.viewState.feedWindowStart - LOAD_CHUNK);
+        const olderEvents = readFeedEventsByRange(this.cwd, newStart, this.viewState.feedWindowStart);
+        if (olderEvents.length > 0) {
+          this.viewState.feedLoadedEvents = [...olderEvents, ...this.viewState.feedLoadedEvents];
+          this.viewState.feedWindowStart = newStart;
+          // Trim if window exceeds max size
+          if (this.viewState.feedLoadedEvents.length > WINDOW_SIZE) {
+            const toRemove = this.viewState.feedLoadedEvents.length - WINDOW_SIZE;
+            this.viewState.feedLoadedEvents = this.viewState.feedLoadedEvents.slice(0, -toRemove);
+            this.viewState.feedWindowEnd -= toRemove;
+          }
           // Re-render with new events
           allFeedLines = renderFeedSection(this.theme, this.viewState.feedLoadedEvents, sectionW, prevTs, this.viewState.expandFeedMessages);
         }

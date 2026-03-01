@@ -36,9 +36,10 @@ export interface MessengerViewState {
   mentionIndex: number;
   pendingG: boolean;
   expandFeedMessages: boolean;
-  // Progressive feed loading
+  // Progressive feed loading - sparse sliding window
   feedLoadedEvents: FeedEvent[];
-  feedLoadedOffset: number; // offset from end (0 = all loaded, N = last N lines not yet loaded)
+  feedWindowStart: number; // absolute line index (0 = oldest, totalLines-1 = newest)
+  feedWindowEnd: number;   // absolute line index
   feedTotalLines: number;
 }
 
@@ -64,9 +65,10 @@ export function createMessengerViewState(): MessengerViewState {
     mentionIndex: -1,
     pendingG: false,
     expandFeedMessages: false,
-    // Progressive feed loading - start empty, will load initial batch on first render
+    // Progressive feed loading - sparse window, initially empty
     feedLoadedEvents: [],
-    feedLoadedOffset: 0,
+    feedWindowStart: 0,
+    feedWindowEnd: 0,
     feedTotalLines: 0,
   };
 }
