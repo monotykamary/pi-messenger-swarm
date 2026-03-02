@@ -145,7 +145,7 @@ export function spawnSubagent(cwd: string, request: SpawnRequest): SpawnedAgent 
   const systemPrompt = buildSystemPrompt(request);
   record.systemPrompt = systemPrompt;
 
-  const args = ["--mode", "json"];
+  const args = ["--mode", "json", "--no-session"];
   applyModelArgs(args, request.model);
   args.push("--extension", EXTENSION_DIR);
 
