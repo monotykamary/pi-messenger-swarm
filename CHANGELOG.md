@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.16.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.15.4...v0.16.0) (2026-03-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **feed:** feedScrollOffset and feedAbsoluteTopIndex replaced
+by feedLineScrollOffset in MessengerViewState
+
+Closes scroll position holding issue
+
+### Features
+
+* **feed:** implement line-based scroll position holding ([de0e915](https://github.com/monotykamary/pi-messenger-swarm/commit/de0e915264a471fa2a269b80e60058a53158aa80))
+* **swarm:** make spawned agents long-running with self-termination ([0f9cf01](https://github.com/monotykamary/pi-messenger-swarm/commit/0f9cf018ea55f998863f70aeac54386e37de4ac2)), closes [#7](https://github.com/monotykamary/pi-messenger-swarm/issues/7)
+
+
+### Bug Fixes
+
+* **swarm:** re-add --no-session to prevent session spam ([a612928](https://github.com/monotykamary/pi-messenger-swarm/commit/a61292844994056664f095109c3285d4f93d8a1e))
+
 ### [0.15.4](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.15.3...v0.15.4) (2026-03-01)
 
 
