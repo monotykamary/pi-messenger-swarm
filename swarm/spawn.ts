@@ -66,6 +66,7 @@ function buildSystemPrompt(request: SpawnRequest): string {
     "4. Report concrete progress and outcomes, not vague status.",
     "5. Be concise, evidence-based, and stay in role.",
     "6. Clarify ambiguity early: if mission scope, expected output format, or framing is unclear or seems incomplete, send a brief targeted question via pi_messenger({ action: \"send\", to: \"AgentName\", message: \"...\" }) before proceeding. A 30-second alignment check prevents off-target work.",
+    "7. Exit when mission is complete: use bash({ command: \"exit 0\" }) to self-terminate. Do not stay alive indefinitely.",
   );
 
   return lines.join("\n");
@@ -98,6 +99,7 @@ function buildPrompt(request: SpawnRequest): string {
     "- Objective addressed with concrete output.",
     "- Progress logged via pi_messenger where relevant.",
     "- Any file reservations released before exit.",
+    "- Exit with: bash({ command: \"exit 0\" })",
   );
 
   return lines.join("\n");
@@ -143,7 +145,7 @@ export function spawnSubagent(cwd: string, request: SpawnRequest): SpawnedAgent 
   const systemPrompt = buildSystemPrompt(request);
   record.systemPrompt = systemPrompt;
 
-  const args = ["--mode", "json", "--no-session", "-p"];
+  const args = ["--mode", "json"];
   applyModelArgs(args, request.model);
   args.push("--extension", EXTENSION_DIR);
 
