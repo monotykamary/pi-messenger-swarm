@@ -325,9 +325,10 @@ export function renderAgentsRow(
   }
 
   for (const worker of getLiveWorkers(cwd).values()) {
-    if (seen.has(worker.taskId)) continue;
+    // Use worker.name for deduplication, not taskId, since multiple agents can work on the same task
+    if (seen.has(worker.name)) continue;
     rowParts.push(`🔵 ${worker.name} (${worker.taskId})`);
-    seen.add(worker.taskId);
+    seen.add(worker.name);
   }
 
   return truncateToWidth(rowParts.join("  "), width);

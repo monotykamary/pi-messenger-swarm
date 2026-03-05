@@ -9,6 +9,24 @@ import { executeTaskAction as runTaskAction } from "./swarm/task-actions.js";
 import type { SwarmTask as Task } from "./swarm/types.js";
 import { getLiveWorkers } from "./swarm/live-progress.js";
 
+// Throttle render requests during typing to reduce lag
+// This coalesces multiple keystrokes into a single render
+const RENDER_THROTTLE_MS = 16; // ~60fps, enough for smooth typing without blocking
+const renderTimers = new WeakMap<TUI, ReturnType<typeof setTimeout>>();
+
+function requestRenderThrottled(tui: TUI): void {
+  const existing = renderTimers.get(tui);
+  if (existing) {
+    // Already scheduled, don't queue another
+    return;
+  }
+  const timer = setTimeout(() => {
+    renderTimers.delete(tui);
+    tui.requestRender();
+  }, RENDER_THROTTLE_MS);
+  renderTimers.set(tui, timer);
+}
+
 interface ConfirmAction {
   type: "delete" | "archive";
   taskId: string;
@@ -204,13 +222,13 @@ export function handleBlockReasonInput(
   if (matchesKey(data, "backspace")) {
     if (viewState.blockReasonInput.length > 0) {
       viewState.blockReasonInput = viewState.blockReasonInput.slice(0, -1);
-      tui.requestRender();
+      requestRenderThrottled(tui);
     }
     return;
   }
   if (isPrintable(data)) {
     viewState.blockReasonInput += data;
-    tui.requestRender();
+    requestRenderThrottled(tui);
   }
 }
 
@@ -396,7 +414,7 @@ export function handleMessageInput(
       viewState.messageInput = viewState.messageInput.slice(0, -1);
       viewState.mentionCandidates = [];
       viewState.mentionIndex = -1;
-      tui.requestRender();
+      requestRenderThrottled(tui);
     }
     return;
   }
@@ -405,7 +423,7 @@ export function handleMessageInput(
     viewState.messageInput += data;
     viewState.mentionCandidates = [];
     viewState.mentionIndex = -1;
-    tui.requestRender();
+    requestRenderThrottled(tui);
   }
 }
 

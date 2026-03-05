@@ -134,7 +134,26 @@ export class MessengerOverlay implements Component, Focusable {
       this.viewState.pendingG = false;
     }
 
-    // Toggle expanded feed messages - check early to ensure it works
+    // Check input modes FIRST before processing any global keybindings
+    // This ensures typing characters like 'e', 's', 'b' work correctly in input fields
+    if (this.viewState.confirmAction) {
+      handleConfirmInput(data, this.viewState, this.cwd, this.state.agentName, this.tui);
+      return;
+    }
+
+    if (this.viewState.inputMode === "block-reason") {
+      const tasks = swarmStore.getTasks(this.cwd);
+      const task = tasks[this.viewState.selectedTaskIndex];
+      handleBlockReasonInput(data, this.viewState, this.cwd, task as Task | undefined, this.state.agentName, this.tui);
+      return;
+    }
+
+    if (this.viewState.inputMode === "message") {
+      handleMessageInput(data, this.viewState, this.state, this.dirs, this.cwd, this.tui);
+      return;
+    }
+
+    // Toggle expanded feed messages - only process when NOT in an input mode
     if (data === "e") {
       this.viewState.expandFeedMessages = !this.viewState.expandFeedMessages;
       this.tui.requestRender();
@@ -150,23 +169,6 @@ export class MessengerOverlay implements Component, Focusable {
     // Background overlay: Ctrl+B (legacy) or Shift+B
     if (data === "\x02" || data === "B" || matchesKey(data, "shift+b")) {
       this.callbacks.onBackground?.(this.generateSnapshot());
-      return;
-    }
-
-    if (this.viewState.confirmAction) {
-      handleConfirmInput(data, this.viewState, this.cwd, this.state.agentName, this.tui);
-      return;
-    }
-
-    if (this.viewState.inputMode === "block-reason") {
-      const tasks = swarmStore.getTasks(this.cwd);
-      const task = tasks[this.viewState.selectedTaskIndex];
-      handleBlockReasonInput(data, this.viewState, this.cwd, task as Task | undefined, this.state.agentName, this.tui);
-      return;
-    }
-
-    if (this.viewState.inputMode === "message") {
-      handleMessageInput(data, this.viewState, this.state, this.dirs, this.cwd, this.tui);
       return;
     }
 
