@@ -60,13 +60,13 @@ function buildSystemPrompt(request: SpawnRequest): string {
   lines.push(
     "",
     "## Swarm Operating Protocol",
-    "1. Join the mesh first: pi_messenger({ action: \"join\" }).",
-    "2. Coordinate via messaging/reservations/task actions before risky edits.",
-    "3. If assigned a task, try claim first and respect ownership conflicts.",
-    "4. Report concrete progress and outcomes, not vague status.",
-    "5. Be concise, evidence-based, and stay in role.",
-    "6. Clarify ambiguity early: if mission scope, expected output format, or framing is unclear or seems incomplete, send a brief targeted question via pi_messenger({ action: \"send\", to: \"AgentName\", message: \"...\" }) before proceeding. A 30-second alignment check prevents off-target work.",
-    "7. Exit when mission is complete: use bash({ command: \"exit 0\" }) to self-terminate. Do not stay alive indefinitely.",
+    '1. Join the mesh first: pi_messenger({ action: "join" }).',
+    '2. Coordinate via messaging/reservations/task actions before risky edits.',
+    '3. If assigned a task, try claim first and respect ownership conflicts.',
+    '4. Report concrete progress and outcomes, not vague status.',
+    '5. Be concise, evidence-based, and stay in role.',
+    '6. Clarify ambiguity early: if mission scope, expected output format, or framing is unclear or seems incomplete, send a brief targeted question via pi_messenger({ action: "send", to: "AgentName", message: "..." }) before proceeding. A 30-second alignment check prevents off-target work.',
+    '7. Exit when mission is complete: use bash({ command: "exit 0" }) to self-terminate. Do not stay alive indefinitely.',
   );
 
   return lines.join("\n");
@@ -87,9 +87,9 @@ function buildPrompt(request: SpawnRequest): string {
     lines.push(
       "",
       "## Task Execution",
-      `Try to claim ${request.taskId}: pi_messenger({ action: \"task.claim\", id: \"${request.taskId}\" }).`,
+      `Try to claim ${request.taskId}: pi_messenger({ action: "task.claim", id: "${request.taskId}" }).`,
       "If claim fails, report the conflict and stop.",
-      `When complete: pi_messenger({ action: \"task.done\", id: \"${request.taskId}\", summary: \"...\" }).`,
+      `When complete: pi_messenger({ action: "task.done", id: "${request.taskId}", summary: "..." }).`,
     );
   }
 
@@ -99,7 +99,7 @@ function buildPrompt(request: SpawnRequest): string {
     "- Objective addressed with concrete output.",
     "- Progress logged via pi_messenger where relevant.",
     "- Any file reservations released before exit.",
-    "- Exit with: bash({ command: \"exit 0\" })",
+    '- Exit with: bash({ command: "exit 0" })',
   );
 
   return lines.join("\n");
@@ -120,6 +120,152 @@ function upsertSpawnRecord(id: string, updater: (record: SpawnedAgent) => Spawne
   if (!runtime) return null;
   runtime.record = updater(runtime.record);
   return runtime.record;
+}
+
+interface SpawnState {
+  id: string;
+  cwd: string;
+  name: string;
+  request: SpawnRequest;
+  prompt: string;
+  systemPrompt: string;
+  env: NodeJS.ProcessEnv;
+  progress: ReturnType<typeof createProgress>;
+  startMs: number;
+  buffer: string;
+  stderr: string;
+  triedFallback: boolean;
+}
+
+function createArgs(state: SpawnState, includeModel: boolean): string[] {
+  const args = ["--mode", "json", "--no-session"];
+  if (includeModel && state.request.model) {
+    applyModelArgs(args, state.request.model);
+  }
+  args.push("--extension", EXTENSION_DIR);
+
+  if (state.systemPrompt.trim().length > 0) {
+    const promptTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-messenger-swarm-subagent-"));
+    const promptPath = path.join(promptTmpDir, `${state.name.replace(/[^\w.-]/g, "_")}-${state.id}.md`);
+    fs.writeFileSync(promptPath, state.systemPrompt, { mode: 0o600 });
+    args.push("--append-system-prompt", promptPath);
+    // Store tmpdir on args for retrieval
+    (args as any)._promptTmpDir = promptTmpDir;
+  }
+
+  args.push(state.prompt);
+  return args;
+}
+
+function cleanupTmpDir(tmpDir: string | null) {
+  if (!tmpDir) return;
+  try {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  } catch {
+    // Best effort cleanup
+  }
+}
+
+function attachHandlers(proc: ChildProcess, state: SpawnState, promptTmpDir: string | null) {
+  proc.stdout?.on("data", (data: Buffer | string) => {
+    state.buffer += data.toString();
+    const lines = state.buffer.split("\n");
+    state.buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      const event = parseJsonlLine(line);
+      if (!event) continue;
+      updateProgress(state.progress, event, state.startMs);
+      updateLiveWorker(state.cwd, state.request.taskId || spawnLiveKey(state.id), {
+        taskId: state.request.taskId || spawnLiveKey(state.id),
+        agent: "swarm-subagent",
+        name: state.name,
+        progress: {
+          ...state.progress,
+          recentTools: state.progress.recentTools.map(tool => ({ ...tool })),
+        },
+        startedAt: state.startMs,
+      });
+    }
+  });
+
+  proc.stderr?.on("data", (data: Buffer | string) => {
+    state.stderr += data.toString();
+  });
+
+  proc.on("error", () => {
+    cleanupTmpDir(promptTmpDir);
+  });
+
+  proc.on("close", (code) => {
+    // Check if this is a model-not-found error and we haven't tried fallback yet
+    const isModelNotFound =
+      !state.triedFallback &&
+      state.request.model &&
+      (code ?? 1) !== 0 &&
+      state.stderr.includes("Model") &&
+      state.stderr.includes("not found");
+
+    if (isModelNotFound) {
+      // Clean up and retry without model
+      cleanupTmpDir(promptTmpDir);
+      state.triedFallback = true;
+
+      console.warn(`[spawn] Model "${state.request.model}" not found, using default model`);
+
+      // Update the record to reflect no model (mutate in place so returned reference updates)
+      const runtime = runtimes.get(state.id);
+      if (runtime) {
+        runtime.record.model = undefined;
+      }
+
+      // Retry without model
+      const fallbackArgs = createArgs(state, false);
+      const fallbackTmpDir = (fallbackArgs as any)._promptTmpDir as string | null;
+
+      const fallbackProc = spawn("pi", fallbackArgs, {
+        cwd: state.cwd,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: state.env,
+      });
+
+      // Clear stderr for the new attempt
+      state.stderr = "";
+
+      // Attach handlers to the new process
+      attachHandlers(fallbackProc, state, fallbackTmpDir);
+
+      // Update runtime with new process
+      if (runtime) {
+        runtime.process = fallbackProc;
+      }
+      return;
+    }
+
+    // Normal cleanup and status update
+    cleanupTmpDir(promptTmpDir);
+    removeLiveWorker(state.cwd, state.request.taskId || spawnLiveKey(state.id));
+
+    const runtime = runtimes.get(state.id);
+    if (!runtime) return;
+
+    const endedAt = new Date().toISOString();
+    let status: SpawnedAgent["status"] = "completed";
+
+    if (runtime.stopping) {
+      status = "stopped";
+    } else if ((code ?? 1) !== 0) {
+      status = "failed";
+    }
+
+    runtime.record = {
+      ...runtime.record,
+      status,
+      endedAt,
+      exitCode: code ?? 1,
+      error: status === "failed" ? (state.stderr.trim() || state.progress.error || "subagent failed") : undefined,
+    };
+  });
 }
 
 export function spawnSubagent(cwd: string, request: SpawnRequest): SpawnedAgent {
@@ -145,25 +291,30 @@ export function spawnSubagent(cwd: string, request: SpawnRequest): SpawnedAgent 
   const systemPrompt = buildSystemPrompt(request);
   record.systemPrompt = systemPrompt;
 
-  const args = ["--mode", "json", "--no-session"];
-  applyModelArgs(args, request.model);
-  args.push("--extension", EXTENSION_DIR);
-
-  let promptTmpDir: string | null = null;
-  if (systemPrompt.trim().length > 0) {
-    promptTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-messenger-swarm-subagent-"));
-    const promptPath = path.join(promptTmpDir, `${name.replace(/[^\w.-]/g, "_")}-${id}.md`);
-    fs.writeFileSync(promptPath, systemPrompt, { mode: 0o600 });
-    args.push("--append-system-prompt", promptPath);
-  }
-
-  args.push(prompt);
-
   const env = {
     ...process.env,
     PI_AGENT_NAME: name,
     PI_SWARM_SPAWNED: "1",
   };
+
+  const state: SpawnState = {
+    id,
+    cwd,
+    name,
+    request,
+    prompt,
+    systemPrompt,
+    env,
+    progress: createProgress(name),
+    startMs: Date.now(),
+    buffer: "",
+    stderr: "",
+    triedFallback: false,
+  };
+
+  // Initial spawn attempt with model
+  const args = createArgs(state, true);
+  const promptTmpDir = (args as any)._promptTmpDir as string | null;
 
   const proc = spawn("pi", args, {
     cwd,
@@ -171,80 +322,12 @@ export function spawnSubagent(cwd: string, request: SpawnRequest): SpawnedAgent 
     env,
   });
 
-  const progress = createProgress(name);
-  const startMs = Date.now();
-  let buffer = "";
-  let stderr = "";
-
-  proc.stdout?.on("data", (data: Buffer | string) => {
-    buffer += data.toString();
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-
-    for (const line of lines) {
-      const event = parseJsonlLine(line);
-      if (!event) continue;
-      updateProgress(progress, event, startMs);
-      updateLiveWorker(cwd, record.taskId || spawnLiveKey(id), {
-        taskId: record.taskId || spawnLiveKey(id),
-        agent: "swarm-subagent",
-        name,
-        progress: {
-          ...progress,
-          recentTools: progress.recentTools.map(tool => ({ ...tool })),
-        },
-        startedAt: startMs,
-      });
-    }
-  });
-
-  proc.stderr?.on("data", (data: Buffer | string) => {
-    stderr += data.toString();
-  });
-
-  const cleanupPromptTmpDir = () => {
-    if (!promptTmpDir) return;
-    try {
-      fs.rmSync(promptTmpDir, { recursive: true, force: true });
-    } catch {
-      // Best effort cleanup
-    }
-    promptTmpDir = null;
-  };
-
-  proc.on("error", () => {
-    cleanupPromptTmpDir();
-  });
-
-  proc.on("close", (code) => {
-    cleanupPromptTmpDir();
-    removeLiveWorker(cwd, record.taskId || spawnLiveKey(id));
-
-    const runtime = runtimes.get(id);
-    if (!runtime) return;
-
-    const endedAt = new Date().toISOString();
-    let status: SpawnedAgent["status"] = "completed";
-
-    if (runtime.stopping) {
-      status = "stopped";
-    } else if ((code ?? 1) !== 0) {
-      status = "failed";
-    }
-
-    runtime.record = {
-      ...runtime.record,
-      status,
-      endedAt,
-      exitCode: code ?? 1,
-      error: status === "failed" ? (stderr.trim() || progress.error || "subagent failed") : undefined,
-    };
-  });
+  attachHandlers(proc, state, promptTmpDir);
 
   runtimes.set(id, {
     process: proc,
     record,
-    startMs,
+    startMs: state.startMs,
     stopping: false,
   });
 
