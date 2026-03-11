@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.17.2](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.17.1...v0.17.2) (2026-03-11)
+
+
+### Bug Fixes
+
+* **swarm:** remove yaml dependency, use simple frontmatter parser ([ef74ee2](https://github.com/monotykamary/pi-messenger-swarm/commit/ef74ee233a901029ab84a7894a27207abf25893b))
+
 ### [0.17.1](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.17.0...v0.17.1) (2026-03-11)
 
 
