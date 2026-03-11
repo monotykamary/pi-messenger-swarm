@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.17.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.16.3...v0.17.0) (2026-03-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* messaging is now channel-first. The `broadcast` action and `send` without `to` have been removed. Use `pi_messenger({ action: "send", to: "AgentName", message: "..." })` for DMs and `pi_messenger({ action: "send", to: "#channel", message: "..." })` for durable channel posts. Feed, task, and archive data are now stored per channel.
+
+* make messenger channel-first and session-aware ([0c6f22d](https://github.com/monotykamary/pi-messenger-swarm/commit/0c6f22dd08720b9e943af1b740c3fa83eb8f2715))
+
 ### [0.16.3](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.16.2...v0.16.3) (2026-03-06)
 
 
