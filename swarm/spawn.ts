@@ -9,6 +9,7 @@ import { createProgress, parseJsonlLine, updateProgress } from "./progress.js";
 import { removeLiveWorker, updateLiveWorker } from "./live-progress.js";
 import type { SpawnRequest, SpawnedAgent } from "./types.js";
 import { formatRoleLabel } from "./labels.js";
+import { loadAgentDefinition } from "./agent-loader.js";
 
 interface SpawnRuntime {
   process: ChildProcess;
@@ -28,8 +29,9 @@ function spawnLiveKey(id: string): string {
 }
 
 function buildSystemPrompt(request: SpawnRequest): string {
-  const role = formatRoleLabel(request.role);
+  const role = formatRoleLabel(request.role ?? "Subagent");
   const persona = request.persona?.trim();
+  const objective = (request.objective ?? request.message ?? "").trim();
 
   const lines: string[] = [
     "# Swarm Subagent Role",
@@ -46,7 +48,7 @@ function buildSystemPrompt(request: SpawnRequest): string {
   lines.push(
     "",
     "## Mission Focus",
-    request.objective.trim(),
+    objective,
   );
 
   if (request.context?.trim()) {
@@ -73,10 +75,12 @@ function buildSystemPrompt(request: SpawnRequest): string {
 }
 
 function buildPrompt(request: SpawnRequest): string {
+  const objective = (request.objective ?? request.message ?? "").trim();
+
   const lines: string[] = [
     "# Mission Brief",
     "",
-    request.objective.trim(),
+    objective,
   ];
 
   if (request.context?.trim()) {
@@ -273,22 +277,49 @@ export function spawnSubagent(cwd: string, request: SpawnRequest, inheritedChann
   const name = request.name?.trim() || generateMemorableName();
   const startedAt = new Date().toISOString();
 
+  // Determine system prompt and user prompt based on mode
+  let systemPrompt: string;
+  let prompt: string;
+  let role: string;
+  let objective: string;
+
+  if (request.agentFile) {
+    // File-based mode: parse frontmatter, use body as system prompt
+    const filePath = path.resolve(cwd, request.agentFile);
+    const def = loadAgentDefinition(filePath);
+    systemPrompt = def.systemPrompt;
+    // Use message > objective from call > objective from file
+    objective = request.message || request.objective || def.objective || "";
+    prompt = objective;
+    role = def.role;
+    // Override model/persona from file if not specified in request
+    if (def.model && !request.model) {
+      request = { ...request, model: def.model };
+    }
+    if (def.persona && !request.persona) {
+      request = { ...request, persona: def.persona };
+    }
+  } else {
+    // Autoregressive mode: build prompts from parameters
+    systemPrompt = buildSystemPrompt(request);
+    prompt = buildPrompt(request);
+    role = request.role || "Subagent";
+    objective = request.objective || request.message || "";
+  }
+
   const record: SpawnedAgent = {
     id,
     cwd,
     name,
-    role: request.role,
+    role,
     persona: request.persona,
-    objective: request.objective,
+    objective,
     context: request.context,
     taskId: request.taskId,
     model: request.model,
     status: "running",
     startedAt,
   };
-
-  const prompt = buildPrompt(request);
-  const systemPrompt = buildSystemPrompt(request);
   record.systemPrompt = systemPrompt;
 
   const env = {

@@ -51,4 +51,5 @@ export interface MessengerActionParams {
   role?: string;
   persona?: string;
   model?: string;
+  agentFile?: string; // Path to markdown file (with YAML frontmatter) to use as system prompt
 }

@@ -485,7 +485,45 @@ export function executeSpawn(op: string | null, params: MessengerActionParams, s
 }
 
 function spawnCreate(params: MessengerActionParams, state: MessengerState, cwd: string) {
-  const objective = params.message?.trim() || params.prompt?.trim();
+  const message = params.message?.trim() || params.prompt?.trim();
+
+  // File-based spawn mode
+  if (params.agentFile) {
+    if (!message) {
+      return result("Error: spawn requires mission text via message or prompt.", {
+        mode: "spawn",
+        error: "missing_message",
+      });
+    }
+
+    const request: SpawnRequest = {
+      agentFile: params.agentFile,
+      message,
+      content: params.content,
+      taskId: params.taskId,
+      model: params.model,
+      name: params.name,
+    };
+
+    try {
+      const record = spawnSubagent(cwd, request, state.currentChannel);
+      const roleLabel = formatRoleLabel(record.role);
+      logFeedEvent(cwd, state.agentName, "message", undefined, `spawned ${record.name} (${roleLabel})`, state.currentChannel);
+
+      return result(`🚀 Spawned ${record.name} (${record.id}) as ${roleLabel}.`, {
+        mode: "spawn",
+        agent: record,
+      });
+    } catch (err) {
+      return result(`Error: ${err instanceof Error ? err.message : String(err)}`, {
+        mode: "spawn",
+        error: "spawn_failed",
+      });
+    }
+  }
+
+  // Autoregressive spawn mode (traditional)
+  const objective = message;
   if (!objective) {
     return result("Error: spawn requires mission text via message or prompt.", {
       mode: "spawn",

@@ -71,6 +71,35 @@ pi_messenger({
 })
 ```
 
+The `agentFile` parameter can be used to specify a markdown file with YAML frontmatter:
+
+```markdown
+---
+role: Security Reviewer
+persona: Paranoid about edge cases
+model: claude-sonnet-4-6
+objective: Review code for security vulnerabilities
+---
+
+You are a security expert. Focus on input validation and auth boundaries.
+```
+
+```typescript
+pi_messenger({
+  action: "spawn",
+  agentFile: "./agents/security-reviewer.md",
+  message: "Review the auth implementation"  // Optional: overrides frontmatter objective
+})
+```
+
+Frontmatter fields (all optional):
+- `role` — Agent role label
+- `persona` — Tone/behavior modifier  
+- `model` — Default model (overridable at spawn)
+- `objective` — Default mission (overridable via `message`)
+
+The body after `---` becomes the system prompt.
+
 Manage spawned agents:
 
 ```typescript

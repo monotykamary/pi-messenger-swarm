@@ -42,13 +42,15 @@ export interface SwarmSummary {
 }
 
 export interface SpawnRequest {
-  role: string;
+  role?: string;
   persona?: string;
-  objective: string;
+  objective?: string;
+  message?: string; // Alias for objective
   context?: string;
   taskId?: string;
   model?: string;
   name?: string;
+  agentFile?: string; // Path to markdown file (with YAML frontmatter) to use as system prompt
 }
 
 export interface SpawnedAgent {
