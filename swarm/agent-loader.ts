@@ -1,5 +1,4 @@
 import * as fs from "node:fs";
-import { parse as parseYaml } from "yaml";
 
 export interface AgentDefinition {
   role: string;
@@ -7,6 +6,21 @@ export interface AgentDefinition {
   model?: string;
   objective?: string;
   systemPrompt: string;
+}
+
+function parseSimpleYaml(yaml: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const line of yaml.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const colonIdx = trimmed.indexOf(":");
+    if (colonIdx === -1) continue;
+    const key = trimmed.slice(0, colonIdx).trim();
+    const value = trimmed.slice(colonIdx + 1).trim();
+    // Remove quotes if present
+    result[key] = value.replace(/^["'](.*)["']$/, "$1");
+  }
+  return result;
 }
 
 export function loadAgentDefinition(filePath: string): AgentDefinition {
@@ -22,14 +36,14 @@ export function loadAgentDefinition(filePath: string): AgentDefinition {
     };
   }
 
-  const frontmatter = parseYaml(match[1]) as Record<string, unknown>;
+  const frontmatter = parseSimpleYaml(match[1]);
   const body = match[2].trim();
 
   return {
-    role: typeof frontmatter.role === "string" ? frontmatter.role : "Subagent",
-    persona: typeof frontmatter.persona === "string" ? frontmatter.persona : undefined,
-    model: typeof frontmatter.model === "string" ? frontmatter.model : undefined,
-    objective: typeof frontmatter.objective === "string" ? frontmatter.objective : undefined,
+    role: frontmatter.role || "Subagent",
+    persona: frontmatter.persona,
+    model: frontmatter.model,
+    objective: frontmatter.objective,
     systemPrompt: body,
   };
 }

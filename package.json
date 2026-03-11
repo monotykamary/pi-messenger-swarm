@@ -46,8 +46,7 @@
   "devDependencies": {
     "@types/node": "^25.3.3",
     "standard-version": "^9.5.0",
-    "vitest": "^2.1.8",
-    "yaml": "^2.8.2"
+    "vitest": "^2.1.8"
   },
   "pi": {
     "extensions": [
