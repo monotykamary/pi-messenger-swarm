@@ -82,7 +82,7 @@ pi_messenger({ action: "spawn.stop", id: "<spawn-id>" })
 
 ```typescript
 pi_messenger({ action: "send", to: "OtherAgent", message: "Need your API shape before I commit" })
-pi_messenger({ action: "broadcast", message: "Claimed task-4, touching src/auth/session.ts" })
+pi_messenger({ action: "send", to: "#memory", message: "Claimed task-4, touching src/auth/session.ts" })
 ```
 
 ## Swarm Philosophy

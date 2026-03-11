@@ -15,6 +15,7 @@ export function createMockContext(cwd: string = process.cwd()): ExtensionContext
     } as ExtensionContext["ui"],
     sessionManager: {
       getEntries: () => [],
+      getSessionId: () => "test-session-1",
     } as ExtensionContext["sessionManager"],
     model: "test-model",
   } as unknown as ExtensionContext;

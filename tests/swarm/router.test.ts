@@ -34,7 +34,7 @@ function createState(agentName: string): MessengerState {
     reservations: [],
     chatHistory: new Map(),
     unreadCounts: new Map(),
-    broadcastHistory: [],
+    channelPostHistory: [],
     seenSenders: new Map(),
     model: "test-model",
     gitBranch: "main",
@@ -174,6 +174,20 @@ describe("swarm router", () => {
 
     const res = await executeAction("spawn.list", {}, state, dirs, ctx, () => {}, () => {}, () => {});
     expect(res.content[0]?.text).toContain("No spawned agents");
+  });
+
+  it("requires explicit send targets and rejects broadcast", async () => {
+    const cwd = createTempCwd();
+    const dirs = createDirs(cwd);
+    const state = createState("AgentSend");
+    const ctx = createMockContext(cwd);
+
+    const missingTo = await executeAction("send", { message: "hello" }, state, dirs, ctx, () => {}, () => {}, () => {});
+    expect(missingTo.content[0]?.text).toContain("send requires 'to'");
+
+    const broadcast = await executeAction("broadcast", { message: "hello" }, state, dirs, ctx, () => {}, () => {}, () => {});
+    expect(broadcast.content[0]?.text).toContain("Action \"broadcast\" was removed");
+    expect(broadcast.content[0]?.text).toContain("action: \"send\", to: \"#channel\"");
   });
 
   it("disables legacy orchestration actions", async () => {

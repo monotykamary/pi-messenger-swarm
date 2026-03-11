@@ -42,6 +42,8 @@ export interface MessengerActionParams {
   paths?: string[];
   name?: string;
   spec?: string;
+  channel?: string;
+  create?: boolean;
   limit?: number;
   autoRegisterPath?: "add" | "remove" | "list";
 

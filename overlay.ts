@@ -10,6 +10,7 @@ import {
   type MessengerState,
   type Dirs,
 } from "./lib.js";
+import { displayChannelLabel } from "./channel.js";
 import * as swarmStore from "./swarm/store.js";
 import { readFeedEvents, readFeedEventsWithOffset, readFeedEventsByRange, getFeedLineCount, type FeedEvent, type FeedEventType } from "./feed.js";
 import type { SwarmTask as Task } from "./swarm/types.js";
@@ -52,6 +53,7 @@ import {
 
 export interface OverlayCallbacks {
   onBackground?: (snapshot: string) => void;
+  onSwitchChannel?: (channelId: string) => boolean;
 }
 
 function isFeedUpKey(data: string): boolean {
@@ -126,6 +128,31 @@ export class MessengerOverlay implements Component, Focusable {
     }
   }
 
+  private currentChannel(): string {
+    return this.state.currentChannel;
+  }
+
+  private cycleChannel(direction: 1 | -1): void {
+    const channels = this.state.joinedChannels.length > 0 ? this.state.joinedChannels : [this.state.currentChannel];
+    if (channels.length <= 1) return;
+    const currentIndex = Math.max(0, channels.indexOf(this.state.currentChannel));
+    const nextIndex = (currentIndex + direction + channels.length) % channels.length;
+    const nextChannel = channels[nextIndex];
+    const switched = this.callbacks.onSwitchChannel?.(nextChannel);
+    if (!switched) return;
+
+    this.viewState.feedLoadedEvents = [];
+    this.viewState.feedWindowStart = 0;
+    this.viewState.feedWindowEnd = 0;
+    this.viewState.feedTotalLines = 0;
+    this.viewState.feedLineScrollOffset = 0;
+    this.viewState.lastSeenEventTs = null;
+    this.viewState.selectedTaskIndex = 0;
+    this.viewState.mode = "list";
+    setNotification(this.viewState, this.tui, true, `Switched to ${displayChannelLabel(nextChannel)}`);
+    this.tui.requestRender();
+  }
+
   handleInput(data: string): void {
     this.cancelCompletionTimer();
 
@@ -137,19 +164,28 @@ export class MessengerOverlay implements Component, Focusable {
     // Check input modes FIRST before processing any global keybindings
     // This ensures typing characters like 'e', 's', 'b' work correctly in input fields
     if (this.viewState.confirmAction) {
-      handleConfirmInput(data, this.viewState, this.cwd, this.state.agentName, this.tui);
+      handleConfirmInput(data, this.viewState, this.cwd, this.state.agentName, this.currentChannel(), this.tui);
       return;
     }
 
     if (this.viewState.inputMode === "block-reason") {
-      const tasks = swarmStore.getTasks(this.cwd);
+      const tasks = swarmStore.getTasks(this.cwd, this.currentChannel());
       const task = tasks[this.viewState.selectedTaskIndex];
-      handleBlockReasonInput(data, this.viewState, this.cwd, task as Task | undefined, this.state.agentName, this.tui);
+      handleBlockReasonInput(data, this.viewState, this.cwd, task as Task | undefined, this.state.agentName, this.currentChannel(), this.tui);
       return;
     }
 
     if (this.viewState.inputMode === "message") {
       handleMessageInput(data, this.viewState, this.state, this.dirs, this.cwd, this.tui);
+      return;
+    }
+
+    if (data === "c") {
+      this.cycleChannel(1);
+      return;
+    }
+    if (data === "C") {
+      this.cycleChannel(-1);
       return;
     }
 
@@ -202,7 +238,7 @@ export class MessengerOverlay implements Component, Focusable {
     // k = scroll up (to older feed items = smaller absolute index),
     // j = scroll down (to newer feed items = larger absolute index).
     // gg = jump to top (oldest, index 0), G = jump to bottom (newest).
-    const totalFeedLines = getFeedLineCount(this.cwd);
+    const totalFeedLines = getFeedLineCount(this.cwd, this.currentChannel());
     const termRows = process.stdout.rows ?? 24;
     const chromeLines = 8;
     const contentHeight = Math.max(8, termRows - chromeLines);
@@ -216,7 +252,7 @@ export class MessengerOverlay implements Component, Focusable {
 
     let feedHeight: number;
     // Note: tasks[] is declared later in this function, use a different variable name here
-    const taskList = swarmStore.getTasks(this.cwd);
+    const taskList = swarmStore.getTasks(this.cwd, this.currentChannel());
     if (this.viewState.mainView === "tasks" && taskList.length === 0) {
       const hasFeed = totalFeedLines > 0;
       if (hasFeed) {
@@ -258,7 +294,7 @@ export class MessengerOverlay implements Component, Focusable {
           const GG_LOAD_SIZE = 100; // sparse load - only oldest 100 events
           const newStart = 0;
           const newEnd = Math.min(GG_LOAD_SIZE, this.viewState.feedTotalLines);
-          const oldestEvents = readFeedEventsByRange(this.cwd, newStart, newEnd);
+          const oldestEvents = readFeedEventsByRange(this.cwd, newStart, newEnd, this.currentChannel());
           this.viewState.feedLoadedEvents = oldestEvents;
           this.viewState.feedWindowStart = newStart;
           this.viewState.feedWindowEnd = newEnd;
@@ -287,7 +323,7 @@ export class MessengerOverlay implements Component, Focusable {
       this.viewState.pendingG = false;
     }
 
-    const tasks = swarmStore.getTasks(this.cwd);
+    const tasks = swarmStore.getTasks(this.cwd, this.currentChannel());
     const spawned = listSpawned(this.cwd);
     const task = tasks[this.viewState.selectedTaskIndex];
     const swarmAgent = spawned[this.viewState.selectedSwarmIndex];
@@ -423,7 +459,7 @@ export class MessengerOverlay implements Component, Focusable {
     }
 
     if (this.viewState.mainView === "tasks" && task) {
-      handleTaskKeyBinding(data, task as Task, this.viewState, this.cwd, this.state.agentName, this.tui);
+      handleTaskKeyBinding(data, task as Task, this.viewState, this.cwd, this.state.agentName, this.currentChannel(), this.tui);
     }
   }
 
@@ -468,7 +504,7 @@ export class MessengerOverlay implements Component, Focusable {
   }
 
   private generateSnapshot(): string {
-    const tasks = swarmStore.getTasks(this.cwd);
+    const tasks = swarmStore.getTasks(this.cwd, this.currentChannel());
     const liveWorkers = getLiveWorkers(this.cwd);
 
     if (tasks.length === 0) {
@@ -481,7 +517,7 @@ export class MessengerOverlay implements Component, Focusable {
       ].join("\n");
     }
 
-    const readyTasks = swarmStore.getReadyTasks(this.cwd);
+    const readyTasks = swarmStore.getReadyTasks(this.cwd, this.currentChannel());
     const readyIds = new Set(readyTasks.map(task => task.id));
     const liveTaskIds = new Set(Array.from(liveWorkers.keys()));
     const activeLines = Array.from(liveWorkers.values()).map(worker => {
@@ -495,7 +531,7 @@ export class MessengerOverlay implements Component, Focusable {
     const inProgressTasks = tasks.filter(task => task.status === "in_progress");
     const blockedTasks = tasks.filter(task => task.status === "blocked");
     const waitingTasks = tasks.filter(task => task.status === "todo" && !readyIds.has(task.id));
-    const recentEvents = readFeedEvents(this.cwd, 2);
+    const recentEvents = readFeedEvents(this.cwd, 2, this.currentChannel());
 
     const lines = [
       `Swarm snapshot: ${doneTasks.length}/${tasks.length} tasks done, ${readyTasks.length} ready`,
@@ -533,7 +569,7 @@ export class MessengerOverlay implements Component, Focusable {
     const emptyRow = () => border("│") + " ".repeat(innerW) + border("│");
     const sectionSeparator = this.theme.fg("dim", "─".repeat(sectionW));
 
-    const tasks = swarmStore.getTasks(this.cwd);
+    const tasks = swarmStore.getTasks(this.cwd, this.currentChannel());
     const spawned = listSpawned(this.cwd);
 
     if (tasks.length === 0) {
@@ -566,11 +602,11 @@ export class MessengerOverlay implements Component, Focusable {
     const rightBorder = borderLen - leftBorder;
 
     lines.push(border("╭" + "─".repeat(leftBorder)) + titleText + border("─".repeat(rightBorder) + "╮"));
-    lines.push(row(renderStatusBar(this.theme, this.cwd, sectionW)));
+    lines.push(row(renderStatusBar(this.theme, this.cwd, sectionW, this.currentChannel())));
     lines.push(emptyRow());
 
     // Calculate legend first to determine dynamic chrome lines
-    const legendLines = renderLegend(this.theme, this.cwd, sectionW, this.viewState, selectedTask as Task | null, selectedSwarmAgent);
+    const legendLines = renderLegend(this.theme, this.cwd, sectionW, this.viewState, selectedTask as Task | null, selectedSwarmAgent, this.currentChannel());
     const chromeLines = 5 + legendLines.length; // title + status + empty row + separator + bottom border + legend lines
     const termRows = process.stdout.rows ?? 24;
     const contentHeight = Math.max(8, termRows - chromeLines);
@@ -578,7 +614,7 @@ export class MessengerOverlay implements Component, Focusable {
     // Progressive feed loading with sparse sliding window
     const WINDOW_SIZE = 200; // max events to keep in memory
     const LOAD_CHUNK = 100;  // events to load when scrolling beyond window
-    const totalFeedLines = getFeedLineCount(this.cwd);
+    const totalFeedLines = getFeedLineCount(this.cwd, this.currentChannel());
 
     // Calculate feed height consistently (must match the calculation in list mode below)
     const workersLimit = termRows <= 26 ? 2 : 5;
@@ -614,7 +650,7 @@ export class MessengerOverlay implements Component, Focusable {
     if (this.viewState.feedLoadedEvents.length === 0 && totalFeedLines > 0) {
       const startIdx = Math.max(0, totalFeedLines - WINDOW_SIZE);
       const endIdx = totalFeedLines;
-      this.viewState.feedLoadedEvents = readFeedEventsByRange(this.cwd, startIdx, endIdx);
+      this.viewState.feedLoadedEvents = readFeedEventsByRange(this.cwd, startIdx, endIdx, this.currentChannel());
       this.viewState.feedWindowStart = startIdx;
       this.viewState.feedWindowEnd = endIdx;
       this.viewState.feedTotalLines = totalFeedLines;
@@ -624,7 +660,7 @@ export class MessengerOverlay implements Component, Focusable {
     } else if (totalFeedLines > this.viewState.feedTotalLines) {
       // New events added: extend window at the end
       const addedCount = totalFeedLines - this.viewState.feedTotalLines;
-      const newEvents = readFeedEventsByRange(this.cwd, this.viewState.feedTotalLines, totalFeedLines);
+      const newEvents = readFeedEventsByRange(this.cwd, this.viewState.feedTotalLines, totalFeedLines, this.currentChannel());
       this.viewState.feedLoadedEvents = [...this.viewState.feedLoadedEvents, ...newEvents];
 
       // Track if we were at bottom before the window potentially slides
@@ -661,7 +697,7 @@ export class MessengerOverlay implements Component, Focusable {
       if (this.viewState.mainView === "swarm" && selectedSwarmAgent) {
         contentLines = renderSwarmDetail(selectedSwarmAgent, sectionW, contentHeight, this.viewState);
       } else if (this.viewState.mainView === "tasks" && selectedTask) {
-        contentLines = renderDetailView(this.cwd, selectedTask as Task, sectionW, contentHeight, this.viewState);
+        contentLines = renderDetailView(this.cwd, selectedTask as Task, sectionW, contentHeight, this.viewState, this.currentChannel());
       } else {
         contentLines = [];
         while (contentLines.length < contentHeight) contentLines.push("");
@@ -717,7 +753,7 @@ export class MessengerOverlay implements Component, Focusable {
           totalFeedLines
         );
 
-        const olderEvents = readFeedEventsByRange(this.cwd, newWindowStart, this.viewState.feedWindowStart);
+        const olderEvents = readFeedEventsByRange(this.cwd, newWindowStart, this.viewState.feedWindowStart, this.currentChannel());
         if (olderEvents.length > 0) {
           this.viewState.feedLoadedEvents = [...olderEvents, ...this.viewState.feedLoadedEvents];
           this.viewState.feedWindowStart = newWindowStart;
@@ -749,9 +785,9 @@ export class MessengerOverlay implements Component, Focusable {
       if (this.viewState.mainView === "swarm") {
         mainLines = renderSwarmList(this.theme, spawned, sectionW, mainHeight, this.viewState);
       } else if (tasks.length === 0) {
-        mainLines = renderEmptyState(this.theme, this.cwd, sectionW, mainHeight);
+        mainLines = renderEmptyState(this.theme, this.cwd, sectionW, mainHeight, this.currentChannel());
       } else {
-        mainLines = renderTaskList(this.theme, this.cwd, sectionW, mainHeight, this.viewState);
+        mainLines = renderTaskList(this.theme, this.cwd, sectionW, mainHeight, this.viewState, this.currentChannel());
       }
 
       contentLines = [];
@@ -863,7 +899,7 @@ export class MessengerOverlay implements Component, Focusable {
   }
 
   private renderTitleContent(): string {
-    return this.theme.fg("accent", "Swarm Messenger");
+    return this.theme.fg("accent", `Swarm Messenger · ${displayChannelLabel(this.currentChannel())}`);
   }
 
   invalidate(): void {

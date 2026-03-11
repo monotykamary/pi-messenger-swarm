@@ -35,7 +35,7 @@ function makeState(agentName: string): MessengerState {
     agentName,
     scopeToFolder: false,
     chatHistory: new Map(),
-    broadcastHistory: [],
+    channelPostHistory: [],
     registered: true,
     reservations: [],
     sessionStartedAt: new Date().toISOString(),

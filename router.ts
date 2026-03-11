@@ -37,7 +37,18 @@ export async function executeAction(
   const cwd = ctx.cwd ?? process.cwd();
 
   if (group === "join") {
-    return handlers.executeJoin(state, dirs, ctx, deliverMessage, updateStatus, params.spec, config?.nameTheme, config?.feedRetention);
+    return handlers.executeJoin(
+      state,
+      dirs,
+      ctx,
+      deliverMessage,
+      updateStatus,
+      params.spec,
+      config?.nameTheme,
+      config?.feedRetention,
+      params.channel,
+      params.create,
+    );
   }
 
   if (group === "autoRegisterPath") {
@@ -72,13 +83,16 @@ export async function executeAction(
       return handlers.executeSetStatus(state, dirs, ctx, params.message);
 
     case "feed":
-      return handlers.executeFeed(cwd, params.limit, config?.swarmEventsInFeed ?? true);
+      return handlers.executeFeed(cwd, state.currentChannel ?? "general", params.limit, config?.swarmEventsInFeed ?? true, params.channel);
 
     case "send":
-      return handlers.executeSend(state, dirs, cwd, params.to, false, params.message, params.replyTo);
+      return handlers.executeSend(state, dirs, cwd, params.to, params.message, params.replyTo, params.channel ?? state.currentChannel ?? "general");
 
     case "broadcast":
-      return handlers.executeSend(state, dirs, cwd, undefined, true, params.message, params.replyTo);
+      return result(
+        'Action "broadcast" was removed. Use pi_messenger({ action: "send", to: "#channel", message: "..." }) instead.',
+        { mode: "broadcast_removed", error: "removed_action", action }
+      );
 
     case "reserve":
       if (!params.paths || params.paths.length === 0) {
@@ -96,11 +110,11 @@ export async function executeAction(
       return handlers.executeRename(state, dirs, ctx, params.name, deliverMessage, updateStatus);
 
     case "swarm":
-      return executeSwarmStatus(cwd);
+      return executeSwarmStatus(cwd, params.channel ?? state.currentChannel ?? "general");
 
     case "task": {
       const operation = op ?? "list";
-      return executeTask(operation, params, state, cwd);
+      return executeTask(operation, params, state, cwd, params.channel ?? state.currentChannel ?? "general");
     }
 
     // Backward-compatible aliases for older swarm calls
@@ -109,7 +123,7 @@ export async function executeAction(
       if (!taskId) {
         return result("Error: id or taskId required for claim action.", { mode: "claim", error: "missing_task_id" });
       }
-      return executeTask("claim", { ...params, id: taskId }, state, cwd);
+      return executeTask("claim", { ...params, id: taskId }, state, cwd, params.channel ?? state.currentChannel ?? "general");
     }
 
     case "unclaim": {
@@ -117,7 +131,7 @@ export async function executeAction(
       if (!taskId) {
         return result("Error: id or taskId required for unclaim action.", { mode: "unclaim", error: "missing_task_id" });
       }
-      return executeTask("unclaim", { ...params, id: taskId }, state, cwd);
+      return executeTask("unclaim", { ...params, id: taskId }, state, cwd, params.channel ?? state.currentChannel ?? "general");
     }
 
     case "complete": {
@@ -125,7 +139,7 @@ export async function executeAction(
       if (!taskId) {
         return result("Error: id or taskId required for complete action.", { mode: "complete", error: "missing_task_id" });
       }
-      return executeTask("done", { ...params, id: taskId }, state, cwd);
+      return executeTask("done", { ...params, id: taskId }, state, cwd, params.channel ?? state.currentChannel ?? "general");
     }
 
     case "spawn":

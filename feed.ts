@@ -1,11 +1,12 @@
 /**
  * Pi Messenger - Activity Feed
  *
- * Append-only JSONL feed stored at <cwd>/.pi/messenger/feed.jsonl
+ * Append-only JSONL feed stored at <cwd>/.pi/messenger/feed/<channel>.jsonl
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { normalizeChannelId } from "./channel.js";
 
 export type FeedEventType =
   | "join"
@@ -42,10 +43,15 @@ export interface FeedEvent {
   type: FeedEventType;
   target?: string;
   preview?: string;
+  channel?: string;
 }
 
-function feedPath(cwd: string): string {
-  return path.join(cwd, ".pi", "messenger", "feed.jsonl");
+function feedDir(cwd: string): string {
+  return path.join(cwd, ".pi", "messenger", "feed");
+}
+
+function feedPath(cwd: string, channelId: string = "general"): string {
+  return path.join(feedDir(cwd), `${normalizeChannelId(channelId)}.jsonl`);
 }
 
 function sanitizeInlineText(value?: string): string | undefined {
@@ -81,25 +87,26 @@ export function sanitizeFeedEvent(event: FeedEvent): FeedEvent {
     agent: sanitizeAgentName(event.agent),
     target: sanitizeInlineText(event.target),
     preview: sanitizePreview(event.preview),
+    channel: event.channel ? normalizeChannelId(event.channel) : undefined,
   };
 }
 
-export function appendFeedEvent(cwd: string, event: FeedEvent): void {
-  const p = feedPath(cwd);
+export function appendFeedEvent(cwd: string, event: FeedEvent, channelId: string = "general"): void {
+  const p = feedPath(cwd, channelId);
   try {
-    const feedDir = path.dirname(p);
-    if (!fs.existsSync(feedDir)) {
-      fs.mkdirSync(feedDir, { recursive: true });
+    const dir = path.dirname(p);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     }
-    const sanitized = sanitizeFeedEvent(event);
+    const sanitized = sanitizeFeedEvent({ ...event, channel: normalizeChannelId(channelId) });
     fs.appendFileSync(p, JSON.stringify(sanitized) + "\n");
   } catch {
     // Best effort
   }
 }
 
-export function readFeedEvents(cwd: string, limit?: number): FeedEvent[] {
-  const p = feedPath(cwd);
+export function readFeedEvents(cwd: string, limit?: number, channelId: string = "general"): FeedEvent[] {
+  const p = feedPath(cwd, channelId);
   if (!fs.existsSync(p)) return [];
 
   try {
@@ -121,8 +128,8 @@ export function readFeedEvents(cwd: string, limit?: number): FeedEvent[] {
   }
 }
 
-export function readFeedEventsWithOffset(cwd: string, offsetFromEnd: number, limit: number): FeedEvent[] {
-  const p = feedPath(cwd);
+export function readFeedEventsWithOffset(cwd: string, offsetFromEnd: number, limit: number, channelId: string = "general"): FeedEvent[] {
+  const p = feedPath(cwd, channelId);
   if (!fs.existsSync(p)) return [];
 
   try {
@@ -131,7 +138,6 @@ export function readFeedEventsWithOffset(cwd: string, offsetFromEnd: number, lim
     const lines = content.split("\n");
     const totalLines = lines.length;
 
-    // Calculate start and end indices from the end of the file
     const endIndex = totalLines - offsetFromEnd;
     const startIndex = Math.max(0, endIndex - limit);
 
@@ -152,8 +158,8 @@ export function readFeedEventsWithOffset(cwd: string, offsetFromEnd: number, lim
   }
 }
 
-export function readFeedEventsByRange(cwd: string, startIndex: number, endIndex: number): FeedEvent[] {
-  const p = feedPath(cwd);
+export function readFeedEventsByRange(cwd: string, startIndex: number, endIndex: number, channelId: string = "general"): FeedEvent[] {
+  const p = feedPath(cwd, channelId);
   if (!fs.existsSync(p)) return [];
 
   try {
@@ -162,7 +168,6 @@ export function readFeedEventsByRange(cwd: string, startIndex: number, endIndex:
     const lines = content.split("\n");
     const totalLines = lines.length;
 
-    // Clamp indices to valid range
     const clampedStart = Math.max(0, Math.min(startIndex, totalLines));
     const clampedEnd = Math.max(0, Math.min(endIndex, totalLines));
 
@@ -183,8 +188,8 @@ export function readFeedEventsByRange(cwd: string, startIndex: number, endIndex:
   }
 }
 
-export function getFeedLineCount(cwd: string): number {
-  const p = feedPath(cwd);
+export function getFeedLineCount(cwd: string, channelId: string = "general"): number {
+  const p = feedPath(cwd, channelId);
   if (!fs.existsSync(p)) return 0;
 
   try {
@@ -196,8 +201,8 @@ export function getFeedLineCount(cwd: string): number {
   }
 }
 
-export function pruneFeed(cwd: string, maxEvents: number): void {
-  const p = feedPath(cwd);
+export function pruneFeed(cwd: string, maxEvents: number, channelId: string = "general"): void {
+  const p = feedPath(cwd, channelId);
   if (!fs.existsSync(p)) return;
 
   try {
@@ -241,7 +246,6 @@ export function formatFeedLine(event: FeedEvent): string {
   let line = `${time} ${prefix}${sanitized.agent}`;
 
   const rawPreview = sanitized.preview;
-  // Normalize newlines to spaces for single-line display
   const normalizedPreview = rawPreview?.replace(/\n/g, " ");
   const preview = normalizedPreview
     ? normalizedPreview.length > 90 ? normalizedPreview.slice(0, 87) + "..." : normalizedPreview
@@ -303,7 +307,8 @@ export function logFeedEvent(
   agent: string,
   type: FeedEventType,
   target?: string,
-  preview?: string
+  preview?: string,
+  channelId: string = "general"
 ): void {
   appendFeedEvent(cwd, {
     ts: new Date().toISOString(),
@@ -311,5 +316,6 @@ export function logFeedEvent(
     type,
     target,
     preview,
-  });
+    channel: channelId,
+  }, channelId);
 }

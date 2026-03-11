@@ -268,7 +268,7 @@ function attachHandlers(proc: ChildProcess, state: SpawnState, promptTmpDir: str
   });
 }
 
-export function spawnSubagent(cwd: string, request: SpawnRequest): SpawnedAgent {
+export function spawnSubagent(cwd: string, request: SpawnRequest, inheritedChannel?: string): SpawnedAgent {
   const id = randomUUID().slice(0, 8);
   const name = request.name?.trim() || generateMemorableName();
   const startedAt = new Date().toISOString();
@@ -295,6 +295,7 @@ export function spawnSubagent(cwd: string, request: SpawnRequest): SpawnedAgent 
     ...process.env,
     PI_AGENT_NAME: name,
     PI_SWARM_SPAWNED: "1",
+    ...(inheritedChannel ? { PI_MESSENGER_CHANNEL: inheritedChannel } : {}),
   };
 
   const state: SpawnState = {

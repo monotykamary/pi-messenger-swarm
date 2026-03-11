@@ -14,11 +14,14 @@ vi.mock("@mariozechner/pi-tui", () => ({
 const mocks = vi.hoisted(() => ({
   sendMessageToAgent: vi.fn(),
   getActiveAgents: vi.fn(),
+  resolveTargetChannel: vi.fn(),
+  logFeedEvent: vi.fn(),
 }));
 
 vi.mock("../../store.js", () => ({
   sendMessageToAgent: mocks.sendMessageToAgent,
   getActiveAgents: mocks.getActiveAgents,
+  resolveTargetChannel: mocks.resolveTargetChannel,
 }));
 
 vi.mock("../../swarm/live-progress.js", () => ({
@@ -28,7 +31,7 @@ vi.mock("../../swarm/live-progress.js", () => ({
 }));
 
 vi.mock("../../feed.js", () => ({
-  logFeedEvent: vi.fn(),
+  logFeedEvent: mocks.logFeedEvent,
 }));
 
 vi.mock("../../swarm/task-actions.js", () => ({
@@ -40,7 +43,15 @@ import type { MessengerState, Dirs } from "../../lib.js";
 import type { TUI } from "@mariozechner/pi-tui";
 
 function makeState(): MessengerState {
-  return { agentName: "me", scopeToFolder: false, chatHistory: new Map(), broadcastHistory: [] } as MessengerState;
+  return {
+    agentName: "me",
+    scopeToFolder: false,
+    chatHistory: new Map(),
+    channelPostHistory: [],
+    currentChannel: "general",
+    sessionChannel: "general",
+    joinedChannels: ["general"],
+  } as MessengerState;
 }
 
 function makeDirs(): Dirs {
@@ -55,9 +66,11 @@ describe("overlay chat steering behavior", () => {
   beforeEach(() => {
     mocks.sendMessageToAgent.mockReset();
     mocks.getActiveAgents.mockReset();
+    mocks.resolveTargetChannel.mockReset();
+    mocks.logFeedEvent.mockReset();
   });
 
-  it("falls back to steering self when broadcasting with no peers", () => {
+  it("posts to the current session channel when no peers are present", () => {
     const viewState = createMessengerViewState();
     viewState.inputMode = "message";
     viewState.messageInput = "Investigate auth race";
@@ -67,18 +80,32 @@ describe("overlay chat steering behavior", () => {
     const tui = makeTui();
 
     mocks.getActiveAgents.mockReturnValue([]);
-    mocks.sendMessageToAgent.mockImplementation((_state, _dirs, to: string, text: string) => ({
-      id: "msg-1",
-      from: "me",
-      to,
-      text,
-      timestamp: new Date().toISOString(),
-      replyTo: null,
-    }));
 
     handleMessageInput("\r", viewState, state, dirs, "/tmp/cwd", tui);
 
-    expect(mocks.sendMessageToAgent).toHaveBeenCalledWith(expect.anything(), expect.anything(), "me", "Investigate auth race");
+    expect(mocks.sendMessageToAgent).not.toHaveBeenCalled();
+    expect(mocks.logFeedEvent).toHaveBeenCalledWith("/tmp/cwd", "me", "message", undefined, "Investigate auth race", "general");
+    expect(viewState.inputMode).toBe("normal");
+    expect(viewState.messageInput).toBe("");
+  });
+
+  it("posts to detached channels even when no peers are present", () => {
+    const viewState = createMessengerViewState();
+    viewState.inputMode = "message";
+    viewState.messageInput = "Remember this";
+
+    const state = makeState();
+    state.currentChannel = "memory";
+    state.joinedChannels = ["general", "memory"];
+    const dirs = makeDirs();
+    const tui = makeTui();
+
+    mocks.getActiveAgents.mockReturnValue([]);
+
+    handleMessageInput("\r", viewState, state, dirs, "/tmp/cwd", tui);
+
+    expect(mocks.sendMessageToAgent).not.toHaveBeenCalled();
+    expect(mocks.logFeedEvent).toHaveBeenCalledWith("/tmp/cwd", "me", "message", undefined, "Remember this", "memory");
     expect(viewState.inputMode).toBe("normal");
     expect(viewState.messageInput).toBe("");
   });
@@ -105,7 +132,7 @@ describe("overlay chat steering behavior", () => {
     handleMessageInput("\r", viewState, state, dirs, "/tmp/cwd", tui);
 
     expect(mocks.sendMessageToAgent).toHaveBeenCalledTimes(2);
-    expect(mocks.sendMessageToAgent).toHaveBeenCalledWith(expect.anything(), expect.anything(), "alpha", "Hello swarm");
-    expect(mocks.sendMessageToAgent).toHaveBeenCalledWith(expect.anything(), expect.anything(), "beta", "Hello swarm");
+    expect(mocks.sendMessageToAgent).toHaveBeenCalledWith(expect.anything(), expect.anything(), "alpha", "Hello swarm", undefined, "general");
+    expect(mocks.sendMessageToAgent).toHaveBeenCalledWith(expect.anything(), expect.anything(), "beta", "Hello swarm", undefined, "general");
   });
 });

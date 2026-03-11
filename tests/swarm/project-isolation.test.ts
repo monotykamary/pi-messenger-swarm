@@ -41,7 +41,7 @@ function createMockState(agentName: string, cwd: string, scopeToFolder: boolean)
     reservations: [],
     chatHistory: new Map(),
     unreadCounts: new Map(),
-    broadcastHistory: [],
+    channelPostHistory: [],
     seenSenders: new Map(),
     model: "test-model",
     gitBranch: undefined,
@@ -390,8 +390,8 @@ describe("Project Isolation", () => {
       const projectB = createTempDir("projectB");
 
       try {
-        const feedA = path.join(projectA, ".pi", "messenger", "feed.jsonl");
-        const feedB = path.join(projectB, ".pi", "messenger", "feed.jsonl");
+        const feedA = path.join(projectA, ".pi", "messenger", "feed", "general.jsonl");
+        const feedB = path.join(projectB, ".pi", "messenger", "feed", "general.jsonl");
 
         // Ensure directories exist
         fs.mkdirSync(path.dirname(feedA), { recursive: true });

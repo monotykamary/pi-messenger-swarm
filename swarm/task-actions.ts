@@ -24,8 +24,9 @@ export function executeTaskAction(
   agentName: string,
   reason?: string,
   options?: TaskActionOptions,
+  channelId: string = "general",
 ): TaskActionResult {
-  const task = store.getTask(cwd, taskId);
+  const task = store.getTask(cwd, taskId, channelId);
   if (!task) return { success: false, error: "not_found", message: `Task ${taskId} not found` };
 
   switch (action) {
@@ -37,9 +38,9 @@ export function executeTaskAction(
         return { success: false, error: "invalid_status", message: `Task ${taskId} is ${task.status}, not todo` };
       }
 
-      const ready = new Set(store.getReadyTasks(cwd).map(t => t.id));
+      const ready = new Set(store.getReadyTasks(cwd, channelId).map(t => t.id));
       if (task.depends_on.length > 0 && !ready.has(task.id)) {
-        const done = new Set(store.getTasks(cwd).filter(t => t.status === "done").map(t => t.id));
+        const done = new Set(store.getTasks(cwd, channelId).filter(t => t.status === "done").map(t => t.id));
         const unmet = task.depends_on.filter(dep => !done.has(dep));
         return {
           success: false,
@@ -49,9 +50,9 @@ export function executeTaskAction(
         };
       }
 
-      const claimed = store.claimTask(cwd, taskId, agentName, reason);
+      const claimed = store.claimTask(cwd, taskId, agentName, reason, channelId);
       if (!claimed) return { success: false, error: "claim_failed", message: `Failed to claim ${taskId}` };
-      logFeedEvent(cwd, agentName, "task.start", taskId, claimed.title);
+      logFeedEvent(cwd, agentName, "task.start", taskId, claimed.title, channelId);
       return { success: true, message: `Claimed ${taskId}`, task: claimed };
     }
 
@@ -59,30 +60,30 @@ export function executeTaskAction(
       if (!reason) {
         return { success: false, error: "missing_reason", message: `Reason required to block ${taskId}` };
       }
-      const blocked = store.blockTask(cwd, taskId, agentName, reason);
+      const blocked = store.blockTask(cwd, taskId, agentName, reason, channelId);
       if (!blocked) return { success: false, error: "block_failed", message: `Failed to block ${taskId}` };
-      logFeedEvent(cwd, agentName, "task.block", taskId, reason);
+      logFeedEvent(cwd, agentName, "task.block", taskId, reason, channelId);
       return { success: true, message: `Blocked ${taskId}`, task: blocked };
     }
 
     case "unblock": {
-      const unblocked = store.unblockTask(cwd, taskId);
+      const unblocked = store.unblockTask(cwd, taskId, channelId);
       if (!unblocked) return { success: false, error: "unblock_failed", message: `Failed to unblock ${taskId}` };
-      logFeedEvent(cwd, agentName, "task.unblock", taskId, unblocked.title);
+      logFeedEvent(cwd, agentName, "task.unblock", taskId, unblocked.title, channelId);
       return { success: true, message: `Unblocked ${taskId}`, task: unblocked };
     }
 
     case "reset": {
-      const resetTasks = store.resetTask(cwd, taskId, false);
+      const resetTasks = store.resetTask(cwd, taskId, false, channelId);
       if (resetTasks.length === 0) return { success: false, error: "reset_failed", message: `Failed to reset ${taskId}` };
-      logFeedEvent(cwd, agentName, "task.reset", taskId, task.title);
+      logFeedEvent(cwd, agentName, "task.reset", taskId, task.title, channelId);
       return { success: true, message: `Reset ${taskId}`, resetTasks };
     }
 
     case "cascade-reset": {
-      const resetTasks = store.resetTask(cwd, taskId, true);
+      const resetTasks = store.resetTask(cwd, taskId, true, channelId);
       if (resetTasks.length === 0) return { success: false, error: "reset_failed", message: `Failed to reset ${taskId}` };
-      logFeedEvent(cwd, agentName, "task.reset", taskId, `cascade (${resetTasks.length} tasks)`);
+      logFeedEvent(cwd, agentName, "task.reset", taskId, `cascade (${resetTasks.length} tasks)`, channelId);
       return { success: true, message: `Reset ${taskId} + ${Math.max(0, resetTasks.length - 1)} dependents`, resetTasks };
     }
 
@@ -90,10 +91,10 @@ export function executeTaskAction(
       if (task.status === "in_progress" && options?.isWorkerActive?.(taskId)) {
         return { success: false, error: "active_worker", message: `Cannot delete ${taskId} while its worker is active` };
       }
-      if (!store.deleteTask(cwd, taskId)) {
+      if (!store.deleteTask(cwd, taskId, channelId)) {
         return { success: false, error: "delete_failed", message: `Failed to delete ${taskId}` };
       }
-      logFeedEvent(cwd, agentName, "task.delete", taskId, task.title);
+      logFeedEvent(cwd, agentName, "task.delete", taskId, task.title, channelId);
       return { success: true, message: `Deleted ${taskId}` };
     }
 
@@ -101,11 +102,11 @@ export function executeTaskAction(
       if (task.status !== "done") {
         return { success: false, error: "invalid_status", message: `Task ${taskId} is ${task.status}, not done` };
       }
-      const archived = store.archiveTask(cwd, taskId);
+      const archived = store.archiveTask(cwd, taskId, channelId);
       if (archived.archived !== 1) {
         return { success: false, error: "archive_failed", message: `Failed to archive ${taskId}` };
       }
-      logFeedEvent(cwd, agentName, "task.archive", taskId, task.title);
+      logFeedEvent(cwd, agentName, "task.archive", taskId, task.title, channelId);
       return { success: true, message: `Archived ${taskId}` };
     }
 
@@ -115,14 +116,14 @@ export function executeTaskAction(
       }
 
       if (options?.isWorkerActive?.(taskId)) {
-        store.appendTaskProgress(cwd, taskId, agentName, "Worker stop requested by user");
+        store.appendTaskProgress(cwd, taskId, agentName, "Worker stop requested by user", channelId);
       }
 
-      const unclaimed = store.unclaimTask(cwd, taskId, agentName);
+      const unclaimed = store.unclaimTask(cwd, taskId, agentName, channelId);
       if (!unclaimed) {
         return { success: false, error: "stop_failed", message: `Failed to stop ${taskId}` };
       }
-      logFeedEvent(cwd, agentName, "task.reset", taskId, "stopped");
+      logFeedEvent(cwd, agentName, "task.reset", taskId, "stopped", channelId);
       return { success: true, message: `Stopped ${taskId}`, task: unclaimed };
     }
   }

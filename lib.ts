@@ -41,6 +41,9 @@ export interface AgentRegistration {
   session: AgentSession;
   activity: AgentActivity;
   statusMessage?: string;
+  currentChannel?: string;
+  sessionChannel?: string;
+  joinedChannels?: string[];
 }
 
 export interface AgentMailMessage {
@@ -50,6 +53,7 @@ export interface AgentMailMessage {
   text: string;
   timestamp: string;
   replyTo: string | null;
+  channel?: string;
 }
 
 export interface ReservationConflict {
@@ -70,7 +74,7 @@ export interface MessengerState {
   reservations: FileReservation[];
   chatHistory: Map<string, AgentMailMessage[]>;
   unreadCounts: Map<string, number>;
-  broadcastHistory: AgentMailMessage[];
+  channelPostHistory: AgentMailMessage[];
   seenSenders: Map<string, string>;
   model: string;
   gitBranch?: string;
@@ -83,6 +87,10 @@ export interface MessengerState {
   customStatus: boolean;
   registryFlushTimer: ReturnType<typeof setTimeout> | null;
   sessionStartedAt: string;
+  contextSessionId?: string;
+  currentChannel: string;
+  sessionChannel: string;
+  joinedChannels: string[];
 }
 
 export interface Dirs {
@@ -384,6 +392,10 @@ export function truncatePathLeft(filePath: string, maxLen: number): string {
 }
 
 export function buildSelfRegistration(state: MessengerState): AgentRegistration {
+  const currentChannel = state.currentChannel || state.sessionChannel || "general";
+  const joinedChannels = Array.isArray(state.joinedChannels)
+    ? [...state.joinedChannels]
+    : [currentChannel];
   return {
     name: state.agentName,
     pid: process.pid,
@@ -398,20 +410,23 @@ export function buildSelfRegistration(state: MessengerState): AgentRegistration 
     activity: { ...state.activity },
     reservations: state.reservations.length > 0 ? state.reservations : undefined,
     statusMessage: state.statusMessage,
+    currentChannel,
+    sessionChannel: state.sessionChannel || currentChannel,
+    joinedChannels,
   };
 }
 
 export function agentHasTask(
   name: string,
   allClaims: AllClaims,
-  crewTasks: Array<{ assigned_to?: string; status: string }>
+  crewTasks: Array<{ assigned_to?: string; claimed_by?: string; status: string }>
 ): boolean {
   for (const tasks of Object.values(allClaims)) {
     for (const claim of Object.values(tasks)) {
       if (claim.agent === name) return true;
     }
   }
-  return crewTasks.some(t => t.assigned_to === name && t.status === "in_progress");
+  return crewTasks.some(t => (t.assigned_to === name || t.claimed_by === name) && t.status === "in_progress");
 }
 
 export type DisplayMode = "same-folder-branch" | "same-folder" | "different";

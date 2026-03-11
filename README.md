@@ -76,7 +76,6 @@ pi_messenger({
 - `feed`
 - `set_status`
 - `send`
-- `broadcast`
 - `reserve`
 - `release`
 - `rename`
@@ -122,7 +121,7 @@ Overlay includes:
 - live agent presence
 - swarm task list/detail
 - live feed
-- DM/broadcast input
+- DM/current-channel post input
 
 Planning UI and worker +/- controls were removed in swarm mode.
 

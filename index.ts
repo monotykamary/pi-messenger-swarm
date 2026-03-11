@@ -36,6 +36,7 @@ import {
   computeStatus,
   agentHasTask,
 } from "./lib.js";
+import { displayChannelLabel } from "./channel.js";
 import * as store from "./store.js";
 import * as handlers from "./handlers.js";
 import { MessengerOverlay, type OverlayCallbacks } from "./overlay.js";
@@ -73,7 +74,7 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
     reservations: [],
     chatHistory: new Map(),
     unreadCounts: new Map(),
-    broadcastHistory: [],
+    channelPostHistory: [],
     seenSenders: new Map(),
     model: "",
     gitBranch: undefined,
@@ -86,6 +87,10 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
     customStatus: false,
     registryFlushTimer: null,
     sessionStartedAt: new Date().toISOString(),
+    contextSessionId: undefined,
+    currentChannel: "",
+    sessionChannel: "",
+    joinedChannels: [],
   };
 
   const nameTheme = { theme: config.nameTheme, customWords: config.nameWords };
@@ -187,7 +192,8 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
     const currentlyStuck = new Set<string>();
 
     for (const agent of peers) {
-      const hasTask = agentHasTask(agent.name, allClaims, swarmStore.getTasks(agent.cwd));
+      const agentChannel = agent.currentChannel ?? agent.sessionChannel ?? state.currentChannel;
+      const hasTask = agentHasTask(agent.name, allClaims, swarmStore.getTasks(agent.cwd, agentChannel));
       const computed = computeStatus(
         agent.activity?.lastActivityAt ?? agent.startedAt,
         hasTask,
@@ -200,7 +206,7 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
 
         if (!notifiedStuck.has(agent.name)) {
           notifiedStuck.add(agent.name);
-          logFeedEvent(ctx.cwd ?? process.cwd(), agent.name, "stuck");
+          logFeedEvent(ctx.cwd ?? process.cwd(), agent.name, "stuck", undefined, undefined, agentChannel);
 
           const idleStr = computed.idleFor ?? "unknown";
           const taskInfo = hasTask ? " with task in progress" : " with reservation";
@@ -254,7 +260,7 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
       ? theme.fg("dim", ` · ${state.activity.currentActivity}`)
       : "";
 
-    const swarmSummary = swarmStore.getSummary(cwd);
+    const swarmSummary = swarmStore.getSummary(cwd, state.currentChannel);
     const taskStr = swarmSummary.total > 0
       ? theme.fg("accent", ` ☑ ${swarmSummary.done}/${swarmSummary.total} tasks`)
       : "";
@@ -273,6 +279,34 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
     for (const key of state.unreadCounts.keys()) {
       state.unreadCounts.set(key, 0);
     }
+  }
+
+  function resetChannelScopedUiState(): void {
+    state.chatHistory.clear();
+    state.channelPostHistory = [];
+    state.unreadCounts.clear();
+    state.seenSenders.clear();
+    clearAllUnreadCounts();
+  }
+
+  function syncContextSession(ctx: ExtensionContext): void {
+    if (!state.registered) return;
+
+    const rebound = store.rebindContextSession(state, dirs, ctx);
+    if (!rebound.changed) return;
+
+    const cwd = ctx.cwd ?? process.cwd();
+    if (rebound.previousSessionChannel && rebound.previousSessionChannel !== state.sessionChannel) {
+      logFeedEvent(cwd, state.agentName, "leave", undefined, undefined, rebound.previousSessionChannel);
+    }
+
+    store.stopWatcher(state);
+    resetChannelScopedUiState();
+    state.watcherRetries = 0;
+    store.startWatcher(state, dirs, deliverMessage);
+    logFeedEvent(cwd, state.agentName, "join", undefined, undefined, state.currentChannel);
+    overlayTui?.requestRender();
+    updateStatus(ctx);
   }
 
   const STATUS_HEARTBEAT_MS = 15_000;
@@ -307,7 +341,7 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
       : folder;
     pi.sendMessage({
       customType: "messenger_context",
-      content: `You are agent "${state.agentName}" in ${locationPart}. Use pi_messenger({ action: "swarm" }) to inspect swarm tasks, task.* to claim/complete work, and spawn.* to manage subagents.`,
+      content: `You are agent "${state.agentName}" in ${locationPart}. Your current channel is ${displayChannelLabel(state.currentChannel)}. Named channels ${displayChannelLabel("memory")} and ${displayChannelLabel("heartbeat")} exist for durable cross-session notes. Send direct messages with pi_messenger({ action: "send", to: "AgentName", message: "..." }). Post durable channel updates with pi_messenger({ action: "send", to: "${displayChannelLabel(state.currentChannel)}", message: "..." }) or named channels like ${displayChannelLabel("memory")}. Use pi_messenger({ action: "swarm" }) to inspect swarm tasks in the current channel, task.* to claim/complete work, join with { channel: "..." } to switch channels, and spawn.* to manage subagents.`,
       display: false
     }, { triggerTurn: false });
   }
@@ -328,6 +362,7 @@ Usage (swarm-first API):
   pi_messenger({ action: "list" })
   pi_messenger({ action: "feed", limit: 20 })
   pi_messenger({ action: "send", to: "Agent", message: "hi" })
+  pi_messenger({ action: "send", to: "#memory", message: "remember this" })
   pi_messenger({ action: "reserve", paths: ["src/"] })
 
   // Swarm board
@@ -374,8 +409,10 @@ Usage (swarm-first API):
       limit: Type.Optional(Type.Number({ description: "Feed line limit" })),
       paths: Type.Optional(Type.Array(Type.String(), { description: "Paths for reserve/release" })),
       name: Type.Optional(Type.String({ description: "Rename self or set spawned agent name" })),
-      to: Type.Optional(Type.Any({ description: "Target agent name (string) or array" })),
-      message: Type.Optional(Type.String({ description: "Message text (send/broadcast) or spawn objective" })),
+      channel: Type.Optional(Type.String({ description: "Optional channel name/id for join/feed/swarm/task actions, or to constrain a direct send to a specific joined channel. For channel posts, prefer to: '#channel'." })),
+      create: Type.Optional(Type.Boolean({ description: "Create the channel if it does not exist when joining." })),
+      to: Type.Optional(Type.Any({ description: "Required for send. Target agent name, array of agent names, or channel name starting with # (for example '#memory')." })),
+      message: Type.Optional(Type.String({ description: "Message text for send, or spawn objective text." })),
       replyTo: Type.Optional(Type.String({ description: "Message ID for replies" })),
       reason: Type.Optional(Type.String({ description: "Reason for reserve or task.block" })),
       autoRegisterPath: Type.Optional(StringEnum(["add", "remove", "list"], { description: "Manage auto-register paths" })),
@@ -402,6 +439,7 @@ Usage (swarm-first API):
     async execute(_toolCallId, rawParams, signal, _onUpdate, ctx) {
       const params = rawParams as MessengerActionParams;
       latestCtx = ctx;
+      syncContextSession(ctx);
 
       const action = params.action;
       if (!action) {
@@ -437,6 +475,8 @@ Usage (swarm-first API):
     description: "Open messenger overlay, or 'config' to manage settings",
     handler: async (args, ctx) => {
       if (!ctx.hasUI) return;
+      latestCtx = ctx;
+      syncContextSession(ctx);
 
       // /messenger config - open config overlay
       if (args[0] === "config") {
@@ -474,6 +514,16 @@ Usage (swarm-first API):
             content: snapshotText,
             display: true,
           }, { triggerTurn: true });
+        },
+        onSwitchChannel: (channelId) => {
+          const switched = store.joinChannel(state, dirs, channelId);
+          if (!switched.success) return false;
+          store.stopWatcher(state);
+          resetChannelScopedUiState();
+          state.watcherRetries = 0;
+          store.startWatcher(state, dirs, deliverMessage);
+          updateStatus(ctx);
+          return true;
         },
       };
 
@@ -583,7 +633,7 @@ Usage (swarm-first API):
     const existing = pendingEdits.get(filePath);
     if (existing) clearTimeout(existing);
     pendingEdits.set(filePath, setTimeout(() => {
-      logFeedEvent(process.cwd(), state.agentName, "edit", filePath);
+      logFeedEvent(process.cwd(), state.agentName, "edit", filePath, undefined, state.currentChannel);
       pendingEdits.delete(filePath);
     }, EDIT_DEBOUNCE_MS));
   }
@@ -702,13 +752,13 @@ Usage (swarm-first API):
         const cwd = ctx.cwd ?? process.cwd();
         if (isGitCommit(command)) {
           const msg = extractCommitMessage(command);
-          logFeedEvent(cwd, state.agentName, "commit", undefined, msg);
+          logFeedEvent(cwd, state.agentName, "commit", undefined, msg, state.currentChannel);
           setLastToolCall(`commit: ${msg}`);
           trackRecentCommit();
         }
         if (isTestRun(command)) {
           const passed = !event.isError;
-          logFeedEvent(cwd, state.agentName, "test", undefined, passed ? "passed" : "failed");
+          logFeedEvent(cwd, state.agentName, "test", undefined, passed ? "passed" : "failed", state.currentChannel);
           setLastToolCall(`test: ${passed ? "passed" : "failed"}`);
           trackRecentTest();
         }
@@ -730,6 +780,8 @@ Usage (swarm-first API):
     state.isHuman = ctx.hasUI;
     try { fs.rmSync(join(homedir(), ".pi/agent/messenger/feed.jsonl"), { force: true }); } catch {}
 
+    syncContextSession(ctx);
+
     const shouldAutoRegister = config.autoRegister || 
       matchesAutoRegisterPath(process.cwd(), config.autoRegisterPaths);
 
@@ -738,12 +790,15 @@ Usage (swarm-first API):
       return;
     }
 
+    const wasRegistered = state.registered;
     if (store.register(state, dirs, ctx, nameTheme)) {
       const cwd = ctx.cwd ?? process.cwd();
       store.startWatcher(state, dirs, deliverMessage);
       updateStatus(ctx);
-      pruneFeed(cwd, config.feedRetention);
-      logFeedEvent(cwd, state.agentName, "join");
+      if (!wasRegistered) {
+        pruneFeed(cwd, config.feedRetention, state.currentChannel);
+        logFeedEvent(cwd, state.agentName, "join", undefined, undefined, state.currentChannel);
+      }
 
       if (config.registrationContext) {
         sendRegistrationContext(ctx);
@@ -766,12 +821,14 @@ Usage (swarm-first API):
 
   pi.on("session_switch", async (_event, ctx) => {
     latestCtx = ctx;
+    syncContextSession(ctx);
     recoverWatcherIfNeeded();
     updateStatus(ctx);
     maybeAutoOpenSwarmOverlay(ctx);
   });
   pi.on("session_fork", async (_event, ctx) => {
     latestCtx = ctx;
+    syncContextSession(ctx);
     recoverWatcherIfNeeded();
     updateStatus(ctx);
     maybeAutoOpenSwarmOverlay(ctx);
@@ -784,6 +841,7 @@ Usage (swarm-first API):
 
   pi.on("turn_end", async (event, ctx) => {
     latestCtx = ctx;
+    syncContextSession(ctx);
     store.processAllPendingMessages(state, dirs, deliverMessage);
     recoverWatcherIfNeeded();
     updateStatus(ctx);
@@ -820,26 +878,29 @@ Usage (swarm-first API):
     overlayHandle = null;
     overlayTui = null;
     if (state.registered) {
-      // Release any tasks claimed by this agent before leaving
-      const claimedTasks = swarmStore.getTasks(cwd).filter(
-        t => t.status === "in_progress" && t.claimed_by === state.agentName
-      );
-      for (const task of claimedTasks) {
-        swarmStore.unclaimTask(cwd, task.id, state.agentName);
-        logFeedEvent(cwd, state.agentName, "task.reset", task.id, "agent left - task unclaimed");
+      const channels = state.joinedChannels.length > 0 ? state.joinedChannels : [state.currentChannel];
+      for (const channel of channels) {
+        const claimedTasks = swarmStore.getTasks(cwd, channel).filter(
+          t => t.status === "in_progress" && t.claimed_by === state.agentName
+        );
+        for (const task of claimedTasks) {
+          swarmStore.unclaimTask(cwd, task.id, state.agentName, channel);
+          logFeedEvent(cwd, state.agentName, "task.reset", task.id, "agent left - task unclaimed", channel);
+        }
       }
-      // Also clean up any tasks claimed by our spawned agents (they may not have time to clean up)
       const { listSpawned } = await import("./swarm/spawn.js");
       const spawnedAgents = listSpawned(cwd);
       const spawnedNames = new Set(spawnedAgents.map(s => s.name));
-      const spawnedClaimedTasks = swarmStore.getTasks(cwd).filter(
-        t => t.status === "in_progress" && t.claimed_by && spawnedNames.has(t.claimed_by)
-      );
-      for (const task of spawnedClaimedTasks) {
-        swarmStore.unclaimTask(cwd, task.id, task.claimed_by!);
-        logFeedEvent(cwd, task.claimed_by!, "task.reset", task.id, "parent agent left - task unclaimed");
+      for (const channel of channels) {
+        const spawnedClaimedTasks = swarmStore.getTasks(cwd, channel).filter(
+          t => t.status === "in_progress" && t.claimed_by && spawnedNames.has(t.claimed_by)
+        );
+        for (const task of spawnedClaimedTasks) {
+          swarmStore.unclaimTask(cwd, task.id, task.claimed_by!, channel);
+          logFeedEvent(cwd, task.claimed_by!, "task.reset", task.id, "parent agent left - task unclaimed", channel);
+        }
       }
-      logFeedEvent(cwd, state.agentName, "leave");
+      logFeedEvent(cwd, state.agentName, "leave", undefined, undefined, state.currentChannel);
     }
     if (state.registryFlushTimer) {
       clearTimeout(state.registryFlushTimer);

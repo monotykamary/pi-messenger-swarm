@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { isProcessAlive } from "../lib.js";
 import { logFeedEvent } from "../feed.js";
+import { normalizeChannelId } from "../channel.js";
 import type { SwarmSummary, SwarmTask, SwarmTaskCreateInput, SwarmTaskEvidence } from "./types.js";
 
 function ensureDir(dir: string): void {
@@ -52,35 +53,39 @@ function moveFile(src: string, dst: string): void {
 }
 
 export function getSwarmDir(cwd: string): string {
-  return path.join(cwd, ".pi", "messenger", "swarm");
+  return path.join(cwd, ".pi", "messenger");
 }
 
-export function getTasksDir(cwd: string): string {
+export function getTasksRootDir(cwd: string): string {
   return path.join(getSwarmDir(cwd), "tasks");
 }
 
-export function getArchiveDir(cwd: string): string {
-  return path.join(getSwarmDir(cwd), "archive");
+export function getTasksDir(cwd: string, channelId: string = "general"): string {
+  return path.join(getTasksRootDir(cwd), normalizeChannelId(channelId));
 }
 
-function getBlocksDir(cwd: string): string {
-  return path.join(getSwarmDir(cwd), "blocks");
+export function getArchiveDir(cwd: string, channelId: string = "general"): string {
+  return path.join(getSwarmDir(cwd), "archive", normalizeChannelId(channelId));
 }
 
-function taskJsonPath(cwd: string, taskId: string): string {
-  return path.join(getTasksDir(cwd), `${taskId}.json`);
+function getBlocksDir(cwd: string, channelId: string = "general"): string {
+  return path.join(getTasksDir(cwd, channelId), "blocks");
 }
 
-function taskSpecPath(cwd: string, taskId: string): string {
-  return path.join(getTasksDir(cwd), `${taskId}.md`);
+function taskJsonPath(cwd: string, taskId: string, channelId: string = "general"): string {
+  return path.join(getTasksDir(cwd, channelId), `${taskId}.json`);
 }
 
-function taskProgressPath(cwd: string, taskId: string): string {
-  return path.join(getTasksDir(cwd), `${taskId}.progress.md`);
+function taskSpecPath(cwd: string, taskId: string, channelId: string = "general"): string {
+  return path.join(getTasksDir(cwd, channelId), `${taskId}.md`);
 }
 
-function taskBlockPath(cwd: string, taskId: string): string {
-  return path.join(getBlocksDir(cwd), `${taskId}.md`);
+function taskProgressPath(cwd: string, taskId: string, channelId: string = "general"): string {
+  return path.join(getTasksDir(cwd, channelId), `${taskId}.progress.md`);
+}
+
+function taskBlockPath(cwd: string, taskId: string, channelId: string = "general"): string {
+  return path.join(getBlocksDir(cwd, channelId), `${taskId}.md`);
 }
 
 function taskNumericId(taskId: string): number {
@@ -89,16 +94,17 @@ function taskNumericId(taskId: string): number {
   return Number.parseInt(match[1], 10);
 }
 
-function normalizeTask(task: SwarmTask): SwarmTask {
+function normalizeTask(task: SwarmTask, channelId: string): SwarmTask {
   return {
     ...task,
     depends_on: Array.isArray(task.depends_on) ? task.depends_on : [],
     attempt_count: typeof task.attempt_count === "number" ? task.attempt_count : 0,
+    channel: task.channel ?? normalizeChannelId(channelId),
   };
 }
 
-function allocateTaskId(cwd: string): string {
-  const tasksDir = getTasksDir(cwd);
+function allocateTaskId(cwd: string, channelId: string = "general"): string {
+  const tasksDir = getTasksDir(cwd, channelId);
   if (!fs.existsSync(tasksDir)) return "task-1";
 
   let max = 0;
@@ -110,94 +116,81 @@ function allocateTaskId(cwd: string): string {
   return `task-${max + 1}`;
 }
 
-export function getTask(cwd: string, taskId: string): SwarmTask | null {
-  const raw = readJson<SwarmTask>(taskJsonPath(cwd, taskId));
-  return raw ? normalizeTask(raw) : null;
+export function getTask(cwd: string, taskId: string, channelId: string = "general"): SwarmTask | null {
+  const raw = readJson<SwarmTask>(taskJsonPath(cwd, taskId, channelId));
+  return raw ? normalizeTask(raw, channelId) : null;
 }
 
 function isAgentActive(cwd: string, agentName: string): boolean | null {
-  // Check if agent has a valid registration file with a live PID
-  // Returns: true = active, false = dead/clean up, null = unknown (no registry)
   const regPath = path.join(cwd, ".pi", "messenger", "registry", `${agentName}.json`);
-  if (!fs.existsSync(regPath)) return null; // Unknown - no registry to check
+  if (!fs.existsSync(regPath)) return null;
 
   try {
     const reg = JSON.parse(fs.readFileSync(regPath, "utf-8"));
-    if (!reg.pid || !isProcessAlive(reg.pid)) return false; // Dead - clean up
-    return true; // Active
+    if (!reg.pid || !isProcessAlive(reg.pid)) return false;
+    return true;
   } catch {
-    return false; // Invalid registration - clean up
+    return false;
   }
 }
 
-/**
- * Cleans up stale task claims from agents that have crashed or died.
- * This is called automatically during getTasks() to ensure reconciliation.
- * Only cleans up when we can verify the agent is dead (has dead PID in registry).
- */
-export function cleanupStaleTaskClaims(cwd: string): number {
-  // Skip cleanup if no registry exists (tests, or fresh project)
+export function cleanupStaleTaskClaims(cwd: string, channelId: string = "general"): number {
   const registryDir = path.join(cwd, ".pi", "messenger", "registry");
   if (!fs.existsSync(registryDir)) return 0;
 
-  const tasks = getTasks(cwd);
+  const tasks = getTasks(cwd, channelId);
   let cleaned = 0;
 
-  // Get list of all known agents for null-check logic
-  const knownAgents = fs.existsSync(registryDir) 
+  const knownAgents = fs.existsSync(registryDir)
     ? fs.readdirSync(registryDir).filter(f => f.endsWith(".json")).map(f => f.slice(0, -5))
     : [];
 
   for (const task of tasks) {
     if (task.status !== "in_progress" || !task.claimed_by) continue;
 
-    // Check if the claiming agent is still active
     const active = isAgentActive(cwd, task.claimed_by);
     if (active === false) {
-      // Agent is confirmed dead (registry exists but PID is dead) - unclaim the task
-      unclaimTask(cwd, task.id, task.claimed_by);
-      logFeedEvent(cwd, task.claimed_by, "task.reset", task.id, "agent crashed - task auto-unclaimed");
+      unclaimTask(cwd, task.id, task.claimed_by, channelId);
+      logFeedEvent(cwd, task.claimed_by, "task.reset", task.id, "agent crashed - task auto-unclaimed", channelId);
       cleaned++;
     } else if (active === null && knownAgents.length > 0) {
-      // Agent has no registry, but other agents do - agent left gracefully, unclaim
-      // Only do this if there are known agents (to avoid false positives in test environments)
-      unclaimTask(cwd, task.id, task.claimed_by);
-      logFeedEvent(cwd, task.claimed_by, "task.reset", task.id, "agent left - task auto-unclaimed");
+      unclaimTask(cwd, task.id, task.claimed_by, channelId);
+      logFeedEvent(cwd, task.claimed_by, "task.reset", task.id, "agent left - task auto-unclaimed", channelId);
       cleaned++;
     }
-    // If active === null and no known agents, we don't clean up - might be test environment
   }
 
   return cleaned;
 }
 
-// Last cleanup timestamp to throttle checks (max once per 30 seconds)
-let lastCleanupTime = 0;
+const lastCleanupTimes = new Map<string, number>();
 const CLEANUP_THROTTLE_MS = 30_000;
 
-export function getTasks(cwd: string): SwarmTask[] {
-  const dir = getTasksDir(cwd);
+export function getTasks(cwd: string, channelId: string = "general"): SwarmTask[] {
+  const normalizedChannel = normalizeChannelId(channelId);
+  const dir = getTasksDir(cwd, normalizedChannel);
   if (!fs.existsSync(dir)) return [];
 
-  // Throttled stale claim cleanup (reconciliation for crashed agents)
+  const key = `${cwd}:${normalizedChannel}`;
   const now = Date.now();
+  const lastCleanupTime = lastCleanupTimes.get(key) ?? 0;
   if (now - lastCleanupTime > CLEANUP_THROTTLE_MS) {
-    lastCleanupTime = now;
-    cleanupStaleTaskClaims(cwd);
+    lastCleanupTimes.set(key, now);
+    cleanupStaleTaskClaims(cwd, normalizedChannel);
   }
 
   const tasks: SwarmTask[] = [];
   for (const file of fs.readdirSync(dir)) {
     if (!file.endsWith(".json")) continue;
     const raw = readJson<SwarmTask>(path.join(dir, file));
-    if (raw) tasks.push(normalizeTask(raw));
+    if (raw) tasks.push(normalizeTask(raw, normalizedChannel));
   }
 
   return tasks.sort((a, b) => taskNumericId(a.id) - taskNumericId(b.id));
 }
 
-export function getSummary(cwd: string): SwarmSummary {
-  const tasks = getTasks(cwd);
+export function getSummary(cwd: string, channelId: string = "general"): SwarmSummary {
+  const tasks = getTasks(cwd, channelId);
   const summary: SwarmSummary = {
     total: tasks.length,
     todo: 0,
@@ -213,22 +206,24 @@ export function getSummary(cwd: string): SwarmSummary {
   return summary;
 }
 
-export function updateTask(cwd: string, taskId: string, updates: Partial<SwarmTask>): SwarmTask | null {
-  const existing = getTask(cwd, taskId);
+export function updateTask(cwd: string, taskId: string, updates: Partial<SwarmTask>, channelId: string = "general"): SwarmTask | null {
+  const existing = getTask(cwd, taskId, channelId);
   if (!existing) return null;
 
   const updated: SwarmTask = {
     ...existing,
     ...updates,
+    channel: existing.channel ?? normalizeChannelId(channelId),
     updated_at: new Date().toISOString(),
   };
 
-  writeJson(taskJsonPath(cwd, taskId), updated);
+  writeJson(taskJsonPath(cwd, taskId, channelId), updated);
   return updated;
 }
 
-export function createTask(cwd: string, input: SwarmTaskCreateInput): SwarmTask {
-  const id = allocateTaskId(cwd);
+export function createTask(cwd: string, input: SwarmTaskCreateInput, channelId: string = input.channel ?? "general"): SwarmTask {
+  const normalizedChannel = normalizeChannelId(channelId);
+  const id = allocateTaskId(cwd, normalizedChannel);
   const now = new Date().toISOString();
 
   const task: SwarmTask = {
@@ -240,31 +235,32 @@ export function createTask(cwd: string, input: SwarmTaskCreateInput): SwarmTask 
     updated_at: now,
     created_by: input.createdBy,
     attempt_count: 0,
+    channel: normalizedChannel,
   };
 
-  writeJson(taskJsonPath(cwd, id), task);
-  writeText(taskSpecPath(cwd, id), input.content?.trim()
+  writeJson(taskJsonPath(cwd, id, normalizedChannel), task);
+  writeText(taskSpecPath(cwd, id, normalizedChannel), input.content?.trim()
     ? `# ${input.title}\n\n${input.content.trim()}\n`
     : `# ${input.title}\n\n*Spec pending*\n`);
 
   return task;
 }
 
-export function deleteTask(cwd: string, taskId: string): boolean {
-  const existing = getTask(cwd, taskId);
+export function deleteTask(cwd: string, taskId: string, channelId: string = "general"): boolean {
+  const existing = getTask(cwd, taskId, channelId);
   if (!existing) return false;
 
-  try { fs.unlinkSync(taskJsonPath(cwd, taskId)); } catch {}
-  try { fs.unlinkSync(taskSpecPath(cwd, taskId)); } catch {}
-  try { fs.unlinkSync(taskProgressPath(cwd, taskId)); } catch {}
-  try { fs.unlinkSync(taskBlockPath(cwd, taskId)); } catch {}
+  try { fs.unlinkSync(taskJsonPath(cwd, taskId, channelId)); } catch {}
+  try { fs.unlinkSync(taskSpecPath(cwd, taskId, channelId)); } catch {}
+  try { fs.unlinkSync(taskProgressPath(cwd, taskId, channelId)); } catch {}
+  try { fs.unlinkSync(taskBlockPath(cwd, taskId, channelId)); } catch {}
 
-  const tasks = getTasks(cwd);
+  const tasks = getTasks(cwd, channelId);
   for (const task of tasks) {
     if (!task.depends_on.includes(taskId)) continue;
     updateTask(cwd, task.id, {
       depends_on: task.depends_on.filter(dep => dep !== taskId),
-    });
+    }, channelId);
   }
 
   return true;
@@ -276,24 +272,24 @@ export interface ArchiveDoneResult {
   archiveDir: string | null;
 }
 
-function archiveTasks(cwd: string, tasksToArchive: SwarmTask[]): ArchiveDoneResult {
+function archiveTasks(cwd: string, tasksToArchive: SwarmTask[], channelId: string = "general"): ArchiveDoneResult {
   if (tasksToArchive.length === 0) {
     return { archived: 0, archivedIds: [], archiveDir: null };
   }
 
   const archivedIds = tasksToArchive.map(task => task.id);
-  const archiveRunDir = path.join(getArchiveDir(cwd), new Date().toISOString().replace(/[:.]/g, "-"));
+  const archiveRunDir = path.join(getArchiveDir(cwd, channelId), new Date().toISOString().replace(/[:.]/g, "-"));
   const archiveTasksDir = path.join(archiveRunDir, "tasks");
   const archiveBlocksDir = path.join(archiveRunDir, "blocks");
 
   ensureDir(archiveTasksDir);
 
   for (const task of tasksToArchive) {
-    moveFile(taskJsonPath(cwd, task.id), path.join(archiveTasksDir, `${task.id}.json`));
-    moveFile(taskSpecPath(cwd, task.id), path.join(archiveTasksDir, `${task.id}.md`));
-    moveFile(taskProgressPath(cwd, task.id), path.join(archiveTasksDir, `${task.id}.progress.md`));
+    moveFile(taskJsonPath(cwd, task.id, channelId), path.join(archiveTasksDir, `${task.id}.json`));
+    moveFile(taskSpecPath(cwd, task.id, channelId), path.join(archiveTasksDir, `${task.id}.md`));
+    moveFile(taskProgressPath(cwd, task.id, channelId), path.join(archiveTasksDir, `${task.id}.progress.md`));
 
-    const blockSrc = taskBlockPath(cwd, task.id);
+    const blockSrc = taskBlockPath(cwd, task.id, channelId);
     if (fs.existsSync(blockSrc)) {
       ensureDir(archiveBlocksDir);
       moveFile(blockSrc, path.join(archiveBlocksDir, `${task.id}.md`));
@@ -301,11 +297,11 @@ function archiveTasks(cwd: string, tasksToArchive: SwarmTask[]): ArchiveDoneResu
   }
 
   const archivedSet = new Set(archivedIds);
-  for (const task of getTasks(cwd)) {
+  for (const task of getTasks(cwd, channelId)) {
     if (!task.depends_on.some(dep => archivedSet.has(dep))) continue;
     updateTask(cwd, task.id, {
       depends_on: task.depends_on.filter(dep => !archivedSet.has(dep)),
-    });
+    }, channelId);
   }
 
   return {
@@ -315,55 +311,55 @@ function archiveTasks(cwd: string, tasksToArchive: SwarmTask[]): ArchiveDoneResu
   };
 }
 
-export function archiveDoneTasks(cwd: string): ArchiveDoneResult {
-  const doneTasks = getTasks(cwd).filter(task => task.status === "done");
-  return archiveTasks(cwd, doneTasks);
+export function archiveDoneTasks(cwd: string, channelId: string = "general"): ArchiveDoneResult {
+  const doneTasks = getTasks(cwd, channelId).filter(task => task.status === "done");
+  return archiveTasks(cwd, doneTasks, channelId);
 }
 
-export function archiveTask(cwd: string, taskId: string): ArchiveDoneResult {
-  const task = getTask(cwd, taskId);
+export function archiveTask(cwd: string, taskId: string, channelId: string = "general"): ArchiveDoneResult {
+  const task = getTask(cwd, taskId, channelId);
   if (!task || task.status !== "done") {
     return { archived: 0, archivedIds: [], archiveDir: null };
   }
-  return archiveTasks(cwd, [task]);
+  return archiveTasks(cwd, [task], channelId);
 }
 
-export function getTaskSpec(cwd: string, taskId: string): string | null {
-  return readText(taskSpecPath(cwd, taskId));
+export function getTaskSpec(cwd: string, taskId: string, channelId: string = "general"): string | null {
+  return readText(taskSpecPath(cwd, taskId, channelId));
 }
 
-export function setTaskSpec(cwd: string, taskId: string, content: string): void {
-  writeText(taskSpecPath(cwd, taskId), content);
-  updateTask(cwd, taskId, {});
+export function setTaskSpec(cwd: string, taskId: string, content: string, channelId: string = "general"): void {
+  writeText(taskSpecPath(cwd, taskId, channelId), content);
+  updateTask(cwd, taskId, {}, channelId);
 }
 
-export function appendTaskProgress(cwd: string, taskId: string, agent: string, message: string): void {
+export function appendTaskProgress(cwd: string, taskId: string, agent: string, message: string, channelId: string = "general"): void {
   const ts = new Date().toISOString();
-  ensureDir(getTasksDir(cwd));
-  fs.appendFileSync(taskProgressPath(cwd, taskId), `[${ts}] (${agent}) ${message}\n`);
+  ensureDir(getTasksDir(cwd, channelId));
+  fs.appendFileSync(taskProgressPath(cwd, taskId, channelId), `[${ts}] (${agent}) ${message}\n`);
 }
 
-export function getTaskProgress(cwd: string, taskId: string): string | null {
-  const text = readText(taskProgressPath(cwd, taskId));
+export function getTaskProgress(cwd: string, taskId: string, channelId: string = "general"): string | null {
+  const text = readText(taskProgressPath(cwd, taskId, channelId));
   if (!text || text.trim().length === 0) return null;
   return text;
 }
 
-export function getBlockContext(cwd: string, taskId: string): string | null {
-  return readText(taskBlockPath(cwd, taskId));
+export function getBlockContext(cwd: string, taskId: string, channelId: string = "general"): string | null {
+  return readText(taskBlockPath(cwd, taskId, channelId));
 }
 
-export function getReadyTasks(cwd: string): SwarmTask[] {
-  const tasks = getTasks(cwd);
+export function getReadyTasks(cwd: string, channelId: string = "general"): SwarmTask[] {
+  const tasks = getTasks(cwd, channelId);
   const doneIds = new Set(tasks.filter(task => task.status === "done").map(task => task.id));
   return tasks.filter(task => task.status === "todo" && task.depends_on.every(dep => doneIds.has(dep)));
 }
 
-export function claimTask(cwd: string, taskId: string, agent: string, reason?: string): SwarmTask | null {
-  const task = getTask(cwd, taskId);
+export function claimTask(cwd: string, taskId: string, agent: string, reason?: string, channelId: string = "general"): SwarmTask | null {
+  const task = getTask(cwd, taskId, channelId);
   if (!task || task.status !== "todo") return null;
 
-  const readyIds = new Set(getReadyTasks(cwd).map(t => t.id));
+  const readyIds = new Set(getReadyTasks(cwd, channelId).map(t => t.id));
   if (task.depends_on.length > 0 && !readyIds.has(taskId)) return null;
 
   const claimed = updateTask(cwd, taskId, {
@@ -372,17 +368,17 @@ export function claimTask(cwd: string, taskId: string, agent: string, reason?: s
     claimed_at: new Date().toISOString(),
     blocked_reason: undefined,
     attempt_count: task.attempt_count + 1,
-  });
+  }, channelId);
 
   if (claimed && reason) {
-    appendTaskProgress(cwd, taskId, agent, `Claimed task (${reason})`);
+    appendTaskProgress(cwd, taskId, agent, `Claimed task (${reason})`, channelId);
   }
 
   return claimed;
 }
 
-export function unclaimTask(cwd: string, taskId: string, agent: string): SwarmTask | null {
-  const task = getTask(cwd, taskId);
+export function unclaimTask(cwd: string, taskId: string, agent: string, channelId: string = "general"): SwarmTask | null {
+  const task = getTask(cwd, taskId, channelId);
   if (!task || task.status !== "in_progress") return null;
   if (task.claimed_by && task.claimed_by !== agent) return null;
 
@@ -390,7 +386,7 @@ export function unclaimTask(cwd: string, taskId: string, agent: string): SwarmTa
     status: "todo",
     claimed_by: undefined,
     claimed_at: undefined,
-  });
+  }, channelId);
 }
 
 export function completeTask(
@@ -399,8 +395,9 @@ export function completeTask(
   agent: string,
   summary: string,
   evidence?: SwarmTaskEvidence,
+  channelId: string = "general",
 ): SwarmTask | null {
-  const task = getTask(cwd, taskId);
+  const task = getTask(cwd, taskId, channelId);
   if (!task || task.status !== "in_progress") return null;
   if (task.claimed_by && task.claimed_by !== agent) return null;
 
@@ -410,39 +407,39 @@ export function completeTask(
     completed_at: new Date().toISOString(),
     summary,
     evidence,
-  });
+  }, channelId);
 }
 
-export function blockTask(cwd: string, taskId: string, agent: string, reason: string): SwarmTask | null {
-  const task = getTask(cwd, taskId);
+export function blockTask(cwd: string, taskId: string, agent: string, reason: string, channelId: string = "general"): SwarmTask | null {
+  const task = getTask(cwd, taskId, channelId);
   if (!task) return null;
   if (task.status === "done") return null;
   if (task.status === "in_progress" && task.claimed_by && task.claimed_by !== agent) return null;
 
-  writeText(taskBlockPath(cwd, taskId), `# Blocked: ${task.title}\n\n**Reason:** ${reason}\n\n**Blocked at:** ${new Date().toISOString()}\n`);
+  writeText(taskBlockPath(cwd, taskId, channelId), `# Blocked: ${task.title}\n\n**Reason:** ${reason}\n\n**Blocked at:** ${new Date().toISOString()}\n`);
 
   return updateTask(cwd, taskId, {
     status: "blocked",
     blocked_reason: reason,
     claimed_by: undefined,
     claimed_at: undefined,
-  });
+  }, channelId);
 }
 
-export function unblockTask(cwd: string, taskId: string): SwarmTask | null {
-  const task = getTask(cwd, taskId);
+export function unblockTask(cwd: string, taskId: string, channelId: string = "general"): SwarmTask | null {
+  const task = getTask(cwd, taskId, channelId);
   if (!task || task.status !== "blocked") return null;
 
-  try { fs.unlinkSync(taskBlockPath(cwd, taskId)); } catch {}
+  try { fs.unlinkSync(taskBlockPath(cwd, taskId, channelId)); } catch {}
 
   return updateTask(cwd, taskId, {
     status: "todo",
     blocked_reason: undefined,
-  });
+  }, channelId);
 }
 
-export function resetTask(cwd: string, taskId: string, cascade: boolean = false): SwarmTask[] {
-  const task = getTask(cwd, taskId);
+export function resetTask(cwd: string, taskId: string, cascade: boolean = false, channelId: string = "general"): SwarmTask[] {
+  const task = getTask(cwd, taskId, channelId);
   if (!task) return [];
 
   const reset: SwarmTask[] = [];
@@ -456,13 +453,13 @@ export function resetTask(cwd: string, taskId: string, cascade: boolean = false)
     summary: undefined,
     evidence: undefined,
     blocked_reason: undefined,
-  });
+  }, channelId);
   if (base) reset.push(base);
 
-  try { fs.unlinkSync(taskBlockPath(cwd, taskId)); } catch {}
+  try { fs.unlinkSync(taskBlockPath(cwd, taskId, channelId)); } catch {}
 
   if (cascade) {
-    for (const dependent of getTransitiveDependents(cwd, taskId)) {
+    for (const dependent of getTransitiveDependents(cwd, taskId, channelId)) {
       if (dependent.status === "todo") continue;
       const updated = updateTask(cwd, dependent.id, {
         status: "todo",
@@ -473,25 +470,25 @@ export function resetTask(cwd: string, taskId: string, cascade: boolean = false)
         summary: undefined,
         evidence: undefined,
         blocked_reason: undefined,
-      });
+      }, channelId);
       if (updated) reset.push(updated);
-      try { fs.unlinkSync(taskBlockPath(cwd, dependent.id)); } catch {}
+      try { fs.unlinkSync(taskBlockPath(cwd, dependent.id, channelId)); } catch {}
     }
   }
 
   return reset;
 }
 
-export function startTask(cwd: string, taskId: string, agent: string): SwarmTask | null {
-  return claimTask(cwd, taskId, agent);
+export function startTask(cwd: string, taskId: string, agent: string, channelId: string = "general"): SwarmTask | null {
+  return claimTask(cwd, taskId, agent, undefined, channelId);
 }
 
-export function stopTask(cwd: string, taskId: string, agent: string): SwarmTask | null {
-  return unclaimTask(cwd, taskId, agent);
+export function stopTask(cwd: string, taskId: string, agent: string, channelId: string = "general"): SwarmTask | null {
+  return unclaimTask(cwd, taskId, agent, channelId);
 }
 
-export function getTransitiveDependents(cwd: string, rootId: string): SwarmTask[] {
-  const tasks = getTasks(cwd);
+export function getTransitiveDependents(cwd: string, rootId: string, channelId: string = "general"): SwarmTask[] {
+  const tasks = getTasks(cwd, channelId);
   const found = new Set<string>();
   const queue = [rootId];
 
@@ -508,10 +505,10 @@ export function getTransitiveDependents(cwd: string, rootId: string): SwarmTask[
   return tasks.filter(task => found.has(task.id));
 }
 
-export function hasAnyTasks(cwd: string): boolean {
-  return getTasks(cwd).length > 0;
+export function hasAnyTasks(cwd: string, channelId: string = "general"): boolean {
+  return getTasks(cwd, channelId).length > 0;
 }
 
-export function agentHasClaimedTask(cwd: string, agentName: string): boolean {
-  return getTasks(cwd).some(task => task.status === "in_progress" && task.claimed_by === agentName);
+export function agentHasClaimedTask(cwd: string, agentName: string, channelId: string = "general"): boolean {
+  return getTasks(cwd, channelId).some(task => task.status === "in_progress" && task.claimed_by === agentName);
 }

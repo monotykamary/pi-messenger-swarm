@@ -34,7 +34,7 @@ function createState(agentName: string): MessengerState {
     reservations: [],
     chatHistory: new Map(),
     unreadCounts: new Map(),
-    broadcastHistory: [],
+    channelPostHistory: [],
     seenSenders: new Map(),
     model: "test-model",
     gitBranch: "main",

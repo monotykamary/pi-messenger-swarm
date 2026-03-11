@@ -22,6 +22,7 @@ import {
   buildSelfRegistration,
   agentHasTask,
 } from "./lib.js";
+import { displayChannelLabel, normalizeChannelId } from "./channel.js";
 import * as store from "./store.js";
 import * as swarmStore from "./swarm/store.js";
 import { getAutoRegisterPaths, saveAutoRegisterPaths, matchesAutoRegisterPath } from "./config.js";
@@ -61,30 +62,75 @@ export function executeJoin(
   updateStatusFn: (ctx: ExtensionContext) => void,
   specPath?: string,
   nameTheme?: NameThemeConfig,
-  feedRetention?: number
+  feedRetention?: number,
+  channel?: string,
+  create?: boolean,
 ) {
-  if (state.registered) {
-    const agents = store.getActiveAgents(state, dirs);
-    return result(
-      `Already joined as ${state.agentName}. ${agents.length} peer${agents.length === 1 ? "" : "s"} active.`,
-      { mode: "join", alreadyJoined: true, name: state.agentName, peerCount: agents.length }
-    );
-  }
-
   state.isHuman = ctx.hasUI;
   const cwd = ctx.cwd ?? process.cwd();
 
-  if (!store.register(state, dirs, ctx, nameTheme)) {
+  if (!state.registered) {
+    if (!store.register(state, dirs, ctx, nameTheme)) {
+      return result(
+        "Failed to join the agent mesh. Check logs for details.",
+        { mode: "join", error: "registration_failed" }
+      );
+    }
+
+    if (channel) {
+      const switched = store.joinChannel(state, dirs, channel, { create });
+      if (!switched.success) {
+        return result(
+          switched.error === "not_found"
+            ? `Channel ${displayChannelLabel(channel)} not found.`
+            : `Invalid channel: ${channel}`,
+          { mode: "join", error: switched.error, channel }
+        );
+      }
+    }
+
+    store.startWatcher(state, dirs, deliverFn);
+    updateStatusFn(ctx);
+    pruneFeed(cwd, feedRetention ?? 50, state.currentChannel);
+    logFeedEvent(cwd, state.agentName, "join", undefined, undefined, state.currentChannel);
+  } else if (channel) {
+    const switched = store.joinChannel(state, dirs, channel, { create });
+    if (!switched.success) {
+      return result(
+        switched.error === "not_found"
+          ? `Channel ${displayChannelLabel(channel)} not found.`
+          : `Invalid channel: ${channel}`,
+        { mode: "join", error: switched.error, channel }
+      );
+    }
+    store.stopWatcher(state);
+    state.chatHistory.clear();
+    state.channelPostHistory = [];
+    state.unreadCounts.clear();
+    state.seenSenders.clear();
+    state.watcherRetries = 0;
+    store.startWatcher(state, dirs, deliverFn);
+    updateStatusFn(ctx);
+
+    const label = displayChannelLabel(state.currentChannel);
+    const text = switched.switched
+      ? `Switched to ${label}.`
+      : `Already in ${label}.`;
+
+    return result(text, {
+      mode: "join",
+      alreadyJoined: !switched.switched,
+      name: state.agentName,
+      channel: state.currentChannel,
+      joinedChannels: [...state.joinedChannels],
+    });
+  } else {
+    const agents = store.getActiveAgents(state, dirs);
     return result(
-      "Failed to join the agent mesh. Check logs for details.",
-      { mode: "join", error: "registration_failed" }
+      `Already joined as ${state.agentName} in ${displayChannelLabel(state.currentChannel)}. ${agents.length} peer${agents.length === 1 ? "" : "s"} active.`,
+      { mode: "join", alreadyJoined: true, name: state.agentName, peerCount: agents.length, channel: state.currentChannel }
     );
   }
-
-  store.startWatcher(state, dirs, deliverFn);
-  updateStatusFn(ctx);
-  pruneFeed(cwd, feedRetention ?? 50);
-  logFeedEvent(cwd, state.agentName, "join");
 
   let specWarning = "";
   if (specPath) {
@@ -98,16 +144,19 @@ export function executeJoin(
   const agents = store.getActiveAgents(state, dirs);
   const folder = extractFolder(cwd);
   const locationPart = state.gitBranch ? `${folder} on ${state.gitBranch}` : folder;
+  const channelLabel = displayChannelLabel(state.currentChannel);
 
-  let text = `Joined as ${state.agentName} in ${locationPart}. ${agents.length} peer${agents.length === 1 ? "" : "s"} active.`;
+  let text = `Joined as ${state.agentName} in ${locationPart} on ${channelLabel}. ${agents.length} peer${agents.length === 1 ? "" : "s"} active.`;
 
   if (state.spec) {
     text += `\nSpec: ${displaySpecPath(state.spec, cwd)}`;
   }
 
+  text += `\nJoined channels: ${state.joinedChannels.map(displayChannelLabel).join(", ")}`;
+
   if (agents.length > 0) {
     text += `\n\nActive peers: ${agents.map(a => a.name).join(", ")}`;
-    text += `\n\nUse pi_messenger({ action: "list" }) for details, or pi_messenger({ action: "send", to: "Name", message: "..." }) to send.`;
+    text += `\n\nUse pi_messenger({ action: "list" }) for details, pi_messenger({ action: "send", to: "Name", message: "..." }) for DMs, or pi_messenger({ action: "send", to: "#memory", message: "..." }) for durable channel posts.`;
   }
 
   if (specWarning) {
@@ -120,7 +169,9 @@ export function executeJoin(
     location: locationPart,
     peerCount: agents.length,
     peers: agents.map(a => a.name),
-    spec: state.spec ? displaySpecPath(state.spec, cwd) : undefined
+    spec: state.spec ? displaySpecPath(state.spec, cwd) : undefined,
+    channel: state.currentChannel,
+    joinedChannels: [...state.joinedChannels],
   });
 }
 
@@ -132,10 +183,11 @@ export function executeStatus(state: MessengerState, dirs: Dirs, cwd: string = p
   const agents = store.getActiveAgents(state, dirs);
   const folder = extractFolder(cwd);
   const location = state.gitBranch ? `${folder} (${state.gitBranch})` : folder;
-  const myClaim = swarmStore.getTasks(cwd).find(task => task.status === "in_progress" && task.claimed_by === state.agentName);
+  const myClaim = swarmStore.getTasks(cwd, state.currentChannel).find(task => task.status === "in_progress" && task.claimed_by === state.agentName);
 
   let text = `You: ${state.agentName}\n`;
   text += `Location: ${location}\n`;
+  text += `On: ${displayChannelLabel(state.currentChannel)}\n`;
   if (myClaim) {
     text += `Claim: ${myClaim.id}${myClaim.blocked_reason ? ` - ${myClaim.blocked_reason}` : ""}\n`;
   }
@@ -145,6 +197,7 @@ export function executeStatus(state: MessengerState, dirs: Dirs, cwd: string = p
     const myRes = state.reservations.map(r => `🔒 ${truncatePathLeft(r.pattern, 40)}`);
     text += `Reservations: ${myRes.join(", ")}\n`;
   }
+  text += `Joined channels: ${state.joinedChannels.map(displayChannelLabel).join(", ")}\n`;
   text += `\nUse pi_messenger({ action: "list" }) for details, pi_messenger({ action: "task.list" }) for tasks.`;
 
   return result(text, {
@@ -154,6 +207,8 @@ export function executeStatus(state: MessengerState, dirs: Dirs, cwd: string = p
     folder,
     gitBranch: state.gitBranch,
     peerCount: agents.length,
+    channel: state.currentChannel,
+    joinedChannels: [...state.joinedChannels],
     claim: myClaim
       ? {
         id: myClaim.id,
@@ -177,6 +232,8 @@ export function executeList(state: MessengerState, dirs: Dirs, cwd: string = pro
 
   const lines: string[] = [];
   lines.push(`# Agents (${totalCount} online - project: ${folder})`, "");
+  lines.push(`Current channel: ${displayChannelLabel(state.currentChannel)}`);
+  lines.push(`Joined channels: ${state.joinedChannels.map(displayChannelLabel).join(", ")}`, "");
 
   function formatAgentLine(
     a: AgentRegistration,
@@ -213,6 +270,11 @@ export function executeList(state: MessengerState, dirs: Dirs, cwd: string = pro
       parts.push(`${tokens}`);
     }
 
+    const preferredChannel = a.currentChannel ?? a.sessionChannel;
+    if (preferredChannel) {
+      parts.push(displayChannelLabel(preferredChannel));
+    }
+
     if (a.reservations && a.reservations.length > 0) {
       const resParts = a.reservations.map(r => r.pattern).join(", ");
       parts.push(`\u{1F4C1} ${resParts}`);
@@ -227,15 +289,16 @@ export function executeList(state: MessengerState, dirs: Dirs, cwd: string = pro
 
   const allClaims = store.getClaims(dirs);
 
-  lines.push(formatAgentLine(buildSelfRegistration(state), true, agentHasTask(state.agentName, allClaims, swarmStore.getTasks(cwd))));
+  lines.push(formatAgentLine(buildSelfRegistration(state), true, agentHasTask(state.agentName, allClaims, swarmStore.getTasks(cwd, state.currentChannel))));
 
   for (const a of peers) {
-    lines.push(formatAgentLine(a, false, agentHasTask(a.name, allClaims, swarmStore.getTasks(a.cwd))));
+    const channel = a.currentChannel ?? a.sessionChannel ?? state.currentChannel;
+    lines.push(formatAgentLine(a, false, agentHasTask(a.name, allClaims, swarmStore.getTasks(a.cwd, channel))));
   }
 
-  const recentEvents = readFeedEvents(cwd, 5);
+  const recentEvents = readFeedEvents(cwd, 5, state.currentChannel);
   if (recentEvents.length > 0) {
-    lines.push("", "# Recent Activity", "");
+    lines.push("", `# Recent Activity ${displayChannelLabel(state.currentChannel)}`, "");
     for (const event of recentEvents) {
       lines.push(formatFeedLine(event));
     }
@@ -243,7 +306,7 @@ export function executeList(state: MessengerState, dirs: Dirs, cwd: string = pro
 
   return result(
     lines.join("\n").trim(),
-    { mode: "list", registered: true, agents: peers, self: state.agentName, totalCount }
+    { mode: "list", registered: true, agents: peers, self: state.agentName, totalCount, channel: state.currentChannel }
   );
 }
 
@@ -252,9 +315,9 @@ export function executeSend(
   dirs: Dirs,
   cwd: string,
   to: string | string[] | undefined,
-  broadcast: boolean | undefined,
   message?: string,
-  replyTo?: string
+  replyTo?: string,
+  channel?: string,
 ) {
   if (!state.registered) {
     return notRegisteredError();
@@ -267,35 +330,59 @@ export function executeSend(
     );
   }
 
-  let recipients: string[];
-  if (broadcast) {
-    if (process.env.PI_SWARM_SPAWNED) {
-      logFeedEvent(cwd, state.agentName, "message", undefined, message);
-      return result(
-        `Broadcast logged.`,
-        { mode: "send", sent: ["feed"], failed: [] }
-      );
-    }
-    const agents = store.getActiveAgents(state, dirs);
-    recipients = agents.map(a => a.name);
-    if (recipients.length === 0) {
-      return result(
-        "No active agents to broadcast to.",
-        { mode: "send", error: "no_recipients" }
-      );
-    }
-  } else if (to) {
-    recipients = [...new Set(Array.isArray(to) ? to : [to])];
-    if (recipients.length === 0) {
-      return result(
-        "Error: recipient list cannot be empty.",
-        { mode: "send", error: "empty_recipients" }
-      );
-    }
-  } else {
+  if (!to || (Array.isArray(to) && to.length === 0) || (typeof to === "string" && to.trim().length === 0)) {
     return result(
-      "Error: specify 'to' or 'broadcast: true'.",
+      "Error: send requires 'to'. Use an agent name, agent list, or #channel.",
       { mode: "send", error: "missing_recipient" }
+    );
+  }
+
+  const requestedChannel = channel ? normalizeChannelId(channel) : undefined;
+  const isChannelPost = typeof to === "string" && to.trim().startsWith("#");
+
+  if (isChannelPost) {
+    const targetChannel = normalizeChannelId(to);
+
+    if (process.env.PI_SWARM_SPAWNED) {
+      logFeedEvent(cwd, state.agentName, "message", undefined, message, targetChannel);
+      return result(
+        `Message posted to ${displayChannelLabel(targetChannel)}.`,
+        { mode: "send", channel: targetChannel, sent: [], failed: [] }
+      );
+    }
+
+    const agents = store.getAgentsInChannel(state, dirs, targetChannel);
+    const sent: string[] = [];
+    const failed: Array<{ name: string; error: string }> = [];
+
+    for (const agent of agents) {
+      try {
+        store.sendMessageToAgent(state, dirs, agent.name, message, replyTo, targetChannel);
+        sent.push(agent.name);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "write failed";
+        failed.push({ name: agent.name, error: msg });
+      }
+    }
+
+    logFeedEvent(cwd, state.agentName, "message", undefined, message, targetChannel);
+
+    let text = sent.length === 0
+      ? `Message posted to ${displayChannelLabel(targetChannel)}.`
+      : `Message posted to ${displayChannelLabel(targetChannel)} and delivered to ${sent.length} peer${sent.length === 1 ? "" : "s"}.`;
+    if (failed.length > 0) {
+      const failedStr = failed.map(f => `${f.name} (${f.error})`).join(", ");
+      text += ` Failed: ${failedStr}`;
+    }
+
+    return result(text, { mode: "send", channel: targetChannel, sent, failed });
+  }
+
+  const recipients = [...new Set(Array.isArray(to) ? to : [to])];
+  if (recipients.length === 0) {
+    return result(
+      "Error: recipient list cannot be empty.",
+      { mode: "send", error: "empty_recipients" }
     );
   }
 
@@ -321,8 +408,15 @@ export function executeSend(
       continue;
     }
 
+    const messageChannel = store.resolveTargetChannel(dirs, recipient, requestedChannel);
+
+    if (!messageChannel) {
+      failed.push({ name: recipient, error: requestedChannel ? `not joined to ${displayChannelLabel(requestedChannel)}` : "no active channel" });
+      continue;
+    }
+
     try {
-      store.sendMessageToAgent(state, dirs, recipient, message, replyTo);
+      store.sendMessageToAgent(state, dirs, recipient, message, replyTo, messageChannel);
       sent.push(recipient);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "write failed";
@@ -338,12 +432,9 @@ export function executeSend(
     );
   }
 
-  if (broadcast) {
-    logFeedEvent(cwd, state.agentName, "message", undefined, message);
-  } else {
-    for (const name of sent) {
-      logFeedEvent(cwd, state.agentName, "message", name, message);
-    }
+  for (const name of sent) {
+    const targetChannel = requestedChannel ?? store.resolveTargetChannel(dirs, name) ?? state.currentChannel;
+    logFeedEvent(cwd, state.agentName, "message", name, message, targetChannel);
   }
 
   let text = `Message sent to ${sent.join(", ")}.`;
@@ -352,7 +443,7 @@ export function executeSend(
     text += ` Failed: ${failedStr}`;
   }
 
-  return result(text, { mode: "send", sent, failed });
+  return result(text, { mode: "send", channel: requestedChannel ?? state.currentChannel, sent, failed });
 }
 
 export function executeReserve(
@@ -383,7 +474,7 @@ export function executeReserve(
   store.updateRegistration(state, dirs, ctx);
 
   for (const pattern of patterns) {
-    logFeedEvent(ctx.cwd ?? process.cwd(), state.agentName, "reserve", pattern, reason);
+    logFeedEvent(ctx.cwd ?? process.cwd(), state.agentName, "reserve", pattern, reason, state.currentChannel);
   }
 
   return result(`Reserved: ${patterns.join(", ")}`, { mode: "reserve", patterns, reason });
@@ -404,7 +495,7 @@ export function executeRelease(
     state.reservations = [];
     store.updateRegistration(state, dirs, ctx);
     for (const pattern of released) {
-      logFeedEvent(ctx.cwd ?? process.cwd(), state.agentName, "release", pattern);
+      logFeedEvent(ctx.cwd ?? process.cwd(), state.agentName, "release", pattern, undefined, state.currentChannel);
     }
     return result(
       released.length > 0 ? `Released all: ${released.join(", ")}` : "No reservations to release.",
@@ -418,7 +509,7 @@ export function executeRelease(
 
   store.updateRegistration(state, dirs, ctx);
   for (const pattern of releasedPatterns) {
-    logFeedEvent(ctx.cwd ?? process.cwd(), state.agentName, "release", pattern);
+    logFeedEvent(ctx.cwd ?? process.cwd(), state.agentName, "release", pattern, undefined, state.currentChannel);
   }
 
   return result(`Released ${releasedPatterns.length} reservation(s).`, { mode: "release", released: releasedPatterns });
@@ -758,32 +849,35 @@ export function executeSetStatus(
 
 export function executeFeed(
   cwd: string,
+  currentChannel: string,
   limit?: number,
-  swarmEventsInFeed: boolean = true
+  swarmEventsInFeed: boolean = true,
+  requestedChannel?: string,
 ) {
+  const channelId = normalizeChannelId(requestedChannel ?? currentChannel);
   const effectiveLimit = limit ?? 20;
   let events: FeedEvent[];
   if (!swarmEventsInFeed) {
-    events = readFeedEvents(cwd, effectiveLimit * 2);
+    events = readFeedEvents(cwd, effectiveLimit * 2, channelId);
     events = events.filter(e => !isSwarmEvent(e.type));
     events = events.slice(-effectiveLimit);
   } else {
-    events = readFeedEvents(cwd, effectiveLimit);
+    events = readFeedEvents(cwd, effectiveLimit, channelId);
   }
 
   if (events.length === 0) {
     return result(
-      "# Activity Feed\n\nNo activity yet.",
-      { mode: "feed", events: [] }
+      `# Activity Feed ${displayChannelLabel(channelId)}\n\nNo activity yet.`,
+      { mode: "feed", channel: channelId, events: [] }
     );
   }
 
-  const lines: string[] = [`# Activity Feed (last ${events.length})`, ""];
+  const lines: string[] = [`# Activity Feed ${displayChannelLabel(channelId)} (last ${events.length})`, ""];
   for (const event of events) {
     lines.push(formatFeedLine(event));
   }
 
-  return result(lines.join("\n"), { mode: "feed", events });
+  return result(lines.join("\n"), { mode: "feed", channel: channelId, events });
 }
 
 export function executeWhois(
@@ -831,7 +925,8 @@ function formatWhoisOutput(
   thresholdMs: number
 ) {
   const allClaims = store.getClaims(dirs);
-  const hasTask = agentHasTask(agent.name, allClaims, swarmStore.getTasks(agent.cwd));
+  const agentChannel = agent.currentChannel ?? agent.sessionChannel ?? "general";
+  const hasTask = agentHasTask(agent.name, allClaims, swarmStore.getTasks(agent.cwd, agentChannel));
 
   const computed = computeStatus(
     agent.activity?.lastActivityAt ?? agent.startedAt,
@@ -853,6 +948,7 @@ function formatWhoisOutput(
   lines.push(`${indicator} ${statusLabel}${idleStr}`);
   if (agent.model) lines.push(`Model: ${agent.model}`);
   if (agent.gitBranch) lines.push(`Branch: ${agent.gitBranch}`);
+  if (agent.currentChannel) lines.push(`Channel: ${displayChannelLabel(agent.currentChannel)}`);
   lines.push(`Session: ${sessionAge} - ${agent.session?.toolCalls ?? 0} tool calls - ${tokenStr} tokens`);
 
   if (agent.statusMessage) {
@@ -874,7 +970,8 @@ function formatWhoisOutput(
   }
 
   const feedCwd = isSelf ? cwd : agent.cwd;
-  const allFeedEvents = readFeedEvents(feedCwd, 100);
+  const feedChannel = agent.currentChannel ?? agent.sessionChannel ?? "general";
+  const allFeedEvents = readFeedEvents(feedCwd, 100, feedChannel);
   const agentEvents = allFeedEvents.filter(e => e.agent === agent.name).slice(-10);
   if (agentEvents.length > 0) {
     lines.push("", "## Recent Activity");

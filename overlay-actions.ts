@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { matchesKey, type TUI } from "@mariozechner/pi-tui";
 import type { AgentMailMessage, Dirs, MessengerState } from "./lib.js";
 import { MAX_CHAT_HISTORY } from "./lib.js";
-import { sendMessageToAgent, getActiveAgents } from "./store.js";
+import { sendMessageToAgent, getActiveAgents, resolveTargetChannel } from "./store.js";
 import { logFeedEvent, type FeedEvent } from "./feed.js";
 import * as swarmStore from "./swarm/store.js";
 import { executeTaskAction as runTaskAction } from "./swarm/task-actions.js";
@@ -113,6 +113,7 @@ function executeTaskAction(
   action: string,
   taskId: string,
   agentName: string,
+  channelId: string,
   reason?: string,
 ): { success: boolean; message: string } {
   if (
@@ -128,7 +129,7 @@ function executeTaskAction(
 
   const result = runTaskAction(cwd, action, taskId, agentName, reason, {
     isWorkerActive: id => hasLiveWorker(cwd, id),
-  });
+  }, channelId);
   return { success: result.success, message: result.message };
 }
 
@@ -151,18 +152,19 @@ function addToChatHistory(state: MessengerState, recipient: string, message: Age
   if (history.length > MAX_CHAT_HISTORY) history.shift();
 }
 
-function addToBroadcastHistory(state: MessengerState, text: string): void {
-  const broadcastMsg: AgentMailMessage = {
+function addToChannelPostHistory(state: MessengerState, text: string): void {
+  const channelPostMsg: AgentMailMessage = {
     id: randomUUID(),
     from: state.agentName,
-    to: "broadcast",
+    to: state.currentChannel,
     text,
     timestamp: new Date().toISOString(),
     replyTo: null,
+    channel: state.currentChannel,
   };
-  state.broadcastHistory.push(broadcastMsg);
-  if (state.broadcastHistory.length > MAX_CHAT_HISTORY) {
-    state.broadcastHistory.shift();
+  state.channelPostHistory.push(channelPostMsg);
+  if (state.channelPostHistory.length > MAX_CHAT_HISTORY) {
+    state.channelPostHistory.shift();
   }
 }
 
@@ -170,13 +172,13 @@ function previewText(text: string): string {
   return text;
 }
 
-export function handleConfirmInput(data: string, viewState: MessengerViewState, cwd: string, agentName: string, tui: TUI): void {
+export function handleConfirmInput(data: string, viewState: MessengerViewState, cwd: string, agentName: string, channelId: string = "general", tui: TUI): void {
   const action = viewState.confirmAction;
   if (!action) return;
   if (matchesKey(data, "y")) {
-    const result = executeTaskAction(cwd, action.type, action.taskId, agentName);
+    const result = executeTaskAction(cwd, action.type, action.taskId, agentName, channelId);
     if (action.type === "delete" || action.type === "archive") {
-      const tasks = swarmStore.getTasks(cwd);
+      const tasks = swarmStore.getTasks(cwd, channelId);
       if (tasks.length > 0) {
         viewState.selectedTaskIndex = Math.max(0, Math.min(viewState.selectedTaskIndex, tasks.length - 1));
       } else {
@@ -201,6 +203,7 @@ export function handleBlockReasonInput(
   cwd: string,
   task: Task | undefined,
   agentName: string,
+  channelId: string = "general",
   tui: TUI,
 ): void {
   if (matchesKey(data, "escape")) {
@@ -212,7 +215,7 @@ export function handleBlockReasonInput(
   if (matchesKey(data, "enter")) {
     const reason = viewState.blockReasonInput.trim();
     if (!reason || !task) return;
-    const result = executeTaskAction(cwd, "block", task.id, agentName, reason);
+    const result = executeTaskAction(cwd, "block", task.id, agentName, channelId, reason);
     viewState.inputMode = "normal";
     viewState.blockReasonInput = "";
     setNotification(viewState, tui, result.success, result.message);
@@ -280,9 +283,10 @@ function sendDirectMessage(
   viewState: MessengerViewState,
 ): void {
   try {
-    const msg = sendMessageToAgent(state, dirs, target, text);
+    const targetChannel = resolveTargetChannel(dirs, target) ?? state.currentChannel;
+    const msg = sendMessageToAgent(state, dirs, target, text, undefined, targetChannel);
     addToChatHistory(state, target, msg);
-    logFeedEvent(cwd, state.agentName, "message", target, previewText(text));
+    logFeedEvent(cwd, state.agentName, "message", target, previewText(text), targetChannel);
     resetMessageInput(viewState);
     setNotification(viewState, tui, true, `Sent to ${target}`);
     tui.requestRender();
@@ -293,7 +297,7 @@ function sendDirectMessage(
   }
 }
 
-function sendBroadcastMessage(
+function sendChannelPost(
   state: MessengerState,
   dirs: Dirs,
   cwd: string,
@@ -301,40 +305,36 @@ function sendBroadcastMessage(
   tui: TUI,
   viewState: MessengerViewState,
 ): void {
-  const peers = getActiveAgents(state, dirs);
+  const peers = getActiveAgents(state, dirs).filter(peer => {
+    const joined = peer.joinedChannels ?? [];
+    if (joined.length === 0 && !peer.currentChannel && !peer.sessionChannel) return true;
+    return joined.includes(state.currentChannel) || peer.currentChannel === state.currentChannel || peer.sessionChannel === state.currentChannel;
+  });
 
   let sentCount = 0;
   for (const peer of peers) {
     try {
-      sendMessageToAgent(state, dirs, peer.name, text);
+      sendMessageToAgent(state, dirs, peer.name, text, undefined, state.currentChannel);
       sentCount++;
     } catch {
       // Ignore per-recipient failures
     }
   }
 
-  // If no peers are active, treat chat input as local steering.
   if (sentCount === 0) {
-    try {
-      const selfMsg = sendMessageToAgent(state, dirs, state.agentName, text);
-      addToChatHistory(state, state.agentName, selfMsg);
-      addToBroadcastHistory(state, text);
-      logFeedEvent(cwd, state.agentName, "message", "self", previewText(text));
-      resetMessageInput(viewState);
-      setNotification(viewState, tui, true, "Steered current agent (no peers)");
-      tui.requestRender();
-      return;
-    } catch {
-      setNotification(viewState, tui, false, "Broadcast/steer failed");
-      tui.requestRender();
-      return;
-    }
+    addToChannelPostHistory(state, text);
+    logFeedEvent(cwd, state.agentName, "message", undefined, previewText(text), state.currentChannel);
+    resetMessageInput(viewState);
+    setNotification(viewState, tui, true, `Posted to ${state.currentChannel.startsWith("#") ? state.currentChannel : `#${state.currentChannel}`}`);
+    tui.requestRender();
+    return;
   }
 
-  addToBroadcastHistory(state, text);
-  logFeedEvent(cwd, state.agentName, "message", undefined, previewText(text));
+  addToChannelPostHistory(state, text);
+  logFeedEvent(cwd, state.agentName, "message", undefined, previewText(text), state.currentChannel);
   resetMessageInput(viewState);
-  setNotification(viewState, tui, true, `Broadcast to ${sentCount} peer${sentCount === 1 ? "" : "s"}`);
+  const channelLabel = state.currentChannel.startsWith("#") ? state.currentChannel : `#${state.currentChannel}`;
+  setNotification(viewState, tui, true, `Posted to ${channelLabel} and delivered to ${sentCount} peer${sentCount === 1 ? "" : "s"}`);
   tui.requestRender();
 }
 
@@ -381,14 +381,14 @@ export function handleMessageInput(
     if (raw.startsWith("@all ")) {
       const text = raw.slice(5).trim();
       if (!text) return;
-      sendBroadcastMessage(state, dirs, cwd, text, tui, viewState);
+      sendChannelPost(state, dirs, cwd, text, tui, viewState);
       return;
     }
 
     if (raw.startsWith("@")) {
       const firstSpace = raw.indexOf(" ");
       if (firstSpace <= 1) {
-        setNotification(viewState, tui, false, "Use @name <message> or type to broadcast");
+        setNotification(viewState, tui, false, "Use @name <message> or type to post to the current channel");
         tui.requestRender();
         return;
       }
@@ -396,7 +396,7 @@ export function handleMessageInput(
       const target = raw.slice(1, firstSpace).trim();
       const text = raw.slice(firstSpace + 1).trim();
       if (!target || !text) {
-        setNotification(viewState, tui, false, "Use @name <message> or type to broadcast");
+        setNotification(viewState, tui, false, "Use @name <message> or type to post to the current channel");
         tui.requestRender();
         return;
       }
@@ -405,7 +405,7 @@ export function handleMessageInput(
       return;
     }
 
-    sendBroadcastMessage(state, dirs, cwd, raw, tui, viewState);
+    sendChannelPost(state, dirs, cwd, raw, tui, viewState);
     return;
   }
 
@@ -433,16 +433,17 @@ export function handleTaskKeyBinding(
   viewState: MessengerViewState,
   cwd: string,
   agentName: string,
+  channelId: string = "general",
   tui: TUI,
 ): void {
   if (matchesKey(data, "s") && task.status === "todo") {
-    const result = executeTaskAction(cwd, "start", task.id, agentName);
+    const result = executeTaskAction(cwd, "start", task.id, agentName, channelId);
     setNotification(viewState, tui, result.success, result.message);
     tui.requestRender();
     return;
   }
   if (matchesKey(data, "u") && task.status === "blocked") {
-    const result = executeTaskAction(cwd, "unblock", task.id, agentName);
+    const result = executeTaskAction(cwd, "unblock", task.id, agentName, channelId);
     setNotification(viewState, tui, result.success, result.message);
     tui.requestRender();
     return;
@@ -454,7 +455,7 @@ export function handleTaskKeyBinding(
     return;
   }
   if (matchesKey(data, "q") && task.status === "in_progress") {
-    const result = executeTaskAction(cwd, "stop", task.id, agentName);
+    const result = executeTaskAction(cwd, "stop", task.id, agentName, channelId);
     setNotification(viewState, tui, result.success, result.message);
     tui.requestRender();
     return;

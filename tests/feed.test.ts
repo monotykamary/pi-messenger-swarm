@@ -14,7 +14,7 @@ describe("feed", () => {
   it("writes events to the project-scoped feed path", () => {
     logFeedEvent(cwd, "AgentOne", "join");
 
-    const feedFile = path.join(cwd, ".pi", "messenger", "feed.jsonl");
+    const feedFile = path.join(cwd, ".pi", "messenger", "feed", "general.jsonl");
     expect(fs.existsSync(feedFile)).toBe(true);
     expect(readFeedEvents(cwd, 20)).toHaveLength(1);
   });
@@ -86,7 +86,7 @@ describe("feed", () => {
     expect(line).toContain("Hey, are you exporting the User type?");
   });
 
-  it("formats broadcast message events with ✦ indicator", () => {
+  it("formats channel post message events with ✦ indicator", () => {
     const line = formatFeedLine({
       ts: new Date("2026-02-13T10:00:00.000Z").toISOString(),
       agent: "EpicGrove",

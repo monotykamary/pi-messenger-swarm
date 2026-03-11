@@ -22,6 +22,7 @@ export interface SwarmTask {
   evidence?: SwarmTaskEvidence;
   blocked_reason?: string;
   attempt_count: number;
+  channel?: string;
 }
 
 export interface SwarmTaskCreateInput {
@@ -29,6 +30,7 @@ export interface SwarmTaskCreateInput {
   content?: string;
   dependsOn?: string[];
   createdBy?: string;
+  channel?: string;
 }
 
 export interface SwarmSummary {

@@ -63,9 +63,9 @@ function idleLabel(timestamp: string | undefined): string {
   return `idle ${formatDuration(ageMs)}`;
 }
 
-export function renderStatusBar(_theme: Theme, cwd: string, width: number): string {
-  const summary = swarmStore.getSummary(cwd);
-  const ready = swarmStore.getReadyTasks(cwd);
+export function renderStatusBar(_theme: Theme, cwd: string, width: number, channelId: string = "general"): string {
+  const summary = swarmStore.getSummary(cwd, channelId);
+  const ready = swarmStore.getReadyTasks(cwd, channelId);
   const liveCount = getLiveWorkers(cwd).size;
 
   if (summary.total === 0) {
@@ -102,8 +102,8 @@ export function renderWorkersSection(theme: Theme, cwd: string, width: number, m
   return lines;
 }
 
-export function renderTaskList(theme: Theme, cwd: string, width: number, height: number, viewState: MessengerViewState): string[] {
-  const tasks = swarmStore.getTasks(cwd);
+export function renderTaskList(theme: Theme, cwd: string, width: number, height: number, viewState: MessengerViewState, channelId: string = "general"): string[] {
+  const tasks = swarmStore.getTasks(cwd, channelId);
   const lines: string[] = [];
 
   if (tasks.length === 0) {
@@ -314,7 +314,7 @@ export function renderAgentsRow(
     if (seen.has(agent.name)) continue;
     const computed = computeStatus(
       agent.activity?.lastActivityAt ?? agent.startedAt,
-      agentHasTask(agent.name, allClaims, swarmStore.getTasks(agent.cwd)),
+      agentHasTask(agent.name, allClaims, swarmStore.getTasks(agent.cwd, agent.currentChannel ?? agent.sessionChannel ?? state.currentChannel)),
       (agent.reservations?.length ?? 0) > 0,
       stuckThresholdMs,
     );
@@ -334,7 +334,7 @@ export function renderAgentsRow(
   return truncateToWidth(rowParts.join("  "), width);
 }
 
-export function renderEmptyState(theme: Theme, cwd: string, width: number, height: number): string[] {
+export function renderEmptyState(theme: Theme, cwd: string, width: number, height: number, channelId: string = "general"): string[] {
   const lines: string[] = [];
   const config = loadConfig(cwd);
 
@@ -357,6 +357,7 @@ export function renderLegend(
   viewState: MessengerViewState,
   task: Task | null,
   swarmAgent: SpawnedAgent | null,
+  channelId: string = "general",
 ): string[] {
   if (viewState.confirmAction) {
     const text = renderConfirmBar(viewState.confirmAction.taskId, viewState.confirmAction.label, viewState.confirmAction.type);
@@ -395,10 +396,10 @@ export function renderLegend(
     return [truncateToWidth(theme.fg("dim", appendUniversalHints(renderListStatusBar(cwd, task))), width)];
   }
 
-  return [truncateToWidth(theme.fg("dim", appendUniversalHints("m:Chat  f:Swarm  j/k/gg/G:Feed  e:Expand  Esc:Close")), width)];
+  return [truncateToWidth(theme.fg("dim", appendUniversalHints("c/C:Channel  m:Chat  f:Swarm  j/k/gg/G:Feed  e:Expand  Esc:Close")), width)];
 }
 
-export function renderDetailView(cwd: string, task: Task, width: number, height: number, viewState: MessengerViewState): string[] {
+export function renderDetailView(cwd: string, task: Task, width: number, height: number, viewState: MessengerViewState, channelId: string = "general"): string[] {
   const live = getLiveWorkers(cwd).get(task.id);
 
   const lines: string[] = [];
@@ -433,14 +434,14 @@ export function renderDetailView(cwd: string, task: Task, width: number, height:
     if (task.depends_on.length > 0) {
       lines.push("Dependencies:");
       for (const depId of task.depends_on) {
-        const dep = swarmStore.getTask(cwd, depId);
+        const dep = swarmStore.getTask(cwd, depId, channelId);
         if (!dep) lines.push(`  ○ ${depId}: (missing)`);
         else lines.push(`  ${dep.status === "done" ? "✓" : "○"} ${dep.id}: ${dep.title} (${dep.status})`);
       }
       lines.push("");
     }
 
-    const progress = swarmStore.getTaskProgress(cwd, task.id);
+    const progress = swarmStore.getTaskProgress(cwd, task.id, channelId);
     if (progress) {
       lines.push("Progress:");
       for (const line of progress.trimEnd().split("\n")) lines.push(`  ${line}`);
@@ -449,7 +450,7 @@ export function renderDetailView(cwd: string, task: Task, width: number, height:
 
     if (task.status === "blocked") {
       lines.push(`Block Reason: ${task.blocked_reason ?? "Unknown"}`);
-      const blockContext = swarmStore.getBlockContext(cwd, task.id);
+      const blockContext = swarmStore.getBlockContext(cwd, task.id, channelId);
       if (blockContext) {
         lines.push("", "Block Context:");
         for (const line of blockContext.trimEnd().split("\n")) lines.push(`  ${line}`);
@@ -470,7 +471,7 @@ export function renderDetailView(cwd: string, task: Task, width: number, height:
     }
 
     lines.push("Spec:");
-    const spec = swarmStore.getTaskSpec(cwd, task.id);
+    const spec = swarmStore.getTaskSpec(cwd, task.id, channelId);
     if (!spec || spec.trimEnd().length === 0) lines.push("  *No spec available*");
     else for (const line of spec.trimEnd().split("\n")) lines.push(`  ${line}`);
   }
@@ -625,7 +626,7 @@ function wrapInputToLines(input: string, width: number, hint: string): string[] 
 
 function renderMessageBar(input: string, width: number): string[] {
   const isAt = input.startsWith("@");
-  const hint = isAt ? "DM" : "broadcast";
+  const hint = isAt ? "DM" : "channel";
   return wrapInputToLines(input, width, hint);
 }
 

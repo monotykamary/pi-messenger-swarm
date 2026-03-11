@@ -218,7 +218,7 @@ describe("swarm/session-shutdown-cleanup", () => {
     const agentName = "TestAgent";
 
     // Verify feed file doesn't exist yet
-    const feedFile = path.join(dirs.cwd, ".pi", "messenger", "feed.jsonl");
+    const feedFile = path.join(dirs.cwd, ".pi", "messenger", "feed", "general.jsonl");
     expect(fs.existsSync(feedFile)).toBe(false);
 
     // Create and claim tasks
@@ -322,7 +322,7 @@ describe("swarm/session-shutdown-cleanup", () => {
       reservations: registration.reservations,
       chatHistory: new Map(),
       unreadCounts: new Map(),
-      broadcastHistory: [],
+      channelPostHistory: [],
       seenSenders: new Map(),
       model: "test-model",
       gitBranch: undefined,
