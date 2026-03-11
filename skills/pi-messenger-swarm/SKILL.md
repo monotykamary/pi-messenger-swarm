@@ -66,8 +66,8 @@ pi_messenger({
   persona: "Skeptical market researcher",
   message: "Analyze idea aggregation products and find productization gaps",
   content: "Focus on monetization and onboarding friction",
-  taskId: "task-6",
-  model: "anthropic/claude-haiku-4-5"
+  taskId: "task-6"
+  // model: omit unless you need a specific capability (coding, vision, etc.)
 })
 ```
 
@@ -77,7 +77,6 @@ The `agentFile` parameter can be used to specify a markdown file with YAML front
 ---
 role: Security Reviewer
 persona: Paranoid about edge cases
-model: claude-sonnet-4-6
 objective: Review code for security vulnerabilities
 ---
 
@@ -95,8 +94,15 @@ pi_messenger({
 Frontmatter fields (all optional):
 - `role` — Agent role label
 - `persona` — Tone/behavior modifier  
-- `model` — Default model (overridable at spawn)
 - `objective` — Default mission (overridable via `message`)
+
+The `model` field should be omitted unless you have a specific reason:
+- Need coding capabilities for implementation tasks
+- Require vision/multimodal for image analysis
+- Want a faster/cheaper model for simple classification or routing
+- Need a specific provider for access to certain tools
+
+When in doubt, omit `model` and let the system use the default.
 
 The body after `---` becomes the system prompt.
 
