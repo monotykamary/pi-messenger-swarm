@@ -24,6 +24,8 @@ https://github.com/nicobailon/pi-messenger
 | Swarm Details | Swarm Messenger |
 | --- | --- |
 | ![Swarm Details](assets/swarm_details.jpg) | ![Swarm Messenger](assets/swarm_messenger.jpg) |
+| Memory Channel | Session Channel |
+| ![Memory Channel](assets/memory.jpg) | ![Session Channel](assets/session.jpg) |
 
 ## Install
 
