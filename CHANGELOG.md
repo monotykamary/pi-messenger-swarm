@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.17.1](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.17.0...v0.17.1) (2026-03-11)
+
+
+### Features
+
+* **swarm:** add agentFile support for markdown-based agent definitions ([0efbd6a](https://github.com/monotykamary/pi-messenger-swarm/commit/0efbd6a11358fbcd1f34ba07acca9e8806916e9d))
+
 ## [0.17.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.16.3...v0.17.0) (2026-03-11)
 
 
