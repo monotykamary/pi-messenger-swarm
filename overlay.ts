@@ -941,68 +941,57 @@ export class MessengerOverlay implements Component, Focusable {
         }
       }
 
-      // No need to re-clamp lineScrollOffset - it will be clamped during visible range calculation
+      const calculateFeedLinesForHeight = (viewportHeight: number): string[] => {
+        if (viewportHeight <= 0) return [];
 
-      // Calculate visible range using LINE-BASED scroll offset
-      // This accounts for multi-line events (messages, etc.)
-      const rangeResult = calculateVisibleRange(
-        this.viewState.feedLoadedEvents,
-        this.theme,
-        sectionW,
-        prevTs,
-        this.viewState.expandFeedMessages,
-        this.viewState.feedLineScrollOffset,
-        feedHeight,
-        this.viewState.feedWindowStart,
-        totalFeedLines
-      );
-
-      // Update wasAtBottom tracking based on actual position
-      this.viewState.wasAtBottom = rangeResult.lineScrollOffset === 0;
-      
-      // Clamp the scroll offset to valid range (in case it was too large)
-      this.viewState.feedLineScrollOffset = rangeResult.lineScrollOffset;
-
-      // Get the visible lines to display
-      let feedLines = rangeResult.visibleLines;
-
-      // Progressive loading: if we need older events, load them and recalculate
-      if (rangeResult.needsOlderLoad && this.viewState.feedWindowStart > 0) {
-        const { newWindowStart, newWindowEnd } = calculateWindowForOlderLoad(
+        let rangeResult = calculateVisibleRange(
+          this.viewState.feedLoadedEvents,
+          this.theme,
+          sectionW,
+          prevTs,
+          this.viewState.expandFeedMessages,
+          this.viewState.feedLineScrollOffset,
+          viewportHeight,
           this.viewState.feedWindowStart,
-          this.viewState.feedWindowEnd,
-          LOAD_CHUNK,
-          WINDOW_SIZE,
           totalFeedLines
         );
 
-        const olderEvents = readFeedEventsByRange(this.cwd, newWindowStart, this.viewState.feedWindowStart, this.currentChannel());
-        if (olderEvents.length > 0) {
-          this.viewState.feedLoadedEvents = [...olderEvents, ...this.viewState.feedLoadedEvents];
-          this.viewState.feedWindowStart = newWindowStart;
-          this.viewState.feedWindowEnd = newWindowEnd;
-          
-          // Recalculate with new events loaded
-          const newRange = calculateVisibleRange(
-            this.viewState.feedLoadedEvents,
-            this.theme,
-            sectionW,
-            prevTs,
-            this.viewState.expandFeedMessages,
-            this.viewState.feedLineScrollOffset,
-            feedHeight,
+        this.viewState.wasAtBottom = rangeResult.lineScrollOffset === 0;
+        this.viewState.feedLineScrollOffset = rangeResult.lineScrollOffset;
+
+        if (rangeResult.needsOlderLoad && this.viewState.feedWindowStart > 0) {
+          const { newWindowStart, newWindowEnd } = calculateWindowForOlderLoad(
             this.viewState.feedWindowStart,
+            this.viewState.feedWindowEnd,
+            LOAD_CHUNK,
+            WINDOW_SIZE,
             totalFeedLines
           );
-          
-          // Use the recalculated visible lines
-          feedLines = newRange.visibleLines;
-        }
-      }
 
-      while (workerLines.length > 0 && workersHeight() + mainHeight + (feedLines.length > 0 ? feedLines.length + 1 : 0) + agentsHeight > contentHeight) {
-        workerLines = workerLines.slice(0, workerLines.length - 1);
-      }
+          const olderEvents = readFeedEventsByRange(this.cwd, newWindowStart, this.viewState.feedWindowStart, this.currentChannel());
+          if (olderEvents.length > 0) {
+            this.viewState.feedLoadedEvents = [...olderEvents, ...this.viewState.feedLoadedEvents];
+            this.viewState.feedWindowStart = newWindowStart;
+            this.viewState.feedWindowEnd = newWindowEnd;
+
+            rangeResult = calculateVisibleRange(
+              this.viewState.feedLoadedEvents,
+              this.theme,
+              sectionW,
+              prevTs,
+              this.viewState.expandFeedMessages,
+              this.viewState.feedLineScrollOffset,
+              viewportHeight,
+              this.viewState.feedWindowStart,
+              totalFeedLines
+            );
+            this.viewState.wasAtBottom = rangeResult.lineScrollOffset === 0;
+            this.viewState.feedLineScrollOffset = rangeResult.lineScrollOffset;
+          }
+        }
+
+        return rangeResult.visibleLines;
+      };
 
       let mainLines: string[];
       if (this.viewState.mainView === "swarm") {
@@ -1011,6 +1000,19 @@ export class MessengerOverlay implements Component, Focusable {
         mainLines = renderEmptyState(this.theme, this.cwd, sectionW, mainHeight, this.currentChannel());
       } else {
         mainLines = renderTaskList(this.theme, this.cwd, sectionW, mainHeight, this.viewState, channelId, liveWorkers, tasks);
+      }
+
+      let feedLines = calculateFeedLinesForHeight(feedHeight);
+
+      while (workerLines.length > 0 && workersHeight() + mainLines.length + (feedLines.length > 0 ? feedLines.length + 1 : 0) + agentsHeight > contentHeight) {
+        workerLines = workerLines.slice(0, workerLines.length - 1);
+      }
+
+      const maxFeedHeight = totalFeedLines > 0
+        ? Math.max(0, contentHeight - agentsHeight - workersHeight() - mainLines.length - 1)
+        : 0;
+      if (maxFeedHeight > feedLines.length) {
+        feedLines = calculateFeedLinesForHeight(maxFeedHeight);
       }
 
       contentLines = [];
