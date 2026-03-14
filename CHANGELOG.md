@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.17.5](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.17.4...v0.17.5) (2026-03-14)
+
+
+### Bug Fixes
+
+* **overlay:** reclaim unused list space for feed viewport ([770be9e](https://github.com/monotykamary/pi-messenger-swarm/commit/770be9efc496802ec24dbe62d71b0ecfbc2ba070))
+
 ### [0.17.4](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.17.3...v0.17.4) (2026-03-14)
 
 ### [0.17.3](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.17.2...v0.17.3) (2026-03-11)
