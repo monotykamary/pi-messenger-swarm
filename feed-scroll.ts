@@ -58,6 +58,37 @@ export interface VisibleRange {
   needsNewerLoad: boolean;
 }
 
+interface RenderedLinesCacheEntry {
+  events: FeedEvent[];
+  theme: Theme;
+  width: number;
+  lastSeenTs: string | null;
+  expanded: boolean;
+  result: { lines: string[]; eventIndexMap: number[] };
+}
+
+interface VisibleRangeCacheEntry {
+  loadedEvents: FeedEvent[];
+  theme: Theme;
+  width: number;
+  lastSeenTs: string | null;
+  expanded: boolean;
+  lineScrollOffset: number;
+  feedHeight: number;
+  windowStart: number;
+  totalLines: number;
+  result: VisibleRange & {
+    visibleLines: string[];
+    totalRenderedLines: number;
+    lineScrollOffset: number;
+    firstVisibleEventIndex: number;
+    lastVisibleEventIndex: number;
+  };
+}
+
+let renderedLinesCache: RenderedLinesCacheEntry | null = null;
+let visibleRangeCache: VisibleRangeCacheEntry | null = null;
+
 /**
  * Calculate all rendered lines for the loaded events.
  * Returns the array of rendered lines and a map from screen line index to event index.
@@ -69,12 +100,23 @@ export function calculateRenderedLines(
   lastSeenTs: string | null,
   expanded: boolean
 ): { lines: string[]; eventIndexMap: number[] } {
+  if (
+    renderedLinesCache &&
+    renderedLinesCache.events === events &&
+    renderedLinesCache.theme === theme &&
+    renderedLinesCache.width === width &&
+    renderedLinesCache.lastSeenTs === lastSeenTs &&
+    renderedLinesCache.expanded === expanded
+  ) {
+    return renderedLinesCache.result;
+  }
+
   const lines = renderFeedSection(theme, events, width, lastSeenTs, expanded);
-  
+
   // Build a map from each screen line to which event it belongs to
   const eventIndexMap: number[] = [];
   let currentLine = 0;
-  
+
   for (let i = 0; i < events.length; i++) {
     // Render just this event to count its lines
     const eventLines = renderFeedSection(theme, [events[i]], width, lastSeenTs, expanded);
@@ -83,8 +125,17 @@ export function calculateRenderedLines(
     }
     currentLine += eventLines.length;
   }
-  
-  return { lines, eventIndexMap };
+
+  const result = { lines, eventIndexMap };
+  renderedLinesCache = {
+    events,
+    theme,
+    width,
+    lastSeenTs,
+    expanded,
+    result,
+  };
+  return result;
 }
 
 /**
@@ -110,6 +161,21 @@ export function calculateVisibleRange(
   firstVisibleEventIndex: number;
   lastVisibleEventIndex: number;
 } {
+  if (
+    visibleRangeCache &&
+    visibleRangeCache.loadedEvents === loadedEvents &&
+    visibleRangeCache.theme === theme &&
+    visibleRangeCache.width === width &&
+    visibleRangeCache.lastSeenTs === lastSeenTs &&
+    visibleRangeCache.expanded === expanded &&
+    visibleRangeCache.lineScrollOffset === lineScrollOffset &&
+    visibleRangeCache.feedHeight === feedHeight &&
+    visibleRangeCache.windowStart === windowStart &&
+    visibleRangeCache.totalLines === totalLines
+  ) {
+    return visibleRangeCache.result;
+  }
+
   if (loadedEvents.length === 0 || feedHeight <= 0) {
     return {
       events: [],
@@ -159,7 +225,7 @@ export function calculateVisibleRange(
   const firstVisibleEventIndex = eventIndexMap[Math.max(0, lineStart)] ?? 0;
   const lastVisibleEventIndex = eventIndexMap[Math.min(lineEnd - 1, lines.length - 1)] ?? (loadedEvents.length - 1);
   
-  return {
+  const result = {
     events: loadedEvents.slice(firstVisibleEventIndex, lastVisibleEventIndex + 1),
     arrayStart: firstVisibleEventIndex,
     arrayEnd: lastVisibleEventIndex + 1,
@@ -171,4 +237,19 @@ export function calculateVisibleRange(
     firstVisibleEventIndex,
     lastVisibleEventIndex,
   };
+
+  visibleRangeCache = {
+    loadedEvents,
+    theme,
+    width,
+    lastSeenTs,
+    expanded,
+    lineScrollOffset,
+    feedHeight,
+    windowStart,
+    totalLines,
+    result,
+  };
+
+  return result;
 }

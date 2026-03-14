@@ -165,14 +165,48 @@ export function cleanupStaleTaskClaims(cwd: string, channelId: string = "general
 
 const lastCleanupTimes = new Map<string, number>();
 const CLEANUP_THROTTLE_MS = 30_000;
+const TASK_CACHE_TTL_MS = 100;
+
+const taskCache = new Map<string, { expiresAt: number; tasks: SwarmTask[] }>();
+const taskDerivedCache = new WeakMap<SwarmTask[], {
+  summary?: SwarmSummary;
+  readyTasks?: SwarmTask[];
+  doneIds?: Set<string>;
+}>();
+
+function getTaskCacheKey(cwd: string, channelId: string): string {
+  return `${cwd}:${normalizeChannelId(channelId)}`;
+}
+
+function getOrCreateTaskDerivedCache(tasks: SwarmTask[]): {
+  summary?: SwarmSummary;
+  readyTasks?: SwarmTask[];
+  doneIds?: Set<string>;
+} {
+  let cache = taskDerivedCache.get(tasks);
+  if (!cache) {
+    cache = {};
+    taskDerivedCache.set(tasks, cache);
+  }
+  return cache;
+}
+
+function invalidateTasksCache(cwd: string, channelId: string = "general"): void {
+  taskCache.delete(getTaskCacheKey(cwd, channelId));
+}
 
 export function getTasks(cwd: string, channelId: string = "general"): SwarmTask[] {
   const normalizedChannel = normalizeChannelId(channelId);
   const dir = getTasksDir(cwd, normalizedChannel);
   if (!fs.existsSync(dir)) return [];
 
-  const key = `${cwd}:${normalizedChannel}`;
+  const key = getTaskCacheKey(cwd, normalizedChannel);
   const now = Date.now();
+  const cached = taskCache.get(key);
+  if (cached && cached.expiresAt > now) {
+    return cached.tasks;
+  }
+
   const lastCleanupTime = lastCleanupTimes.get(key) ?? 0;
   if (now - lastCleanupTime > CLEANUP_THROTTLE_MS) {
     lastCleanupTimes.set(key, now);
@@ -186,11 +220,18 @@ export function getTasks(cwd: string, channelId: string = "general"): SwarmTask[
     if (raw) tasks.push(normalizeTask(raw, normalizedChannel));
   }
 
-  return tasks.sort((a, b) => taskNumericId(a.id) - taskNumericId(b.id));
+  const sortedTasks = tasks.sort((a, b) => taskNumericId(a.id) - taskNumericId(b.id));
+  taskCache.set(key, {
+    expiresAt: now + TASK_CACHE_TTL_MS,
+    tasks: sortedTasks,
+  });
+  return sortedTasks;
 }
 
-export function getSummary(cwd: string, channelId: string = "general"): SwarmSummary {
-  const tasks = getTasks(cwd, channelId);
+export function getSummaryForTasks(tasks: SwarmTask[]): SwarmSummary {
+  const derived = getOrCreateTaskDerivedCache(tasks);
+  if (derived.summary) return derived.summary;
+
   const summary: SwarmSummary = {
     total: tasks.length,
     todo: 0,
@@ -203,7 +244,12 @@ export function getSummary(cwd: string, channelId: string = "general"): SwarmSum
     summary[task.status] += 1;
   }
 
+  derived.summary = summary;
   return summary;
+}
+
+export function getSummary(cwd: string, channelId: string = "general"): SwarmSummary {
+  return getSummaryForTasks(getTasks(cwd, channelId));
 }
 
 export function updateTask(cwd: string, taskId: string, updates: Partial<SwarmTask>, channelId: string = "general"): SwarmTask | null {
@@ -218,6 +264,7 @@ export function updateTask(cwd: string, taskId: string, updates: Partial<SwarmTa
   };
 
   writeJson(taskJsonPath(cwd, taskId, channelId), updated);
+  invalidateTasksCache(cwd, channelId);
   return updated;
 }
 
@@ -243,6 +290,7 @@ export function createTask(cwd: string, input: SwarmTaskCreateInput, channelId: 
     ? `# ${input.title}\n\n${input.content.trim()}\n`
     : `# ${input.title}\n\n*Spec pending*\n`);
 
+  invalidateTasksCache(cwd, normalizedChannel);
   return task;
 }
 
@@ -263,6 +311,7 @@ export function deleteTask(cwd: string, taskId: string, channelId: string = "gen
     }, channelId);
   }
 
+  invalidateTasksCache(cwd, channelId);
   return true;
 }
 
@@ -295,6 +344,8 @@ function archiveTasks(cwd: string, tasksToArchive: SwarmTask[], channelId: strin
       moveFile(blockSrc, path.join(archiveBlocksDir, `${task.id}.md`));
     }
   }
+
+  invalidateTasksCache(cwd, channelId);
 
   const archivedSet = new Set(archivedIds);
   for (const task of getTasks(cwd, channelId)) {
@@ -349,10 +400,18 @@ export function getBlockContext(cwd: string, taskId: string, channelId: string =
   return readText(taskBlockPath(cwd, taskId, channelId));
 }
 
+export function getReadyTasksForTasks(tasks: SwarmTask[]): SwarmTask[] {
+  const derived = getOrCreateTaskDerivedCache(tasks);
+  if (derived.readyTasks) return derived.readyTasks;
+
+  const doneIds = derived.doneIds ?? new Set(tasks.filter(task => task.status === "done").map(task => task.id));
+  derived.doneIds = doneIds;
+  derived.readyTasks = tasks.filter(task => task.status === "todo" && task.depends_on.every(dep => doneIds.has(dep)));
+  return derived.readyTasks;
+}
+
 export function getReadyTasks(cwd: string, channelId: string = "general"): SwarmTask[] {
-  const tasks = getTasks(cwd, channelId);
-  const doneIds = new Set(tasks.filter(task => task.status === "done").map(task => task.id));
-  return tasks.filter(task => task.status === "todo" && task.depends_on.every(dep => doneIds.has(dep)));
+  return getReadyTasksForTasks(getTasks(cwd, channelId));
 }
 
 export function claimTask(cwd: string, taskId: string, agent: string, reason?: string, channelId: string = "general"): SwarmTask | null {

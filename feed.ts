@@ -46,12 +46,27 @@ export interface FeedEvent {
   channel?: string;
 }
 
+interface FeedCacheEntry {
+  mtimeMs: number;
+  size: number;
+  expiresAt: number;
+  lines: string[];
+  events: FeedEvent[];
+}
+
+const FEED_CACHE_TTL_MS = 100;
+const feedCache = new Map<string, FeedCacheEntry>();
+
 function feedDir(cwd: string): string {
   return path.join(cwd, ".pi", "messenger", "feed");
 }
 
 function feedPath(cwd: string, channelId: string = "general"): string {
   return path.join(feedDir(cwd), `${normalizeChannelId(channelId)}.jsonl`);
+}
+
+function invalidateFeedCache(cwd: string, channelId: string = "general"): void {
+  feedCache.delete(feedPath(cwd, channelId));
 }
 
 function sanitizeInlineText(value?: string): string | undefined {
@@ -91,27 +106,39 @@ export function sanitizeFeedEvent(event: FeedEvent): FeedEvent {
   };
 }
 
-export function appendFeedEvent(cwd: string, event: FeedEvent, channelId: string = "general"): void {
+function loadFeedCache(cwd: string, channelId: string = "general"): FeedCacheEntry | null {
   const p = feedPath(cwd, channelId);
-  try {
-    const dir = path.dirname(p);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    const sanitized = sanitizeFeedEvent({ ...event, channel: normalizeChannelId(channelId) });
-    fs.appendFileSync(p, JSON.stringify(sanitized) + "\n");
-  } catch {
-    // Best effort
+  const now = Date.now();
+  const cached = feedCache.get(p);
+  if (cached && cached.expiresAt > now) {
+    return cached;
   }
-}
 
-export function readFeedEvents(cwd: string, limit?: number, channelId: string = "general"): FeedEvent[] {
-  const p = feedPath(cwd, channelId);
-  if (!fs.existsSync(p)) return [];
+  if (!fs.existsSync(p)) {
+    feedCache.delete(p);
+    return null;
+  }
 
   try {
+    const stat = fs.statSync(p);
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+      cached.expiresAt = now + FEED_CACHE_TTL_MS;
+      return cached;
+    }
+
     const content = fs.readFileSync(p, "utf-8").trim();
-    if (!content) return [];
+    if (!content) {
+      const empty: FeedCacheEntry = {
+        mtimeMs: stat.mtimeMs,
+        size: stat.size,
+        expiresAt: now + FEED_CACHE_TTL_MS,
+        lines: [],
+        events: [],
+      };
+      feedCache.set(p, empty);
+      return empty;
+    }
+
     const lines = content.split("\n");
     const events: FeedEvent[] = [];
     for (const line of lines) {
@@ -122,83 +149,72 @@ export function readFeedEvents(cwd: string, limit?: number, channelId: string = 
         // Skip malformed lines
       }
     }
-    return limit ? events.slice(-limit) : events;
+
+    const entry: FeedCacheEntry = {
+      mtimeMs: stat.mtimeMs,
+      size: stat.size,
+      expiresAt: now + FEED_CACHE_TTL_MS,
+      lines,
+      events,
+    };
+    feedCache.set(p, entry);
+    return entry;
   } catch {
-    return [];
+    feedCache.delete(p);
+    return null;
   }
+}
+
+export function appendFeedEvent(cwd: string, event: FeedEvent, channelId: string = "general"): void {
+  const p = feedPath(cwd, channelId);
+  try {
+    const dir = path.dirname(p);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const sanitized = sanitizeFeedEvent({ ...event, channel: normalizeChannelId(channelId) });
+    fs.appendFileSync(p, JSON.stringify(sanitized) + "\n");
+    invalidateFeedCache(cwd, channelId);
+  } catch {
+    // Best effort
+  }
+}
+
+export function readFeedEvents(cwd: string, limit?: number, channelId: string = "general"): FeedEvent[] {
+  const entry = loadFeedCache(cwd, channelId);
+  if (!entry) return [];
+  return limit ? entry.events.slice(-limit) : entry.events;
 }
 
 export function readFeedEventsWithOffset(cwd: string, offsetFromEnd: number, limit: number, channelId: string = "general"): FeedEvent[] {
-  const p = feedPath(cwd, channelId);
-  if (!fs.existsSync(p)) return [];
+  const entry = loadFeedCache(cwd, channelId);
+  if (!entry) return [];
 
-  try {
-    const content = fs.readFileSync(p, "utf-8").trim();
-    if (!content) return [];
-    const lines = content.split("\n");
-    const totalLines = lines.length;
+  const totalLines = entry.lines.length;
+  const endIndex = totalLines - offsetFromEnd;
+  const startIndex = Math.max(0, endIndex - limit);
 
-    const endIndex = totalLines - offsetFromEnd;
-    const startIndex = Math.max(0, endIndex - limit);
+  if (startIndex >= endIndex || endIndex <= 0) return [];
 
-    if (startIndex >= endIndex || endIndex <= 0) return [];
-
-    const events: FeedEvent[] = [];
-    for (let i = startIndex; i < endIndex; i++) {
-      try {
-        const parsed = JSON.parse(lines[i]) as FeedEvent;
-        events.push(sanitizeFeedEvent(parsed));
-      } catch {
-        // Skip malformed lines
-      }
-    }
-    return events;
-  } catch {
-    return [];
-  }
+  return entry.events.slice(startIndex, endIndex);
 }
 
 export function readFeedEventsByRange(cwd: string, startIndex: number, endIndex: number, channelId: string = "general"): FeedEvent[] {
-  const p = feedPath(cwd, channelId);
-  if (!fs.existsSync(p)) return [];
+  const entry = loadFeedCache(cwd, channelId);
+  if (!entry) return [];
 
-  try {
-    const content = fs.readFileSync(p, "utf-8").trim();
-    if (!content) return [];
-    const lines = content.split("\n");
-    const totalLines = lines.length;
+  const totalLines = entry.lines.length;
+  const clampedStart = Math.max(0, Math.min(startIndex, totalLines));
+  const clampedEnd = Math.max(0, Math.min(endIndex, totalLines));
 
-    const clampedStart = Math.max(0, Math.min(startIndex, totalLines));
-    const clampedEnd = Math.max(0, Math.min(endIndex, totalLines));
+  if (clampedStart >= clampedEnd) return [];
 
-    if (clampedStart >= clampedEnd) return [];
-
-    const events: FeedEvent[] = [];
-    for (let i = clampedStart; i < clampedEnd; i++) {
-      try {
-        const parsed = JSON.parse(lines[i]) as FeedEvent;
-        events.push(sanitizeFeedEvent(parsed));
-      } catch {
-        // Skip malformed lines
-      }
-    }
-    return events;
-  } catch {
-    return [];
-  }
+  return entry.events.slice(clampedStart, clampedEnd);
 }
 
 export function getFeedLineCount(cwd: string, channelId: string = "general"): number {
-  const p = feedPath(cwd, channelId);
-  if (!fs.existsSync(p)) return 0;
-
-  try {
-    const content = fs.readFileSync(p, "utf-8").trim();
-    if (!content) return 0;
-    return content.split("\n").length;
-  } catch {
-    return 0;
-  }
+  const entry = loadFeedCache(cwd, channelId);
+  return entry?.lines.length ?? 0;
 }
 
 export function pruneFeed(cwd: string, maxEvents: number, channelId: string = "general"): void {
@@ -206,12 +222,11 @@ export function pruneFeed(cwd: string, maxEvents: number, channelId: string = "g
   if (!fs.existsSync(p)) return;
 
   try {
-    const content = fs.readFileSync(p, "utf-8").trim();
-    if (!content) return;
-    const lines = content.split("\n");
-    if (lines.length <= maxEvents) return;
-    const pruned = lines.slice(-maxEvents);
+    const entry = loadFeedCache(cwd, channelId);
+    if (!entry || entry.lines.length <= maxEvents) return;
+    const pruned = entry.lines.slice(-maxEvents);
     fs.writeFileSync(p, pruned.join("\n") + "\n");
+    invalidateFeedCache(cwd, channelId);
   } catch {
     // Best effort
   }

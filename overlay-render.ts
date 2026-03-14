@@ -23,6 +23,20 @@ import type { MessengerViewState } from "./overlay-actions.js";
 
 const STATUS_ICONS: Record<string, string> = { done: "✓", in_progress: "●", todo: "○", blocked: "✗" };
 
+let statusBarCache: {
+  tasks: Task[];
+  width: number;
+  channelId: string;
+  liveCount: number;
+  line: string;
+} | null = null;
+
+let listLegendCache: {
+  task: Task;
+  width: number;
+  line: string;
+} | null = null;
+
 function formatElapsed(ms: number): string {
   const s = Math.floor(Math.max(0, ms) / 1000);
   const m = Math.floor(s / 60);
@@ -63,28 +77,60 @@ function idleLabel(timestamp: string | undefined): string {
   return `idle ${formatDuration(ageMs)}`;
 }
 
-export function renderStatusBar(_theme: Theme, cwd: string, width: number, channelId: string = "general"): string {
-  const summary = swarmStore.getSummary(cwd, channelId);
-  const ready = swarmStore.getReadyTasks(cwd, channelId);
-  const liveCount = getLiveWorkers(cwd).size;
-
-  if (summary.total === 0) {
-    return truncateToWidth(`No swarm tasks │ ⚙ ${liveCount} live`, width);
+export function renderStatusBar(
+  _theme: Theme,
+  cwd: string,
+  width: number,
+  channelId: string = "general",
+  liveWorkers: ReadonlyMap<string, LiveWorkerInfo> = getLiveWorkers(cwd),
+  tasks: Task[] = swarmStore.getTasks(cwd, channelId),
+): string {
+  const liveCount = liveWorkers.size;
+  if (
+    statusBarCache &&
+    statusBarCache.tasks === tasks &&
+    statusBarCache.width === width &&
+    statusBarCache.channelId === channelId &&
+    statusBarCache.liveCount === liveCount
+  ) {
+    return statusBarCache.line;
   }
 
-  let line = `☑ ${summary.done}/${summary.total} tasks`;
-  line += ` │ ready ${ready.length}`;
-  line += ` │ in progress ${summary.in_progress}`;
-  line += ` │ blocked ${summary.blocked}`;
-  line += ` │ ⚙ ${liveCount} live`;
+  const summary = swarmStore.getSummaryForTasks(tasks);
+  const ready = swarmStore.getReadyTasksForTasks(tasks);
 
-  return truncateToWidth(line, width);
+  let line: string;
+  if (summary.total === 0) {
+    line = truncateToWidth(`No swarm tasks │ ⚙ ${liveCount} live`, width);
+  } else {
+    line = `☑ ${summary.done}/${summary.total} tasks`;
+    line += ` │ ready ${ready.length}`;
+    line += ` │ in progress ${summary.in_progress}`;
+    line += ` │ blocked ${summary.blocked}`;
+    line += ` │ ⚙ ${liveCount} live`;
+    line = truncateToWidth(line, width);
+  }
+
+  statusBarCache = {
+    tasks,
+    width,
+    channelId,
+    liveCount,
+    line,
+  };
+  return line;
 }
 
-export function renderWorkersSection(theme: Theme, cwd: string, width: number, maxLines: number): string[] {
+export function renderWorkersSection(
+  theme: Theme,
+  cwd: string,
+  width: number,
+  maxLines: number,
+  liveWorkers: ReadonlyMap<string, LiveWorkerInfo> = getLiveWorkers(cwd),
+): string[] {
   if (maxLines <= 0) return [];
 
-  const workers = Array.from(getLiveWorkers(cwd).values()).slice(0, maxLines);
+  const workers = Array.from(liveWorkers.values()).slice(0, maxLines);
   if (workers.length === 0) return [];
 
   const lines: string[] = [];
@@ -102,8 +148,16 @@ export function renderWorkersSection(theme: Theme, cwd: string, width: number, m
   return lines;
 }
 
-export function renderTaskList(theme: Theme, cwd: string, width: number, height: number, viewState: MessengerViewState, channelId: string = "general"): string[] {
-  const tasks = swarmStore.getTasks(cwd, channelId);
+export function renderTaskList(
+  theme: Theme,
+  cwd: string,
+  width: number,
+  height: number,
+  viewState: MessengerViewState,
+  channelId: string = "general",
+  liveWorkers: ReadonlyMap<string, LiveWorkerInfo> = getLiveWorkers(cwd),
+  tasks: Task[] = swarmStore.getTasks(cwd, channelId),
+): string[] {
   const lines: string[] = [];
 
   if (tasks.length === 0) {
@@ -114,24 +168,30 @@ export function renderTaskList(theme: Theme, cwd: string, width: number, height:
 
   viewState.selectedTaskIndex = Math.max(0, Math.min(viewState.selectedTaskIndex, tasks.length - 1));
 
-  for (let i = 0; i < tasks.length; i++) {
-    lines.push(renderTaskLine(theme, tasks[i], i === viewState.selectedTaskIndex, width, getLiveWorkers(cwd).get(tasks[i].id)));
-  }
-
-  if (lines.length <= height) {
+  if (tasks.length <= height) {
     viewState.scrollOffset = 0;
+    for (let i = 0; i < tasks.length; i++) {
+      lines.push(renderTaskLine(theme, tasks[i], i === viewState.selectedTaskIndex, width, liveWorkers.get(tasks[i].id)));
+    }
     return lines;
   }
 
-  const selectedLine = Math.min(viewState.selectedTaskIndex, lines.length - 1);
+  const selectedLine = viewState.selectedTaskIndex;
   if (selectedLine < viewState.scrollOffset) {
     viewState.scrollOffset = selectedLine;
   } else if (selectedLine >= viewState.scrollOffset + height) {
     viewState.scrollOffset = selectedLine - height + 1;
   }
 
-  viewState.scrollOffset = Math.max(0, Math.min(viewState.scrollOffset, lines.length - height));
-  return lines.slice(viewState.scrollOffset, viewState.scrollOffset + height);
+  viewState.scrollOffset = Math.max(0, Math.min(viewState.scrollOffset, tasks.length - height));
+  const start = viewState.scrollOffset;
+  const end = Math.min(tasks.length, start + height);
+
+  for (let i = start; i < end; i++) {
+    lines.push(renderTaskLine(theme, tasks[i], i === viewState.selectedTaskIndex, width, liveWorkers.get(tasks[i].id)));
+  }
+
+  return lines;
 }
 
 export function renderSwarmList(theme: Theme, agents: SpawnedAgent[], width: number, height: number, viewState: MessengerViewState): string[] {
@@ -301,8 +361,10 @@ export function renderAgentsRow(
   state: MessengerState,
   dirs: Dirs,
   stuckThresholdMs: number,
+  liveWorkers: ReadonlyMap<string, LiveWorkerInfo> = getLiveWorkers(cwd),
 ): string {
-  const allClaims = store.getClaims(dirs);
+  const activeAgents = store.getActiveAgents(state, dirs);
+  let allClaims: ReturnType<typeof store.getClaims> | null = null;
   const rowParts: string[] = [];
   const seen = new Set<string>();
 
@@ -310,8 +372,9 @@ export function renderAgentsRow(
   rowParts.push(`🟢 You (${idleLabel(self.activity?.lastActivityAt ?? self.startedAt)})`);
   seen.add(self.name);
 
-  for (const agent of store.getActiveAgents(state, dirs)) {
+  for (const agent of activeAgents) {
     if (seen.has(agent.name)) continue;
+    allClaims ??= store.getClaims(dirs);
     const computed = computeStatus(
       agent.activity?.lastActivityAt ?? agent.startedAt,
       agentHasTask(agent.name, allClaims, swarmStore.getTasks(agent.cwd, agent.currentChannel ?? agent.sessionChannel ?? state.currentChannel)),
@@ -324,7 +387,7 @@ export function renderAgentsRow(
     seen.add(agent.name);
   }
 
-  for (const worker of getLiveWorkers(cwd).values()) {
+  for (const worker of liveWorkers.values()) {
     // Use worker.name for deduplication, not taskId, since multiple agents can work on the same task
     if (seen.has(worker.name)) continue;
     rowParts.push(`🔵 ${worker.name} (${worker.taskId})`);
@@ -393,14 +456,27 @@ export function renderLegend(
   }
 
   if (task) {
-    return [truncateToWidth(theme.fg("dim", appendUniversalHints(renderListStatusBar(cwd, task))), width)];
+    if (listLegendCache && listLegendCache.task === task && listLegendCache.width === width) {
+      return [listLegendCache.line];
+    }
+    const line = truncateToWidth(theme.fg("dim", appendUniversalHints(renderListStatusBar(cwd, task))), width);
+    listLegendCache = { task, width, line };
+    return [line];
   }
 
   return [truncateToWidth(theme.fg("dim", appendUniversalHints("c/C:Channel  m:Chat  f:Swarm  j/k/gg/G:Feed  e:Expand  Esc:Close")), width)];
 }
 
-export function renderDetailView(cwd: string, task: Task, width: number, height: number, viewState: MessengerViewState, channelId: string = "general"): string[] {
-  const live = getLiveWorkers(cwd).get(task.id);
+export function renderDetailView(
+  cwd: string,
+  task: Task,
+  width: number,
+  height: number,
+  viewState: MessengerViewState,
+  channelId: string = "general",
+  liveWorkers: ReadonlyMap<string, LiveWorkerInfo> = getLiveWorkers(cwd),
+): string[] {
+  const live = liveWorkers.get(task.id);
 
   const lines: string[] = [];
   const tokens = live ? (live.progress.tokens > 1000 ? `${(live.progress.tokens / 1000).toFixed(0)}k` : `${live.progress.tokens}`) : "";
@@ -630,7 +706,21 @@ function renderMessageBar(input: string, width: number): string[] {
   return wrapInputToLines(input, width, hint);
 }
 
+interface TaskLineCacheEntry {
+  theme: Theme;
+  width: number;
+  isSelected: boolean;
+  liveWorker: LiveWorkerInfo | undefined;
+  line: string;
+}
+
+const taskLineCache = new WeakMap<Task, TaskLineCacheEntry>();
+
 function renderTaskLine(theme: Theme, task: Task, isSelected: boolean, width: number, liveWorker?: LiveWorkerInfo): string {
+  const cached = taskLineCache.get(task);
+  if (cached && cached.theme === theme && cached.width === width && cached.isSelected === isSelected && cached.liveWorker === liveWorker) {
+    return cached.line;
+  }
   const select = isSelected ? theme.fg("accent", "▸ ") : "  ";
   const icon = STATUS_ICONS[task.status] ?? "?";
   const coloredIcon = task.status === "done"
@@ -653,7 +743,15 @@ function renderTaskLine(theme: Theme, task: Task, isSelected: boolean, width: nu
     suffix = ` [${reason}${task.blocked_reason.length > 28 ? "…" : ""}]`;
   }
 
-  return truncateToWidth(`${select}${coloredIcon} ${task.id}  ${task.title}${theme.fg("dim", suffix)}`, width);
+  const line = truncateToWidth(`${select}${coloredIcon} ${task.id}  ${task.title}${theme.fg("dim", suffix)}`, width);
+  taskLineCache.set(task, {
+    theme,
+    width,
+    isSelected,
+    liveWorker,
+    line,
+  });
+  return line;
 }
 
 export function navigateTask(viewState: MessengerViewState, direction: 1 | -1, taskCount: number): void {

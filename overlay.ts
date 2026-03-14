@@ -66,6 +66,9 @@ function isFeedDownKey(data: string): boolean {
   return data === "j" || data === "J";
 }
 
+const RENDER_CACHE_TTL_MS = 50;
+const FEED_LINE_COUNT_CACHE_TTL_MS = 100;
+
 export class MessengerOverlay implements Component, Focusable {
   get width(): number {
     return Math.min(100, Math.max(40, process.stdout.columns ?? 90));
@@ -80,6 +83,33 @@ export class MessengerOverlay implements Component, Focusable {
   private sawIncompleteWork = false;
   private completionTimer: ReturnType<typeof setTimeout> | null = null;
   private completionDismissed = false;
+  private completionStateCache: {
+    tasks: Task[];
+    allDone: boolean;
+  } | null = null;
+  private feedLineCountCache: {
+    channelId: string;
+    expiresAt: number;
+    totalLines: number;
+  } | null = null;
+  private rowCache = new Map<string, string>();
+  private rowCacheInnerWidth: number | null = null;
+  private rowCacheSectionWidth: number | null = null;
+  private chromeCache: {
+    key: string;
+    titleLine: string;
+    emptyLine: string;
+    middleBorder: string;
+    bottomBorder: string;
+  } | null = null;
+  private renderCache: {
+    key: string;
+    quickKey: string;
+    expiresAt: number;
+    tasks: Task[];
+    feedEvents: FeedEvent[];
+    lines: string[];
+  } | null = null;
 
   constructor(
     private tui: TUI,
@@ -98,6 +128,7 @@ export class MessengerOverlay implements Component, Focusable {
     }
 
     this.progressUnsubscribe = onLiveWorkersChanged(() => {
+      this.renderCache = null;
       this.syncRefreshTimers();
       this.tui.requestRender();
     });
@@ -132,6 +163,22 @@ export class MessengerOverlay implements Component, Focusable {
     return this.state.currentChannel;
   }
 
+  private getFeedLineCountCached(channelId: string): number {
+    const cached = this.feedLineCountCache;
+    const now = Date.now();
+    if (cached && cached.channelId === channelId && cached.expiresAt > now) {
+      return cached.totalLines;
+    }
+
+    const totalLines = getFeedLineCount(this.cwd, channelId);
+    this.feedLineCountCache = {
+      channelId,
+      expiresAt: now + FEED_LINE_COUNT_CACHE_TTL_MS,
+      totalLines,
+    };
+    return totalLines;
+  }
+
   private cycleChannel(direction: 1 | -1): void {
     const channels = this.state.joinedChannels.length > 0 ? this.state.joinedChannels : [this.state.currentChannel];
     if (channels.length <= 1) return;
@@ -141,6 +188,7 @@ export class MessengerOverlay implements Component, Focusable {
     const switched = this.callbacks.onSwitchChannel?.(nextChannel);
     if (!switched) return;
 
+    this.feedLineCountCache = null;
     this.viewState.feedLoadedEvents = [];
     this.viewState.feedWindowStart = 0;
     this.viewState.feedWindowEnd = 0;
@@ -562,14 +610,64 @@ export class MessengerOverlay implements Component, Focusable {
       .replaceAll("\r", " ")
       .replaceAll("\n", " ")
       .replaceAll("\t", " ");
+    if (this.rowCacheInnerWidth !== innerW || this.rowCacheSectionWidth !== sectionW) {
+      this.rowCache.clear();
+      this.rowCacheInnerWidth = innerW;
+      this.rowCacheSectionWidth = sectionW;
+    }
+
     const row = (content: string) => {
+      const cached = this.rowCache.get(content);
+      if (cached) return cached;
+
       const safe = truncateToWidth(sanitizeRowContent(content), sectionW);
-      return border("│") + pad(" " + safe, innerW) + border("│");
+      const rendered = border("│") + pad(" " + safe, innerW) + border("│");
+      if (this.rowCache.size > 2048) this.rowCache.clear();
+      this.rowCache.set(content, rendered);
+      return rendered;
     };
-    const emptyRow = () => border("│") + " ".repeat(innerW) + border("│");
     const sectionSeparator = this.theme.fg("dim", "─".repeat(sectionW));
 
-    const tasks = swarmStore.getTasks(this.cwd, this.currentChannel());
+    const channelId = this.currentChannel();
+    const termRows = process.stdout.rows ?? 24;
+    const initialCachedRender = this.renderCache;
+    const ultraEarlyCacheKey = [
+      w,
+      termRows,
+      channelId,
+      this.viewState.mainView,
+      this.viewState.mode,
+      this.viewState.selectedTaskIndex,
+      this.viewState.selectedSwarmIndex,
+      this.viewState.scrollOffset,
+      this.viewState.swarmScrollOffset,
+      this.viewState.detailScroll,
+      this.viewState.detailAutoScroll ? 1 : 0,
+      this.viewState.inputMode,
+      this.viewState.expandFeedMessages ? 1 : 0,
+      this.viewState.feedLineScrollOffset,
+      this.viewState.feedWindowStart,
+      this.viewState.feedWindowEnd,
+      this.viewState.feedTotalLines,
+      this.viewState.notification?.message ?? "",
+      this.viewState.notification?.expiresAt ?? 0,
+      this.viewState.confirmAction?.type ?? "",
+      this.viewState.confirmAction?.taskId ?? "",
+      this.viewState.blockReasonInput,
+      this.viewState.messageInput,
+      this.viewState.lastSeenEventTs ?? "",
+    ].join("|");
+
+    if (
+      initialCachedRender &&
+      initialCachedRender.expiresAt > Date.now() &&
+      initialCachedRender.quickKey === ultraEarlyCacheKey &&
+      initialCachedRender.feedEvents === this.viewState.feedLoadedEvents
+    ) {
+      return initialCachedRender.lines;
+    }
+
+    const tasks = swarmStore.getTasks(this.cwd, channelId);
     const spawned = listSpawned(this.cwd);
 
     if (tasks.length === 0) {
@@ -593,64 +691,58 @@ export class MessengerOverlay implements Component, Focusable {
     const selectedTask = tasks[this.viewState.selectedTaskIndex] ?? null;
     const selectedSwarmAgent = spawned[this.viewState.selectedSwarmIndex] ?? null;
 
-    const lines: string[] = [];
-    const titleContent = this.renderTitleContent();
-    const titleText = ` ${titleContent} `;
-    const titleLen = visibleWidth(titleContent) + 2;
-    const borderLen = Math.max(0, innerW - titleLen);
-    const leftBorder = Math.floor(borderLen / 2);
-    const rightBorder = borderLen - leftBorder;
+    if (initialCachedRender) {
+      const preFeedSyncCacheKey = [
+        w,
+        termRows,
+        channelId,
+        this.viewState.mainView,
+        this.viewState.mode,
+        this.viewState.selectedTaskIndex,
+        this.viewState.selectedSwarmIndex,
+        this.viewState.scrollOffset,
+        this.viewState.swarmScrollOffset,
+        this.viewState.detailScroll,
+        this.viewState.detailAutoScroll ? 1 : 0,
+        this.viewState.inputMode,
+        this.viewState.expandFeedMessages ? 1 : 0,
+        this.viewState.feedLineScrollOffset,
+        this.viewState.feedWindowStart,
+        this.viewState.feedWindowEnd,
+        this.viewState.feedTotalLines,
+        this.viewState.notification?.message ?? "",
+        this.viewState.notification?.expiresAt ?? 0,
+        this.viewState.confirmAction?.type ?? "",
+        this.viewState.confirmAction?.taskId ?? "",
+        this.viewState.blockReasonInput,
+        this.viewState.messageInput,
+        this.viewState.feedTotalLines,
+        tasks.length,
+        selectedTask?.id ?? "",
+        selectedSwarmAgent?.name ?? "",
+        this.viewState.lastSeenEventTs ?? "",
+      ].join("|");
 
-    lines.push(border("╭" + "─".repeat(leftBorder)) + titleText + border("─".repeat(rightBorder) + "╮"));
-    lines.push(row(renderStatusBar(this.theme, this.cwd, sectionW, this.currentChannel())));
-    lines.push(emptyRow());
-
-    // Calculate legend first to determine dynamic chrome lines
-    const legendLines = renderLegend(this.theme, this.cwd, sectionW, this.viewState, selectedTask as Task | null, selectedSwarmAgent, this.currentChannel());
-    const chromeLines = 5 + legendLines.length; // title + status + empty row + separator + bottom border + legend lines
-    const termRows = process.stdout.rows ?? 24;
-    const contentHeight = Math.max(8, termRows - chromeLines);
+      if (
+        initialCachedRender.expiresAt > Date.now() &&
+        initialCachedRender.key === preFeedSyncCacheKey &&
+        initialCachedRender.tasks === tasks &&
+        initialCachedRender.feedEvents === this.viewState.feedLoadedEvents
+      ) {
+        return initialCachedRender.lines;
+      }
+    }
 
     // Progressive feed loading with sparse sliding window
     const WINDOW_SIZE = 200; // max events to keep in memory
     const LOAD_CHUNK = 100;  // events to load when scrolling beyond window
-    const totalFeedLines = getFeedLineCount(this.cwd, this.currentChannel());
-
-    // Calculate feed height consistently (must match the calculation in list mode below)
-    const workersLimit = termRows <= 26 ? 2 : 5;
-    const workerLines = renderWorkersSection(this.theme, this.cwd, sectionW, workersLimit);
-    const agentsHeight = 2;
-    const workersHeight = () => workerLines.length > 0 ? workerLines.length + 1 : 0;
-    const available = contentHeight - workersHeight() - agentsHeight;
-
-    let feedHeight: number;
-    let mainHeight: number;
-
-    if (this.viewState.mainView === "tasks" && tasks.length === 0) {
-      const hasFeed = totalFeedLines > 0;
-      if (hasFeed) {
-        mainHeight = Math.min(Math.max(2, available - 1), 4);
-        feedHeight = Math.max(2, available - mainHeight - 1);
-      } else {
-        mainHeight = Math.min(10, Math.max(5, available));
-        feedHeight = 0;
-      }
-    } else if (workerLines.length > 0) {
-      feedHeight = Math.max(6, Math.floor(available * 0.65));
-      mainHeight = available - feedHeight - 1;
-    } else {
-      feedHeight = Math.max(4, Math.floor(available * 0.55));
-      mainHeight = available - feedHeight - 1;
-    }
-
-    feedHeight = Math.max(0, feedHeight);
-    mainHeight = Math.max(2, mainHeight);
+    const totalFeedLines = this.getFeedLineCountCached(channelId);
 
     // Initialize window if empty and feed exists
     if (this.viewState.feedLoadedEvents.length === 0 && totalFeedLines > 0) {
       const startIdx = Math.max(0, totalFeedLines - WINDOW_SIZE);
       const endIdx = totalFeedLines;
-      this.viewState.feedLoadedEvents = readFeedEventsByRange(this.cwd, startIdx, endIdx, this.currentChannel());
+      this.viewState.feedLoadedEvents = readFeedEventsByRange(this.cwd, startIdx, endIdx, channelId);
       this.viewState.feedWindowStart = startIdx;
       this.viewState.feedWindowEnd = endIdx;
       this.viewState.feedTotalLines = totalFeedLines;
@@ -659,8 +751,7 @@ export class MessengerOverlay implements Component, Focusable {
       this.viewState.wasAtBottom = true;
     } else if (totalFeedLines > this.viewState.feedTotalLines) {
       // New events added: extend window at the end
-      const addedCount = totalFeedLines - this.viewState.feedTotalLines;
-      const newEvents = readFeedEventsByRange(this.cwd, this.viewState.feedTotalLines, totalFeedLines, this.currentChannel());
+      const newEvents = readFeedEventsByRange(this.cwd, this.viewState.feedTotalLines, totalFeedLines, channelId);
       this.viewState.feedLoadedEvents = [...this.viewState.feedLoadedEvents, ...newEvents];
 
       // Track if we were at bottom before the window potentially slides
@@ -689,21 +780,153 @@ export class MessengerOverlay implements Component, Focusable {
       this.viewState.lastSeenEventTs = allEvents[allEvents.length - 1].ts;
     }
     const prevTs = this.viewState.lastSeenEventTs;
+    if (initialCachedRender) {
+      const earlyRenderCacheKey = [
+        w,
+        termRows,
+        channelId,
+        this.viewState.mainView,
+        this.viewState.mode,
+        this.viewState.selectedTaskIndex,
+        this.viewState.selectedSwarmIndex,
+        this.viewState.scrollOffset,
+        this.viewState.swarmScrollOffset,
+        this.viewState.detailScroll,
+        this.viewState.detailAutoScroll ? 1 : 0,
+        this.viewState.inputMode,
+        this.viewState.expandFeedMessages ? 1 : 0,
+        this.viewState.feedLineScrollOffset,
+        this.viewState.feedWindowStart,
+        this.viewState.feedWindowEnd,
+        this.viewState.feedTotalLines,
+        this.viewState.notification?.message ?? "",
+        this.viewState.notification?.expiresAt ?? 0,
+        this.viewState.confirmAction?.type ?? "",
+        this.viewState.confirmAction?.taskId ?? "",
+        this.viewState.blockReasonInput,
+        this.viewState.messageInput,
+        totalFeedLines,
+        tasks.length,
+        selectedTask?.id ?? "",
+        selectedSwarmAgent?.name ?? "",
+        prevTs ?? "",
+      ].join("|");
+
+      if (
+        initialCachedRender.expiresAt > Date.now() &&
+        initialCachedRender.key === earlyRenderCacheKey &&
+        initialCachedRender.tasks === tasks &&
+        initialCachedRender.feedEvents === this.viewState.feedLoadedEvents
+      ) {
+        return initialCachedRender.lines;
+      }
+    }
+
     this.detectAndFlashEvents(allEvents, prevTs);
     this.checkCompletion(tasks);
+
+    const renderCacheKey = [
+      w,
+      termRows,
+      channelId,
+      this.viewState.mainView,
+      this.viewState.mode,
+      this.viewState.selectedTaskIndex,
+      this.viewState.selectedSwarmIndex,
+      this.viewState.scrollOffset,
+      this.viewState.swarmScrollOffset,
+      this.viewState.detailScroll,
+      this.viewState.detailAutoScroll ? 1 : 0,
+      this.viewState.inputMode,
+      this.viewState.expandFeedMessages ? 1 : 0,
+      this.viewState.feedLineScrollOffset,
+      this.viewState.feedWindowStart,
+      this.viewState.feedWindowEnd,
+      this.viewState.feedTotalLines,
+      this.viewState.notification?.message ?? "",
+      this.viewState.notification?.expiresAt ?? 0,
+      this.viewState.confirmAction?.type ?? "",
+      this.viewState.confirmAction?.taskId ?? "",
+      this.viewState.blockReasonInput,
+      this.viewState.messageInput,
+      totalFeedLines,
+      tasks.length,
+      selectedTask?.id ?? "",
+      selectedSwarmAgent?.name ?? "",
+      prevTs ?? "",
+    ].join("|");
+
+    const liveWorkers = getLiveWorkers(this.cwd);
+
+    const lines: string[] = [];
+    const titleContent = this.renderTitleContent();
+    const chromeKey = `${innerW}|${titleContent}`;
+    if (!this.chromeCache || this.chromeCache.key !== chromeKey) {
+      const titleText = ` ${titleContent} `;
+      const titleLen = visibleWidth(titleContent) + 2;
+      const borderLen = Math.max(0, innerW - titleLen);
+      const leftBorder = Math.floor(borderLen / 2);
+      const rightBorder = borderLen - leftBorder;
+      this.chromeCache = {
+        key: chromeKey,
+        titleLine: border("╭" + "─".repeat(leftBorder)) + titleText + border("─".repeat(rightBorder) + "╮"),
+        emptyLine: border("│") + " ".repeat(innerW) + border("│"),
+        middleBorder: border("├" + "─".repeat(innerW) + "┤"),
+        bottomBorder: border("╰" + "─".repeat(innerW) + "╯"),
+      };
+    }
+
+    lines.push(this.chromeCache.titleLine);
+    lines.push(row(renderStatusBar(this.theme, this.cwd, sectionW, channelId, liveWorkers, tasks)));
+    lines.push(this.chromeCache.emptyLine);
+
+    // Calculate legend first to determine dynamic chrome lines
+    const legendLines = renderLegend(this.theme, this.cwd, sectionW, this.viewState, selectedTask as Task | null, selectedSwarmAgent, channelId);
+    const chromeLines = 5 + legendLines.length; // title + status + empty row + separator + bottom border + legend lines
+    const contentHeight = Math.max(8, termRows - chromeLines);
+
+    // Calculate feed height consistently (must match the calculation in list mode below)
+    const workersLimit = termRows <= 26 ? 2 : 5;
+    let workerLines = renderWorkersSection(this.theme, this.cwd, sectionW, workersLimit, liveWorkers);
+    const agentsHeight = 2;
+    const workersHeight = () => workerLines.length > 0 ? workerLines.length + 1 : 0;
+    const available = contentHeight - workersHeight() - agentsHeight;
+
+    let feedHeight: number;
+    let mainHeight: number;
+
+    if (this.viewState.mainView === "tasks" && tasks.length === 0) {
+      const hasFeed = totalFeedLines > 0;
+      if (hasFeed) {
+        mainHeight = Math.min(Math.max(2, available - 1), 4);
+        feedHeight = Math.max(2, available - mainHeight - 1);
+      } else {
+        mainHeight = Math.min(10, Math.max(5, available));
+        feedHeight = 0;
+      }
+    } else if (workerLines.length > 0) {
+      feedHeight = Math.max(6, Math.floor(available * 0.65));
+      mainHeight = available - feedHeight - 1;
+    } else {
+      feedHeight = Math.max(4, Math.floor(available * 0.55));
+      mainHeight = available - feedHeight - 1;
+    }
+
+    feedHeight = Math.max(0, feedHeight);
+    mainHeight = Math.max(2, mainHeight);
 
     let contentLines: string[];
     if (this.viewState.mode === "detail") {
       if (this.viewState.mainView === "swarm" && selectedSwarmAgent) {
         contentLines = renderSwarmDetail(selectedSwarmAgent, sectionW, contentHeight, this.viewState);
       } else if (this.viewState.mainView === "tasks" && selectedTask) {
-        contentLines = renderDetailView(this.cwd, selectedTask as Task, sectionW, contentHeight, this.viewState, this.currentChannel());
+        contentLines = renderDetailView(this.cwd, selectedTask as Task, sectionW, contentHeight, this.viewState, channelId, liveWorkers);
       } else {
         contentLines = [];
         while (contentLines.length < contentHeight) contentLines.push("");
       }
     } else {
-      const agentsLine = renderAgentsRow(this.cwd, sectionW, this.state, this.dirs, this.stuckThresholdMs);
+      const agentsLine = renderAgentsRow(this.cwd, sectionW, this.state, this.dirs, this.stuckThresholdMs, liveWorkers);
 
       // Adjust heights based on list panel content (may increase feedHeight)
       const isListPanel = this.viewState.mainView === "swarm" || tasks.length > 0;
@@ -787,7 +1010,7 @@ export class MessengerOverlay implements Component, Focusable {
       } else if (tasks.length === 0) {
         mainLines = renderEmptyState(this.theme, this.cwd, sectionW, mainHeight, this.currentChannel());
       } else {
-        mainLines = renderTaskList(this.theme, this.cwd, sectionW, mainHeight, this.viewState, this.currentChannel());
+        mainLines = renderTaskList(this.theme, this.cwd, sectionW, mainHeight, this.viewState, channelId, liveWorkers, tasks);
       }
 
       contentLines = [];
@@ -818,15 +1041,24 @@ export class MessengerOverlay implements Component, Focusable {
       lines.push(row(line));
     }
 
-    lines.push(border("├" + "─".repeat(innerW) + "┤"));
+    lines.push(this.chromeCache.middleBorder);
     for (const legendLine of legendLines) {
       lines.push(row(legendLine));
     }
-    lines.push(border("╰" + "─".repeat(innerW) + "╯"));
+    lines.push(this.chromeCache.bottomBorder);
 
     if (allEvents.length > 0) {
       this.viewState.lastSeenEventTs = allEvents[allEvents.length - 1].ts;
     }
+
+    this.renderCache = {
+      key: renderCacheKey,
+      quickKey: ultraEarlyCacheKey,
+      expiresAt: Date.now() + RENDER_CACHE_TTL_MS,
+      tasks,
+      feedEvents: this.viewState.feedLoadedEvents,
+      lines,
+    };
 
     return lines;
   }
@@ -837,7 +1069,10 @@ export class MessengerOverlay implements Component, Focusable {
   ]);
 
   private detectAndFlashEvents(events: FeedEvent[], prevTs: string | null): void {
-    if (prevTs === null) return;
+    if (prevTs === null || events.length === 0) return;
+    const newestTs = events[events.length - 1]?.ts;
+    if (!newestTs || newestTs <= prevTs) return;
+
     const newEvents = events.filter(e => e.ts > prevTs);
     if (newEvents.length === 0) return;
 
@@ -871,7 +1106,11 @@ export class MessengerOverlay implements Component, Focusable {
   }
 
   private checkCompletion(tasks: Task[]): void {
-    const allDone = tasks.length > 0 && tasks.every(t => t.status === "done");
+    const cached = this.completionStateCache;
+    const allDone = cached && cached.tasks === tasks
+      ? cached.allDone
+      : tasks.length > 0 && tasks.every(t => t.status === "done");
+    this.completionStateCache = { tasks, allDone };
     const isIdle = !hasLiveWorkers(this.cwd);
 
     if (!allDone) {
@@ -903,10 +1142,11 @@ export class MessengerOverlay implements Component, Focusable {
   }
 
   invalidate(): void {
-    // No cached state
+    this.renderCache = null;
   }
 
   dispose(): void {
+    this.renderCache = null;
     this.stopProgressRefresh();
     this.cancelCompletionTimer();
     if (this.viewState.notificationTimer) {
