@@ -2,6 +2,8 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.17.8](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.17.7...v0.17.8) (2026-03-26)
+
 ### [0.17.7](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.17.6...v0.17.7) (2026-03-26)
 
 
