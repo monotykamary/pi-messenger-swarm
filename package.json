@@ -43,14 +43,30 @@
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "release": "standard-version",
-    "release:dry-run": "standard-version --dry-run"
+    "release:dry-run": "standard-version --dry-run",
+    "postinstall": "simple-git-hooks"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "npx lint-staged",
+    "pre-push": "npm run typecheck && npm run test",
+    "commit-msg": "npx commitlint --edit ${1}"
+  },
+  "lint-staged": {
+    "*.{ts,js,json,md}": [
+      "prettier --write"
+    ]
   },
   "devDependencies": {
+    "@commitlint/cli": "^20.5.0",
+    "@commitlint/config-conventional": "^20.5.0",
     "@mariozechner/pi-coding-agent": "*",
     "@mariozechner/pi-tui": "*",
     "@sinclair/typebox": "*",
     "@types/node": "^25.3.3",
     "@vitest/coverage-v8": "^2.1.8",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.1",
+    "simple-git-hooks": "^2.13.1",
     "standard-version": "^9.5.0",
     "typescript": "^6.0.2",
     "vitest": "^2.1.8"
