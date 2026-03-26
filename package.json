@@ -40,12 +40,16 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
     "release": "standard-version",
     "release:dry-run": "standard-version --dry-run"
   },
   "devDependencies": {
     "@types/node": "^25.3.3",
+    "@vitest/coverage-v8": "^2.1.8",
     "standard-version": "^9.5.0",
+    "typescript": "^6.0.2",
     "vitest": "^2.1.8"
   },
   "pi": {

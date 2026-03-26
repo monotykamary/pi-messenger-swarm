@@ -8,6 +8,7 @@
     "skipLibCheck": true,
     "noEmit": true,
     "resolveJsonModule": true,
+    "ignoreDeprecations": "6.0",
     "paths": {
       "@mariozechner/pi-coding-agent": ["/opt/homebrew/lib/node_modules/@mariozechner/pi-coding-agent/dist/index.d.ts"],
       "@mariozechner/pi-tui": ["/opt/homebrew/lib/node_modules/@mariozechner/pi-coding-agent/node_modules/@mariozechner/pi-tui/dist/index.d.ts"],
