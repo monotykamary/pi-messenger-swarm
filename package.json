@@ -62,14 +62,14 @@
     "@mariozechner/pi-coding-agent": "*",
     "@mariozechner/pi-tui": "*",
     "@sinclair/typebox": "*",
-    "@types/node": "^25.3.3",
-    "@vitest/coverage-v8": "^2.1.8",
+    "@types/node": "^25.5.0",
+    "@vitest/coverage-v8": "^4.1.2",
     "lint-staged": "^16.4.0",
     "prettier": "^3.8.1",
     "simple-git-hooks": "^2.13.1",
     "standard-version": "^9.5.0",
     "typescript": "^6.0.2",
-    "vitest": "^2.1.8"
+    "vitest": "^4.1.2"
   },
   "pi": {
     "extensions": [
