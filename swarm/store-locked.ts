@@ -219,7 +219,7 @@ export async function createTaskLocked(
     dependsOn?: string[];
     createdBy?: string;
   }
-): Promise<store.SwarmTask> {
+): Promise<SwarmTask> {
   // Lock the ID allocation process itself
   const idLockPath = "__id_allocation__";
   

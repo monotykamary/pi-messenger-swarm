@@ -46,6 +46,9 @@
     "release:dry-run": "standard-version --dry-run"
   },
   "devDependencies": {
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-tui": "*",
+    "@sinclair/typebox": "*",
     "@types/node": "^25.3.3",
     "@vitest/coverage-v8": "^2.1.8",
     "standard-version": "^9.5.0",

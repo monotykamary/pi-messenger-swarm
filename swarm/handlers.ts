@@ -499,7 +499,7 @@ function spawnCreate(params: MessengerActionParams, state: MessengerState, cwd: 
     const request: SpawnRequest = {
       agentFile: params.agentFile,
       message,
-      content: params.content,
+      context: params.content,
       taskId: params.taskId,
       model: params.model,
       name: params.name,

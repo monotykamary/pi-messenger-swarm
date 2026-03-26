@@ -80,11 +80,12 @@ export function executeJoin(
     if (channel) {
       const switched = store.joinChannel(state, dirs, channel, { create });
       if (!switched.success) {
+        const error = (switched as Extract<typeof switched, { success: false }>).error;
         return result(
-          switched.error === "not_found"
+          error === "not_found"
             ? `Channel ${displayChannelLabel(channel)} not found.`
             : `Invalid channel: ${channel}`,
-          { mode: "join", error: switched.error, channel }
+          { mode: "join", error, channel }
         );
       }
     }
@@ -96,11 +97,12 @@ export function executeJoin(
   } else if (channel) {
     const switched = store.joinChannel(state, dirs, channel, { create });
     if (!switched.success) {
+      const error = (switched as Extract<typeof switched, { success: false }>).error;
       return result(
-        switched.error === "not_found"
+        error === "not_found"
           ? `Channel ${displayChannelLabel(channel)} not found.`
           : `Invalid channel: ${channel}`,
-        { mode: "join", error: switched.error, channel }
+        { mode: "join", error, channel }
       );
     }
     store.stopWatcher(state);
