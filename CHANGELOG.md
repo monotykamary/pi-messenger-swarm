@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.17.7](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.17.6...v0.17.7) (2026-03-26)
+
+
+### Bug Fixes
+
+* resolve TypeScript errors and add missing dependencies ([48b23ad](https://github.com/monotykamary/pi-messenger-swarm/commit/48b23ad7b27fb0ecfe1822b8a7a88f389dd32383))
+
 ### [0.17.6](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.17.5...v0.17.6) (2026-03-26)
 
 ### [0.17.5](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.17.4...v0.17.5) (2026-03-14)
