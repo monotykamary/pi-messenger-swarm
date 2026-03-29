@@ -17,7 +17,18 @@ const theme = {
 };
 
 function extractVisibleMessages(frame: string[]): string[] {
-  return frame
+  const middleBorderIndex = frame.findIndex((line) => line.includes('├') && line.includes('┤'));
+  const contentLines = middleBorderIndex >= 0 ? frame.slice(0, middleBorderIndex) : frame;
+  const separatorIndexes = contentLines
+    .map((line, index) => (/─{5,}/.test(line) ? index : -1))
+    .filter((index) => index >= 0);
+  const lastContentSeparator = separatorIndexes.at(-1);
+  const feedLines =
+    lastContentSeparator === undefined
+      ? contentLines
+      : contentLines.slice(lastContentSeparator + 1);
+
+  return feedLines
     .map((line) => line.match(/Msg \d+/)?.[0])
     .filter((value): value is string => Boolean(value));
 }
@@ -125,7 +136,7 @@ describe('overlay layout', () => {
       const frame = overlay.render(100);
       overlay.dispose();
 
-      const visibleMessages = frame.filter((line) => line.includes('Msg '));
+      const visibleMessages = extractVisibleMessages(frame);
       expect(visibleMessages).toHaveLength(6);
       expect(visibleMessages.at(-1)).toContain('Msg 9');
     } finally {
