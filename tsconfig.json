@@ -10,6 +10,6 @@
     "noEmit": true,
     "resolveJsonModule": true
   },
-  "include": ["*.ts", "./swarm/**/*.ts"],
-  "exclude": ["node_modules", "**/*.test.ts"]
+  "include": ["./**/*.ts"],
+  "exclude": ["node_modules", "tests"]
 }

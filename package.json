@@ -31,9 +31,14 @@
   "files": [
     "*.ts",
     "*.mjs",
+    "handlers/**",
+    "overlay/**",
+    "store/**",
+    "extension/**",
     "swarm/**",
     "migrations/**",
     "skills/**",
+    "docs/**",
     "README.md",
     "CHANGELOG.md"
   ],
