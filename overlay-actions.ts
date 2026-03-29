@@ -1,13 +1,13 @@
-import { randomUUID } from "node:crypto";
-import { matchesKey, type TUI } from "@mariozechner/pi-tui";
-import type { AgentMailMessage, Dirs, MessengerState } from "./lib.js";
-import { MAX_CHAT_HISTORY } from "./lib.js";
-import { sendMessageToAgent, getActiveAgents, resolveTargetChannel } from "./store.js";
-import { logFeedEvent, type FeedEvent } from "./feed.js";
-import * as swarmStore from "./swarm/store.js";
-import { executeTaskAction as runTaskAction } from "./swarm/task-actions.js";
-import type { SwarmTask as Task } from "./swarm/types.js";
-import { getLiveWorkers } from "./swarm/live-progress.js";
+import { randomUUID } from 'node:crypto';
+import { matchesKey, type TUI } from '@mariozechner/pi-tui';
+import type { AgentMailMessage, Dirs, MessengerState } from './lib.js';
+import { MAX_CHAT_HISTORY } from './lib.js';
+import { sendMessageToAgent, getActiveAgents, resolveTargetChannel } from './store.js';
+import { logFeedEvent, type FeedEvent } from './feed.js';
+import * as swarmStore from './swarm/store.js';
+import { executeTaskAction as runTaskAction } from './swarm/task-actions.js';
+import type { SwarmTask as Task } from './swarm/types.js';
+import { getLiveWorkers } from './swarm/live-progress.js';
 
 // Throttle render requests during typing to reduce lag
 // This coalesces multiple keystrokes into a single render
@@ -28,7 +28,7 @@ function requestRenderThrottled(tui: TUI): void {
 }
 
 interface ConfirmAction {
-  type: "delete" | "archive";
+  type: 'delete' | 'archive';
   taskId: string;
   label: string;
 }
@@ -38,14 +38,14 @@ export interface MessengerViewState {
   selectedTaskIndex: number;
   selectedSwarmIndex: number;
   swarmScrollOffset: number;
-  mainView: "tasks" | "swarm";
-  mode: "list" | "detail";
+  mainView: 'tasks' | 'swarm';
+  mode: 'list' | 'detail';
   detailScroll: number;
   detailAutoScroll: boolean;
   confirmAction: ConfirmAction | null;
   blockReasonInput: string;
   messageInput: string;
-  inputMode: "normal" | "block-reason" | "message";
+  inputMode: 'normal' | 'block-reason' | 'message';
   lastSeenEventTs: string | null;
   notification: { message: string; expiresAt: number } | null;
   notificationTimer: ReturnType<typeof setTimeout> | null;
@@ -58,7 +58,7 @@ export interface MessengerViewState {
   // Progressive feed loading - sparse sliding window
   feedLoadedEvents: FeedEvent[];
   feedWindowStart: number; // absolute line index (0 = oldest, totalLines-1 = newest)
-  feedWindowEnd: number;   // absolute line index
+  feedWindowEnd: number; // absolute line index
   feedTotalLines: number;
   // Line-based feed scroll state
   feedLineScrollOffset: number; // lines from bottom (0 = at bottom, >0 = scrolled up)
@@ -73,14 +73,14 @@ export function createMessengerViewState(): MessengerViewState {
     selectedTaskIndex: 0,
     selectedSwarmIndex: 0,
     swarmScrollOffset: 0,
-    mainView: "tasks",
-    mode: "list",
+    mainView: 'tasks',
+    mode: 'list',
     detailScroll: 0,
     detailAutoScroll: true,
     confirmAction: null,
-    blockReasonInput: "",
-    messageInput: "",
-    inputMode: "normal",
+    blockReasonInput: '',
+    messageInput: '',
+    inputMode: 'normal',
     lastSeenEventTs: null,
     notification: null,
     notificationTimer: null,
@@ -114,35 +114,55 @@ function executeTaskAction(
   taskId: string,
   agentName: string,
   channelId: string,
-  reason?: string,
+  reason?: string
 ): { success: boolean; message: string } {
   if (
-    action !== "start" &&
-    action !== "block" &&
-    action !== "unblock" &&
-    action !== "delete" &&
-    action !== "archive" &&
-    action !== "stop"
+    action !== 'start' &&
+    action !== 'block' &&
+    action !== 'unblock' &&
+    action !== 'delete' &&
+    action !== 'archive' &&
+    action !== 'stop'
   ) {
     return { success: false, message: `Unknown action: ${action}` };
   }
 
-  const result = runTaskAction(cwd, action, taskId, agentName, reason, {
-    isWorkerActive: id => hasLiveWorker(cwd, id),
-  }, channelId);
+  const result = runTaskAction(
+    cwd,
+    action,
+    taskId,
+    agentName,
+    reason,
+    {
+      isWorkerActive: (id) => hasLiveWorker(cwd, id),
+    },
+    channelId
+  );
   return { success: result.success, message: result.message };
 }
 
-export function setNotification(viewState: MessengerViewState, tui: TUI, success: boolean, message: string): void {
+export function setNotification(
+  viewState: MessengerViewState,
+  tui: TUI,
+  success: boolean,
+  message: string
+): void {
   if (viewState.notificationTimer) clearTimeout(viewState.notificationTimer);
-  viewState.notification = { message: `${success ? "✓" : "✗"} ${message}`, expiresAt: Date.now() + 2000 };
+  viewState.notification = {
+    message: `${success ? '✓' : '✗'} ${message}`,
+    expiresAt: Date.now() + 2000,
+  };
   viewState.notificationTimer = setTimeout(() => {
     viewState.notificationTimer = null;
     tui.requestRender();
   }, 2000);
 }
 
-function addToChatHistory(state: MessengerState, recipient: string, message: AgentMailMessage): void {
+function addToChatHistory(
+  state: MessengerState,
+  recipient: string,
+  message: AgentMailMessage
+): void {
   let history = state.chatHistory.get(recipient);
   if (!history) {
     history = [];
@@ -172,18 +192,28 @@ function previewText(text: string): string {
   return text;
 }
 
-export function handleConfirmInput(data: string, viewState: MessengerViewState, cwd: string, agentName: string, channelId: string = "general", tui: TUI): void {
+export function handleConfirmInput(
+  data: string,
+  viewState: MessengerViewState,
+  cwd: string,
+  agentName: string,
+  channelId: string = 'general',
+  tui: TUI
+): void {
   const action = viewState.confirmAction;
   if (!action) return;
-  if (matchesKey(data, "y")) {
+  if (matchesKey(data, 'y')) {
     const result = executeTaskAction(cwd, action.type, action.taskId, agentName, channelId);
-    if (action.type === "delete" || action.type === "archive") {
+    if (action.type === 'delete' || action.type === 'archive') {
       const tasks = swarmStore.getTasks(cwd, channelId);
       if (tasks.length > 0) {
-        viewState.selectedTaskIndex = Math.max(0, Math.min(viewState.selectedTaskIndex, tasks.length - 1));
+        viewState.selectedTaskIndex = Math.max(
+          0,
+          Math.min(viewState.selectedTaskIndex, tasks.length - 1)
+        );
       } else {
         viewState.selectedTaskIndex = 0;
-        if (viewState.mode === "detail") viewState.mode = "list";
+        if (viewState.mode === 'detail') viewState.mode = 'list';
       }
     }
     viewState.confirmAction = null;
@@ -191,7 +221,7 @@ export function handleConfirmInput(data: string, viewState: MessengerViewState, 
     tui.requestRender();
     return;
   }
-  if (matchesKey(data, "n") || matchesKey(data, "escape")) {
+  if (matchesKey(data, 'n') || matchesKey(data, 'escape')) {
     viewState.confirmAction = null;
     tui.requestRender();
   }
@@ -203,26 +233,26 @@ export function handleBlockReasonInput(
   cwd: string,
   task: Task | undefined,
   agentName: string,
-  channelId: string = "general",
-  tui: TUI,
+  channelId: string = 'general',
+  tui: TUI
 ): void {
-  if (matchesKey(data, "escape")) {
-    viewState.inputMode = "normal";
-    viewState.blockReasonInput = "";
+  if (matchesKey(data, 'escape')) {
+    viewState.inputMode = 'normal';
+    viewState.blockReasonInput = '';
     tui.requestRender();
     return;
   }
-  if (matchesKey(data, "enter")) {
+  if (matchesKey(data, 'enter')) {
     const reason = viewState.blockReasonInput.trim();
     if (!reason || !task) return;
-    const result = executeTaskAction(cwd, "block", task.id, agentName, channelId, reason);
-    viewState.inputMode = "normal";
-    viewState.blockReasonInput = "";
+    const result = executeTaskAction(cwd, 'block', task.id, agentName, channelId, reason);
+    viewState.inputMode = 'normal';
+    viewState.blockReasonInput = '';
     setNotification(viewState, tui, result.success, result.message);
     tui.requestRender();
     return;
   }
-  if (matchesKey(data, "backspace")) {
+  if (matchesKey(data, 'backspace')) {
     if (viewState.blockReasonInput.length > 0) {
       viewState.blockReasonInput = viewState.blockReasonInput.slice(0, -1);
       requestRenderThrottled(tui);
@@ -236,8 +266,8 @@ export function handleBlockReasonInput(
 }
 
 function resetMessageInput(viewState: MessengerViewState): void {
-  viewState.inputMode = "normal";
-  viewState.messageInput = "";
+  viewState.inputMode = 'normal';
+  viewState.messageInput = '';
   viewState.mentionCandidates = [];
   viewState.mentionIndex = -1;
 }
@@ -246,7 +276,7 @@ function collectMentionCandidates(
   prefix: string,
   state: MessengerState,
   dirs: Dirs,
-  cwd: string,
+  cwd: string
 ): string[] {
   const seen = new Set<string>();
   const names: string[] = [];
@@ -266,11 +296,11 @@ function collectMentionCandidates(
     }
   }
 
-  names.push("all");
+  names.push('all');
 
   if (!prefix) return names;
   const lower = prefix.toLowerCase();
-  return names.filter(n => n.toLowerCase().startsWith(lower));
+  return names.filter((n) => n.toLowerCase().startsWith(lower));
 }
 
 function sendDirectMessage(
@@ -280,18 +310,18 @@ function sendDirectMessage(
   target: string,
   text: string,
   tui: TUI,
-  viewState: MessengerViewState,
+  viewState: MessengerViewState
 ): void {
   try {
     const targetChannel = resolveTargetChannel(dirs, target) ?? state.currentChannel;
     const msg = sendMessageToAgent(state, dirs, target, text, undefined, targetChannel);
     addToChatHistory(state, target, msg);
-    logFeedEvent(cwd, state.agentName, "message", target, previewText(text), targetChannel);
+    logFeedEvent(cwd, state.agentName, 'message', target, previewText(text), targetChannel);
     resetMessageInput(viewState);
     setNotification(viewState, tui, true, `Sent to ${target}`);
     tui.requestRender();
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "unknown error";
+    const msg = err instanceof Error ? err.message : 'unknown error';
     setNotification(viewState, tui, false, `Failed to send to ${target}: ${msg}`);
     tui.requestRender();
   }
@@ -303,12 +333,16 @@ function sendChannelPost(
   cwd: string,
   text: string,
   tui: TUI,
-  viewState: MessengerViewState,
+  viewState: MessengerViewState
 ): void {
-  const peers = getActiveAgents(state, dirs).filter(peer => {
+  const peers = getActiveAgents(state, dirs).filter((peer) => {
     const joined = peer.joinedChannels ?? [];
     if (joined.length === 0 && !peer.currentChannel && !peer.sessionChannel) return true;
-    return joined.includes(state.currentChannel) || peer.currentChannel === state.currentChannel || peer.sessionChannel === state.currentChannel;
+    return (
+      joined.includes(state.currentChannel) ||
+      peer.currentChannel === state.currentChannel ||
+      peer.sessionChannel === state.currentChannel
+    );
   });
 
   let sentCount = 0;
@@ -323,18 +357,37 @@ function sendChannelPost(
 
   if (sentCount === 0) {
     addToChannelPostHistory(state, text);
-    logFeedEvent(cwd, state.agentName, "message", undefined, previewText(text), state.currentChannel);
+    logFeedEvent(
+      cwd,
+      state.agentName,
+      'message',
+      undefined,
+      previewText(text),
+      state.currentChannel
+    );
     resetMessageInput(viewState);
-    setNotification(viewState, tui, true, `Posted to ${state.currentChannel.startsWith("#") ? state.currentChannel : `#${state.currentChannel}`}`);
+    setNotification(
+      viewState,
+      tui,
+      true,
+      `Posted to ${state.currentChannel.startsWith('#') ? state.currentChannel : `#${state.currentChannel}`}`
+    );
     tui.requestRender();
     return;
   }
 
   addToChannelPostHistory(state, text);
-  logFeedEvent(cwd, state.agentName, "message", undefined, previewText(text), state.currentChannel);
+  logFeedEvent(cwd, state.agentName, 'message', undefined, previewText(text), state.currentChannel);
   resetMessageInput(viewState);
-  const channelLabel = state.currentChannel.startsWith("#") ? state.currentChannel : `#${state.currentChannel}`;
-  setNotification(viewState, tui, true, `Posted to ${channelLabel} and delivered to ${sentCount} peer${sentCount === 1 ? "" : "s"}`);
+  const channelLabel = state.currentChannel.startsWith('#')
+    ? state.currentChannel
+    : `#${state.currentChannel}`;
+  setNotification(
+    viewState,
+    tui,
+    true,
+    `Posted to ${channelLabel} and delivered to ${sentCount} peer${sentCount === 1 ? '' : 's'}`
+  );
   tui.requestRender();
 }
 
@@ -344,20 +397,20 @@ export function handleMessageInput(
   state: MessengerState,
   dirs: Dirs,
   cwd: string,
-  tui: TUI,
+  tui: TUI
 ): void {
-  if (matchesKey(data, "escape")) {
+  if (matchesKey(data, 'escape')) {
     resetMessageInput(viewState);
     tui.requestRender();
     return;
   }
 
-  if (matchesKey(data, "tab") || matchesKey(data, "shift+tab")) {
+  if (matchesKey(data, 'tab') || matchesKey(data, 'shift+tab')) {
     const input = viewState.messageInput;
     const cycling = viewState.mentionIndex >= 0 && viewState.mentionCandidates.length > 0;
-    if (!input.startsWith("@") || (input.includes(" ") && !cycling)) return;
+    if (!input.startsWith('@') || (input.includes(' ') && !cycling)) return;
 
-    const reverse = matchesKey(data, "shift+tab");
+    const reverse = matchesKey(data, 'shift+tab');
 
     if (!cycling) {
       const prefix = input.slice(1);
@@ -366,7 +419,9 @@ export function handleMessageInput(
       viewState.mentionIndex = 0;
     } else {
       const delta = reverse ? -1 : 1;
-      viewState.mentionIndex = (viewState.mentionIndex + delta + viewState.mentionCandidates.length) % viewState.mentionCandidates.length;
+      viewState.mentionIndex =
+        (viewState.mentionIndex + delta + viewState.mentionCandidates.length) %
+        viewState.mentionCandidates.length;
     }
 
     viewState.messageInput = `@${viewState.mentionCandidates[viewState.mentionIndex]} `;
@@ -374,21 +429,26 @@ export function handleMessageInput(
     return;
   }
 
-  if (matchesKey(data, "enter")) {
+  if (matchesKey(data, 'enter')) {
     const raw = viewState.messageInput.trim();
     if (!raw) return;
 
-    if (raw.startsWith("@all ")) {
+    if (raw.startsWith('@all ')) {
       const text = raw.slice(5).trim();
       if (!text) return;
       sendChannelPost(state, dirs, cwd, text, tui, viewState);
       return;
     }
 
-    if (raw.startsWith("@")) {
-      const firstSpace = raw.indexOf(" ");
+    if (raw.startsWith('@')) {
+      const firstSpace = raw.indexOf(' ');
       if (firstSpace <= 1) {
-        setNotification(viewState, tui, false, "Use @name <message> or type to post to the current channel");
+        setNotification(
+          viewState,
+          tui,
+          false,
+          'Use @name <message> or type to post to the current channel'
+        );
         tui.requestRender();
         return;
       }
@@ -396,7 +456,12 @@ export function handleMessageInput(
       const target = raw.slice(1, firstSpace).trim();
       const text = raw.slice(firstSpace + 1).trim();
       if (!target || !text) {
-        setNotification(viewState, tui, false, "Use @name <message> or type to post to the current channel");
+        setNotification(
+          viewState,
+          tui,
+          false,
+          'Use @name <message> or type to post to the current channel'
+        );
         tui.requestRender();
         return;
       }
@@ -409,7 +474,7 @@ export function handleMessageInput(
     return;
   }
 
-  if (matchesKey(data, "backspace")) {
+  if (matchesKey(data, 'backspace')) {
     if (viewState.messageInput.length > 0) {
       viewState.messageInput = viewState.messageInput.slice(0, -1);
       viewState.mentionCandidates = [];
@@ -433,40 +498,35 @@ export function handleTaskKeyBinding(
   viewState: MessengerViewState,
   cwd: string,
   agentName: string,
-  channelId: string = "general",
-  tui: TUI,
+  channelId: string = 'general',
+  tui: TUI
 ): void {
-  if (matchesKey(data, "s") && task.status === "todo") {
-    const result = executeTaskAction(cwd, "start", task.id, agentName, channelId);
+  if (matchesKey(data, 's') && task.status === 'todo') {
+    const result = executeTaskAction(cwd, 'start', task.id, agentName, channelId);
     setNotification(viewState, tui, result.success, result.message);
     tui.requestRender();
     return;
   }
-  if (matchesKey(data, "u") && task.status === "blocked") {
-    const result = executeTaskAction(cwd, "unblock", task.id, agentName, channelId);
+  if (matchesKey(data, 'u') && task.status === 'blocked') {
+    const result = executeTaskAction(cwd, 'unblock', task.id, agentName, channelId);
     setNotification(viewState, tui, result.success, result.message);
     tui.requestRender();
     return;
   }
-  if (matchesKey(data, "b") && task.status === "in_progress") {
-    viewState.inputMode = "block-reason";
-    viewState.blockReasonInput = "";
+  if (matchesKey(data, 'b') && task.status === 'in_progress') {
+    viewState.inputMode = 'block-reason';
+    viewState.blockReasonInput = '';
     tui.requestRender();
     return;
   }
-  if (matchesKey(data, "q") && task.status === "in_progress") {
-    const result = executeTaskAction(cwd, "stop", task.id, agentName, channelId);
-    setNotification(viewState, tui, result.success, result.message);
-    tui.requestRender();
-    return;
-  }
-  if (matchesKey(data, "x")) {
-    if (task.status !== "done") {
-      setNotification(viewState, tui, false, "Only done tasks can be archived");
+
+  if (matchesKey(data, 'x')) {
+    if (task.status !== 'done') {
+      setNotification(viewState, tui, false, 'Only done tasks can be archived');
       tui.requestRender();
       return;
     }
-    viewState.confirmAction = { type: "archive", taskId: task.id, label: task.title };
+    viewState.confirmAction = { type: 'archive', taskId: task.id, label: task.title };
     tui.requestRender();
     return;
   }
