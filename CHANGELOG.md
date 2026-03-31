@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.17.10](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.17.9...v0.17.10) (2026-03-31)
+
+### Features
+
+- **overlay:** add 'q' keybinding to close messenger ([0355b8d](https://github.com/monotykamary/pi-messenger-swarm/commit/0355b8d230efb81db9f5140cfdd1f3fcecfd1767))
+
 ### [0.17.9](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.17.8...v0.17.9) (2026-03-29)
 
 ### Bug Fixes
