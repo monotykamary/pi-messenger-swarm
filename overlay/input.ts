@@ -129,7 +129,7 @@ export function handleOverlayInput({
     return;
   }
 
-  if (matchesKey(data, 'escape')) {
+  if (matchesKey(data, 'escape') || data === 'q') {
     if (viewState.mode === 'detail') {
       viewState.mode = 'list';
       tui.requestRender();
