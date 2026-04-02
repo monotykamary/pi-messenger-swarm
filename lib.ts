@@ -2,8 +2,8 @@
  * Pi Messenger - Types and Pure Utilities
  */
 
-import type * as fs from "node:fs";
-import { basename, isAbsolute, resolve, relative } from "node:path";
+import type * as fs from 'node:fs';
+import { basename, isAbsolute, resolve, relative } from 'node:path';
 
 // =============================================================================
 // Types
@@ -118,7 +118,7 @@ export type SpecCompletions = Record<string, CompletionEntry>;
 export type AllClaims = Record<string, SpecClaims>;
 export type AllCompletions = Record<string, SpecCompletions>;
 
-export type AgentStatus = "active" | "idle" | "away" | "stuck";
+export type AgentStatus = 'active' | 'idle' | 'away' | 'stuck';
 
 export interface ComputedStatus {
   status: AgentStatus;
@@ -133,24 +133,24 @@ export function computeStatus(
 ): ComputedStatus {
   const elapsed = Date.now() - new Date(lastActivityAt).getTime();
   if (isNaN(elapsed) || elapsed < 0) {
-    return { status: "active" };
+    return { status: 'active' };
   }
   const ACTIVE_MS = 30_000;
   const IDLE_MS = 5 * 60_000;
 
   if (elapsed < ACTIVE_MS) {
-    return { status: "active" };
+    return { status: 'active' };
   }
   if (elapsed < IDLE_MS) {
-    return { status: "idle", idleFor: formatDuration(elapsed) };
+    return { status: 'idle', idleFor: formatDuration(elapsed) };
   }
   if (!hasTask && !hasReservation) {
-    return { status: "away", idleFor: formatDuration(elapsed) };
+    return { status: 'away', idleFor: formatDuration(elapsed) };
   }
   if (elapsed >= thresholdMs) {
-    return { status: "stuck", idleFor: formatDuration(elapsed) };
+    return { status: 'stuck', idleFor: formatDuration(elapsed) };
   }
-  return { status: "idle", idleFor: formatDuration(elapsed) };
+  return { status: 'idle', idleFor: formatDuration(elapsed) };
 }
 
 export function formatDuration(ms: number): string {
@@ -163,10 +163,10 @@ export function formatDuration(ms: number): string {
 }
 
 export const STATUS_INDICATORS: Record<AgentStatus, string> = {
-  active: "\u{1F7E2}",
-  idle: "\u{1F7E1}",
-  away: "\u{1F7E0}",
-  stuck: "\u{1F534}",
+  active: '\u{1F7E2}',
+  idle: '\u{1F7E1}',
+  away: '\u{1F7E0}',
+  stuck: '\u{1F534}',
 };
 
 export interface AutoStatusContext {
@@ -181,27 +181,27 @@ export function generateAutoStatus(ctx: AutoStatusContext): string | undefined {
   const sessionAge = Date.now() - new Date(ctx.sessionStartedAt).getTime();
 
   if (sessionAge < 30_000) {
-    return "just arrived";
+    return 'just arrived';
   }
 
   if (ctx.recentCommit) {
-    return "just shipped";
+    return 'just shipped';
   }
 
   if (ctx.recentTestRuns >= 3) {
-    return "debugging...";
+    return 'debugging...';
   }
 
   if (ctx.recentEdits >= 8) {
-    return "on fire \u{1F525}";
+    return 'on fire \u{1F525}';
   }
 
-  if (ctx.currentActivity?.startsWith("reading")) {
-    return "exploring the codebase";
+  if (ctx.currentActivity?.startsWith('reading')) {
+    return 'exploring the codebase';
   }
 
-  if (ctx.currentActivity?.startsWith("editing")) {
-    return "deep in thought";
+  if (ctx.currentActivity?.startsWith('editing')) {
+    return 'deep in thought';
   }
 
   return undefined;
@@ -215,50 +215,172 @@ export const MAX_WATCHER_RETRIES = 5;
 export const MAX_CHAT_HISTORY = 50;
 
 const AGENT_COLORS = [
-  "38;2;178;129;214",  // purple
-  "38;2;215;135;175",  // pink  
-  "38;2;254;188;56",   // gold
-  "38;2;137;210;129",  // green
-  "38;2;0;175;175",    // cyan
-  "38;2;23;143;185",   // blue
-  "38;2;228;192;15",   // yellow
-  "38;2;255;135;135",  // coral
+  '38;2;178;129;214', // purple
+  '38;2;215;135;175', // pink
+  '38;2;254;188;56', // gold
+  '38;2;137;210;129', // green
+  '38;2;0;175;175', // cyan
+  '38;2;23;143;185', // blue
+  '38;2;228;192;15', // yellow
+  '38;2;255;135;135', // coral
 ];
 
 const DEFAULT_ADJECTIVES = [
-  "Swift", "Bright", "Calm", "Dark", "Epic", "Fast", "Gold", "Happy",
-  "Iron", "Jade", "Keen", "Loud", "Mint", "Nice", "Oak", "Pure",
-  "Quick", "Red", "Sage", "True", "Ultra", "Vivid", "Wild", "Young", "Zen"
+  'Swift',
+  'Bright',
+  'Calm',
+  'Dark',
+  'Epic',
+  'Fast',
+  'Gold',
+  'Happy',
+  'Iron',
+  'Jade',
+  'Keen',
+  'Loud',
+  'Mint',
+  'Nice',
+  'Oak',
+  'Pure',
+  'Quick',
+  'Red',
+  'Sage',
+  'True',
+  'Ultra',
+  'Vivid',
+  'Wild',
+  'Young',
+  'Zen',
 ];
 
 const DEFAULT_NOUNS = [
-  "Arrow", "Bear", "Castle", "Dragon", "Eagle", "Falcon", "Grove", "Hawk",
-  "Ice", "Jaguar", "Knight", "Lion", "Moon", "Nova", "Owl", "Phoenix",
-  "Quartz", "Raven", "Storm", "Tiger", "Union", "Viper", "Wolf", "Xenon", "Yak", "Zenith"
+  'Arrow',
+  'Bear',
+  'Castle',
+  'Dragon',
+  'Eagle',
+  'Falcon',
+  'Grove',
+  'Hawk',
+  'Ice',
+  'Jaguar',
+  'Knight',
+  'Lion',
+  'Moon',
+  'Nova',
+  'Owl',
+  'Phoenix',
+  'Quartz',
+  'Raven',
+  'Storm',
+  'Tiger',
+  'Union',
+  'Viper',
+  'Wolf',
+  'Xenon',
+  'Yak',
+  'Zenith',
 ];
 
 const NATURE_ADJECTIVES = [
-  "Oak", "River", "Mountain", "Cedar", "Storm", "Meadow", "Frost", "Coral",
-  "Willow", "Stone", "Ember", "Moss", "Tide", "Fern", "Cloud", "Pine"
+  'Oak',
+  'River',
+  'Mountain',
+  'Cedar',
+  'Storm',
+  'Meadow',
+  'Frost',
+  'Coral',
+  'Willow',
+  'Stone',
+  'Ember',
+  'Moss',
+  'Tide',
+  'Fern',
+  'Cloud',
+  'Pine',
 ];
 const NATURE_NOUNS = [
-  "Tree", "Stone", "Wind", "Brook", "Peak", "Valley", "Lake", "Ridge",
-  "Creek", "Glade", "Fox", "Heron", "Sage", "Thorn", "Dawn", "Dusk"
+  'Tree',
+  'Stone',
+  'Wind',
+  'Brook',
+  'Peak',
+  'Valley',
+  'Lake',
+  'Ridge',
+  'Creek',
+  'Glade',
+  'Fox',
+  'Heron',
+  'Sage',
+  'Thorn',
+  'Dawn',
+  'Dusk',
 ];
 
 const SPACE_ADJECTIVES = [
-  "Nova", "Lunar", "Cosmic", "Solar", "Stellar", "Astral", "Nebula", "Orbit",
-  "Pulse", "Quasar", "Void", "Zenith", "Aurora", "Comet", "Warp", "Ion"
+  'Nova',
+  'Lunar',
+  'Cosmic',
+  'Solar',
+  'Stellar',
+  'Astral',
+  'Nebula',
+  'Orbit',
+  'Pulse',
+  'Quasar',
+  'Void',
+  'Zenith',
+  'Aurora',
+  'Comet',
+  'Warp',
+  'Ion',
 ];
 const SPACE_NOUNS = [
-  "Star", "Dust", "Ray", "Flare", "Drift", "Core", "Ring", "Gate",
-  "Spark", "Beam", "Wave", "Shard", "Forge", "Bolt", "Glow", "Arc"
+  'Star',
+  'Dust',
+  'Ray',
+  'Flare',
+  'Drift',
+  'Core',
+  'Ring',
+  'Gate',
+  'Spark',
+  'Beam',
+  'Wave',
+  'Shard',
+  'Forge',
+  'Bolt',
+  'Glow',
+  'Arc',
 ];
 
 const MINIMAL_NAMES = [
-  "Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta", "Theta",
-  "Iota", "Kappa", "Lambda", "Mu", "Nu", "Xi", "Omicron", "Pi",
-  "Rho", "Sigma", "Tau", "Upsilon", "Phi", "Chi", "Psi", "Omega"
+  'Alpha',
+  'Beta',
+  'Gamma',
+  'Delta',
+  'Epsilon',
+  'Zeta',
+  'Eta',
+  'Theta',
+  'Iota',
+  'Kappa',
+  'Lambda',
+  'Mu',
+  'Nu',
+  'Xi',
+  'Omicron',
+  'Pi',
+  'Rho',
+  'Sigma',
+  'Tau',
+  'Upsilon',
+  'Phi',
+  'Chi',
+  'Psi',
+  'Omega',
 ];
 
 export interface NameThemeConfig {
@@ -271,9 +393,9 @@ export interface NameThemeConfig {
 // =============================================================================
 
 export function generateMemorableName(themeConfig?: NameThemeConfig): string {
-  const themeName = themeConfig?.theme ?? "default";
+  const themeName = themeConfig?.theme ?? 'default';
 
-  if (themeName === "minimal") {
+  if (themeName === 'minimal') {
     return MINIMAL_NAMES[Math.floor(Math.random() * MINIMAL_NAMES.length)];
   }
 
@@ -281,15 +403,15 @@ export function generateMemorableName(themeConfig?: NameThemeConfig): string {
   let nouns: string[];
 
   switch (themeName) {
-    case "nature":
+    case 'nature':
       adjectives = NATURE_ADJECTIVES;
       nouns = NATURE_NOUNS;
       break;
-    case "space":
+    case 'space':
       adjectives = SPACE_ADJECTIVES;
       nouns = SPACE_NOUNS;
       break;
-    case "custom":
+    case 'custom':
       adjectives = themeConfig?.customWords?.adjectives ?? DEFAULT_ADJECTIVES;
       nouns = themeConfig?.customWords?.nouns ?? DEFAULT_NOUNS;
       break;
@@ -326,19 +448,19 @@ export function formatRelativeTime(timestamp: string): string {
 
   if (hours > 0) return `${hours}h ago`;
   if (minutes > 0) return `${minutes}m ago`;
-  return "just now";
+  return 'just now';
 }
 
 export function pathMatchesReservation(filePath: string, pattern: string): boolean {
-  if (pattern.endsWith("/")) {
-    return filePath.startsWith(pattern) || filePath + "/" === pattern;
+  if (pattern.endsWith('/')) {
+    return filePath.startsWith(pattern) || filePath + '/' === pattern;
   }
   return filePath === pattern;
 }
 
 export function stripAnsiCodes(text: string): string {
   // eslint-disable-next-line no-control-regex
-  return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
+  return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
 }
 
 const colorCache = new Map<string, string>();
@@ -348,7 +470,7 @@ export function agentColorCode(name: string): string {
   if (cached) return cached;
 
   let hash = 0;
-  for (const char of name) hash = ((hash << 5) - hash) + char.charCodeAt(0);
+  for (const char of name) hash = (hash << 5) - hash + char.charCodeAt(0);
   const color = AGENT_COLORS[Math.abs(hash) % AGENT_COLORS.length];
   colorCache.set(name, color);
   return color;
@@ -370,9 +492,9 @@ export function resolveSpecPath(specPath: string, cwd: string): string {
 export function displaySpecPath(absPath: string, cwd: string): string {
   try {
     const rel = relative(cwd, absPath);
-    if (rel === "") return ".";
-    if (!rel.startsWith("..") && !isAbsolute(rel)) {
-      return "./" + rel;
+    if (rel === '') return '.';
+    if (!rel.startsWith('..') && !isAbsolute(rel)) {
+      return './' + rel;
     }
   } catch {
     // Ignore and fall back to absolute
@@ -392,14 +514,14 @@ export function truncatePathLeft(filePath: string, maxLen: number): string {
 }
 
 export function buildSelfRegistration(state: MessengerState): AgentRegistration {
-  const currentChannel = state.currentChannel || state.sessionChannel || "general";
+  const currentChannel = state.currentChannel || state.sessionChannel || 'general';
   const joinedChannels = Array.isArray(state.joinedChannels)
     ? [...state.joinedChannels]
     : [currentChannel];
   return {
     name: state.agentName,
     pid: process.pid,
-    sessionId: "",
+    sessionId: '',
     cwd: process.cwd(),
     model: state.model,
     startedAt: state.sessionStartedAt,
@@ -426,23 +548,25 @@ export function agentHasTask(
       if (claim.agent === name) return true;
     }
   }
-  return crewTasks.some(t => (t.assigned_to === name || t.claimed_by === name) && t.status === "in_progress");
+  return crewTasks.some(
+    (t) => (t.assigned_to === name || t.claimed_by === name) && t.status === 'in_progress'
+  );
 }
 
-export type DisplayMode = "same-folder-branch" | "same-folder" | "different";
+export type DisplayMode = 'same-folder-branch' | 'same-folder' | 'different';
 
-export function getDisplayMode(agents: AgentRegistration[]): DisplayMode {
-  if (agents.length === 0) return "different";
-  
-  const folders = agents.map(a => extractFolder(a.cwd));
+function getDisplayMode(agents: AgentRegistration[]): DisplayMode {
+  if (agents.length === 0) return 'different';
+
+  const folders = agents.map((a) => extractFolder(a.cwd));
   const uniqueFolders = new Set(folders);
-  
-  if (uniqueFolders.size > 1) return "different";
-  
-  const branches = agents.map(a => a.gitBranch).filter(Boolean);
+
+  if (uniqueFolders.size > 1) return 'different';
+
+  const branches = agents.map((a) => a.gitBranch).filter(Boolean);
   const uniqueBranches = new Set(branches);
-  
-  if (uniqueBranches.size <= 1) return "same-folder-branch";
-  
-  return "same-folder";
+
+  if (uniqueBranches.size <= 1) return 'same-folder-branch';
+
+  return 'same-folder';
 }

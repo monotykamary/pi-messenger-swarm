@@ -11,7 +11,7 @@ export interface ToolEntry {
 
 export interface AgentProgress {
   agent: string;
-  status: "pending" | "running" | "completed" | "failed";
+  status: 'pending' | 'running' | 'completed' | 'failed';
   currentTool?: string;
   currentToolArgs?: string;
   currentToolStartMs?: number;
@@ -38,7 +38,7 @@ export interface PiEvent {
 export function createProgress(agent: string): AgentProgress {
   return {
     agent,
-    status: "pending",
+    status: 'pending',
     recentTools: [],
     toolCallCount: 0,
     tokens: 0,
@@ -59,19 +59,19 @@ export function updateProgress(progress: AgentProgress, event: PiEvent, startTim
   progress.durationMs = Date.now() - startTime;
 
   switch (event.type) {
-    case "tool_execution_start":
-      progress.status = "running";
+    case 'tool_execution_start':
+      progress.status = 'running';
       progress.currentTool = event.toolName;
       progress.currentToolArgs = extractArgsPreview(event.args);
       progress.currentToolStartMs = Date.now();
       break;
 
-    case "tool_execution_end":
+    case 'tool_execution_end':
       progress.toolCallCount++;
       if (progress.currentTool) {
         progress.recentTools.push({
           tool: progress.currentTool,
-          args: progress.currentToolArgs ?? "",
+          args: progress.currentToolArgs ?? '',
           startMs: progress.currentToolStartMs ?? Date.now(),
           endMs: Date.now(),
         });
@@ -81,7 +81,7 @@ export function updateProgress(progress: AgentProgress, event: PiEvent, startTim
       progress.currentToolStartMs = undefined;
       break;
 
-    case "message_end":
+    case 'message_end':
       if (event.message?.usage) {
         progress.tokens += (event.message.usage.input ?? 0) + (event.message.usage.output ?? 0);
       }
@@ -93,25 +93,25 @@ export function updateProgress(progress: AgentProgress, event: PiEvent, startTim
 }
 
 function extractArgsPreview(args?: Record<string, unknown>): string {
-  if (!args) return "";
-  const previewKeys = ["command", "path", "file_path", "pattern", "query"];
+  if (!args) return '';
+  const previewKeys = ['command', 'path', 'file_path', 'pattern', 'query'];
   for (const key of previewKeys) {
-    if (args[key] && typeof args[key] === "string") {
-      const value = (args[key] as string).replaceAll("\n", " ").replaceAll("\r", "");
+    if (args[key] && typeof args[key] === 'string') {
+      const value = (args[key] as string).replaceAll('\n', ' ').replaceAll('\r', '');
       return value.length > 60 ? `${value.slice(0, 57)}...` : value;
     }
   }
-  return "";
+  return '';
 }
 
-export function getFinalOutput(messages: PiEvent[]): string {
+function getFinalOutput(messages: PiEvent[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
-    if (msg.type === "message_end" && msg.message?.role === "assistant") {
+    if (msg.type === 'message_end' && msg.message?.role === 'assistant') {
       for (const part of msg.message.content ?? []) {
-        if (part.type === "text" && part.text) return part.text;
+        if (part.type === 'text' && part.text) return part.text;
       }
     }
   }
-  return "";
+  return '';
 }

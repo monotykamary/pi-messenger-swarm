@@ -381,7 +381,7 @@ export function getRunningSpawnCount(cwd?: string): number {
   return count;
 }
 
-export function getSpawnByTask(cwd: string, taskId: string): SpawnedAgent | null {
+function getSpawnByTask(cwd: string, taskId: string): SpawnedAgent | null {
   for (const runtime of runtimes.values()) {
     if (runtime.record.cwd !== cwd) continue;
     if (runtime.record.taskId !== taskId) continue;
