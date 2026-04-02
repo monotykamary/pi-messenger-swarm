@@ -1,6 +1,6 @@
 {
   "name": "pi-messenger-swarm",
-  "version": "0.17.10",
+  "version": "0.18.0",
   "description": "Swarm-first multi-agent messaging and task orchestration extension for Pi",
   "type": "module",
   "author": "Tom X Nguyen",
