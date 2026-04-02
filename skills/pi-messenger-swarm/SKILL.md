@@ -14,45 +14,55 @@ Pi-messenger now runs in **swarm-first mode**.
 ## Core protocol (all agents)
 
 1. Join first
+
 ```typescript
-pi_messenger({ action: "join" })
+pi_messenger({ action: 'join' });
 ```
 
 2. Inspect swarm state
+
 ```typescript
-pi_messenger({ action: "swarm" })
-pi_messenger({ action: "task.list" })
+pi_messenger({ action: 'swarm' });
+pi_messenger({ action: 'task.list' });
 ```
 
 3. Claim work before implementing
+
 ```typescript
-pi_messenger({ action: "task.claim", id: "task-1" })
+pi_messenger({ action: 'task.claim', id: 'task-1' });
 ```
 
 4. Reserve files before edits
+
 ```typescript
-pi_messenger({ action: "reserve", paths: ["src/auth/"], reason: "task-1" })
+pi_messenger({ action: 'reserve', paths: ['src/auth/'], reason: 'task-1' });
 ```
 
 5. Log progress and complete
+
 ```typescript
-pi_messenger({ action: "task.progress", id: "task-1", message: "Implemented JWT verification" })
-pi_messenger({ action: "task.done", id: "task-1", summary: "Auth middleware + tests" })
-pi_messenger({ action: "release" })
+pi_messenger({ action: 'task.progress', id: 'task-1', message: 'Implemented JWT verification' });
+pi_messenger({ action: 'task.done', id: 'task-1', summary: 'Auth middleware + tests' });
+pi_messenger({ action: 'release' });
 ```
 
 ## Task operations
 
 ```typescript
-pi_messenger({ action: "task.create", title: "Fix token refresh race", content: "...", dependsOn: ["task-2"] })
-pi_messenger({ action: "task.list" })
-pi_messenger({ action: "task.show", id: "task-3" })
-pi_messenger({ action: "task.ready" })
-pi_messenger({ action: "task.unclaim", id: "task-3" })
-pi_messenger({ action: "task.block", id: "task-3", reason: "Awaiting API key" })
-pi_messenger({ action: "task.unblock", id: "task-3" })
-pi_messenger({ action: "task.reset", id: "task-3", cascade: true })
-pi_messenger({ action: "task.archive_done" })
+pi_messenger({
+  action: 'task.create',
+  title: 'Fix token refresh race',
+  content: '...',
+  dependsOn: ['task-2'],
+});
+pi_messenger({ action: 'task.list' });
+pi_messenger({ action: 'task.show', id: 'task-3' });
+pi_messenger({ action: 'task.ready' });
+pi_messenger({ action: 'task.unclaim', id: 'task-3' });
+pi_messenger({ action: 'task.block', id: 'task-3', reason: 'Awaiting API key' });
+pi_messenger({ action: 'task.unblock', id: 'task-3' });
+pi_messenger({ action: 'task.reset', id: 'task-3', cascade: true });
+pi_messenger({ action: 'task.archive_done' });
 ```
 
 ## Dynamic subagent spawning
@@ -61,14 +71,13 @@ Spawn specialized subagents at runtime:
 
 ```typescript
 pi_messenger({
-  action: "spawn",
-  role: "Packaging Gap Analyst",
-  persona: "Skeptical market researcher",
-  message: "Analyze idea aggregation products and find productization gaps",
-  content: "Focus on monetization and onboarding friction",
-  taskId: "task-6"
-  // model: omit unless you need a specific capability (coding, vision, etc.)
-})
+  action: 'spawn',
+  role: 'Packaging Gap Analyst',
+  persona: 'Skeptical market researcher',
+  message: 'Analyze idea aggregation products and find productization gaps',
+  content: 'Focus on monetization and onboarding friction',
+  taskId: 'task-6',
+});
 ```
 
 The `agentFile` parameter can be used to specify a markdown file with YAML frontmatter:
@@ -85,39 +94,37 @@ You are a security expert. Focus on input validation and auth boundaries.
 
 ```typescript
 pi_messenger({
-  action: "spawn",
-  agentFile: "./agents/security-reviewer.md",
-  message: "Review the auth implementation"  // Optional: overrides frontmatter objective
-})
+  action: 'spawn',
+  agentFile: './agents/security-reviewer.md',
+  message: 'Review the auth implementation', // Optional: overrides frontmatter objective
+});
 ```
 
 Frontmatter fields (all optional):
+
 - `role` — Agent role label
-- `persona` — Tone/behavior modifier  
+- `persona` — Tone/behavior modifier
 - `objective` — Default mission (overridable via `message`)
-
-The `model` field should be omitted unless you have a specific reason:
-- Need coding capabilities for implementation tasks
-- Require vision/multimodal for image analysis
-- Want a faster/cheaper model for simple classification or routing
-- Need a specific provider for access to certain tools
-
-When in doubt, omit `model` and let the system use the default.
+- `model` — Model specification (provider/model format, e.g., `openai/gpt-4o`)
 
 The body after `---` becomes the system prompt.
 
 Manage spawned agents:
 
 ```typescript
-pi_messenger({ action: "spawn.list" })
-pi_messenger({ action: "spawn.stop", id: "<spawn-id>" })
+pi_messenger({ action: 'spawn.list' });
+pi_messenger({ action: 'spawn.stop', id: '<spawn-id>' });
 ```
 
 ## Messaging and coordination
 
 ```typescript
-pi_messenger({ action: "send", to: "OtherAgent", message: "Need your API shape before I commit" })
-pi_messenger({ action: "send", to: "#memory", message: "Claimed task-4, touching src/auth/session.ts" })
+pi_messenger({ action: 'send', to: 'OtherAgent', message: 'Need your API shape before I commit' });
+pi_messenger({
+  action: 'send',
+  to: '#memory',
+  message: 'Claimed task-4, touching src/auth/session.ts',
+});
 ```
 
 ## Swarm Philosophy
@@ -129,6 +136,7 @@ The swarm is self-organizing. Your role is participant, not manager.
 State changes arrive when they happen. The system surfaces updates via the feed and task notifications. Checking repeatedly adds latency and wastes context.
 
 Good pattern: inspect once at decision points, act, move on.
+
 - Before claiming: check what's ready
 - After spawning: trust the agent to execute
 - On uncertainty: message the agent directly
@@ -140,6 +148,7 @@ Avoid loops that poll status. The system already does this.
 Subagents execute with full context. They report progress through task updates and messaging. Stay available for collaboration without inserting yourself into their loop.
 
 Engage when:
+
 - They reach out with a question or blocker
 - You have relevant context they lack (share it proactively)
 - Output reveals a misunderstanding of constraints

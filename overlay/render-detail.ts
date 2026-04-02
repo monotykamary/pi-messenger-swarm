@@ -364,7 +364,6 @@ export function renderSwarmDetail(
     lines.push(`Ended: ${formatRelativeTime(agent.endedAt)}${exit}`);
   }
   if (agent.taskId) lines.push(`Task: ${agent.taskId}`);
-  if (agent.model) lines.push(`Model: ${agent.model}`);
 
   if (agent.context?.trim()) {
     lines.push('', 'Context:');

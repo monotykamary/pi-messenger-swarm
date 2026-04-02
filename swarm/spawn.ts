@@ -101,16 +101,6 @@ function buildPrompt(request: SpawnRequest): string {
   return lines.join('\n');
 }
 
-function applyModelArgs(args: string[], model?: string): void {
-  if (!model) return;
-  const slash = model.indexOf('/');
-  if (slash !== -1) {
-    args.push('--provider', model.slice(0, slash), '--model', model.slice(slash + 1));
-    return;
-  }
-  args.push('--model', model);
-}
-
 function upsertSpawnRecord(
   id: string,
   updater: (record: SpawnedAgent) => SpawnedAgent
@@ -133,13 +123,17 @@ interface SpawnState {
   startMs: number;
   buffer: string;
   stderr: string;
-  triedFallback: boolean;
 }
 
-function createArgs(state: SpawnState, includeModel: boolean): string[] {
+function createArgs(state: SpawnState, model?: string): string[] {
   const args = ['--mode', 'json', '--no-session'];
-  if (includeModel && state.request.model) {
-    applyModelArgs(args, state.request.model);
+  if (model) {
+    const slash = model.indexOf('/');
+    if (slash !== -1) {
+      args.push('--provider', model.slice(0, slash), '--model', model.slice(slash + 1));
+    } else {
+      args.push('--model', model);
+    }
   }
   args.push('--extension', EXTENSION_DIR);
 
@@ -200,51 +194,6 @@ function attachHandlers(proc: ChildProcess, state: SpawnState, promptTmpDir: str
   });
 
   proc.on('close', (code) => {
-    // Check if this is a model-not-found error and we haven't tried fallback yet
-    const isModelNotFound =
-      !state.triedFallback &&
-      state.request.model &&
-      (code ?? 1) !== 0 &&
-      state.stderr.includes('Model') &&
-      state.stderr.includes('not found');
-
-    if (isModelNotFound) {
-      // Clean up and retry without model
-      cleanupTmpDir(promptTmpDir);
-      state.triedFallback = true;
-
-      console.warn(`[spawn] Model "${state.request.model}" not found, using default model`);
-
-      // Update the record to reflect no model (mutate in place so returned reference updates)
-      const runtime = runtimes.get(state.id);
-      if (runtime) {
-        runtime.record.model = undefined;
-      }
-
-      // Retry without model
-      const fallbackArgs = createArgs(state, false);
-      const fallbackTmpDir = (fallbackArgs as any)._promptTmpDir as string | null;
-
-      const fallbackProc = spawn('pi', fallbackArgs, {
-        cwd: state.cwd,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: state.env,
-      });
-
-      // Clear stderr for the new attempt
-      state.stderr = '';
-
-      // Attach handlers to the new process
-      attachHandlers(fallbackProc, state, fallbackTmpDir);
-
-      // Update runtime with new process
-      if (runtime) {
-        runtime.process = fallbackProc;
-      }
-      return;
-    }
-
-    // Normal cleanup and status update
     cleanupTmpDir(promptTmpDir);
     removeLiveWorker(state.cwd, state.request.taskId || spawnLiveKey(state.id));
 
@@ -287,6 +236,7 @@ export function spawnSubagent(
   let prompt: string;
   let role: string;
   let objective: string;
+  let agentFileModel: string | undefined;
 
   if (request.agentFile) {
     // File-based mode: parse frontmatter, use body as system prompt
@@ -297,10 +247,9 @@ export function spawnSubagent(
     objective = request.message || request.objective || def.objective || '';
     prompt = objective;
     role = def.role;
-    // Override model/persona from file if not specified in request
-    if (def.model && !request.model) {
-      request = { ...request, model: def.model };
-    }
+    // Extract model from agent file (reserved for agent files only)
+    agentFileModel = def.model;
+    // Override persona from file if not specified in request
     if (def.persona && !request.persona) {
       request = { ...request, persona: def.persona };
     }
@@ -321,7 +270,6 @@ export function spawnSubagent(
     objective,
     context: request.context,
     taskId: request.taskId,
-    model: request.model,
     status: 'running',
     startedAt,
   };
@@ -346,11 +294,9 @@ export function spawnSubagent(
     startMs: Date.now(),
     buffer: '',
     stderr: '',
-    triedFallback: false,
   };
 
-  // Initial spawn attempt with model
-  const args = createArgs(state, true);
+  const args = createArgs(state, agentFileModel);
   const promptTmpDir = (args as any)._promptTmpDir as string | null;
 
   const proc = spawn('pi', args, {

@@ -1,4 +1,4 @@
-export type SwarmTaskStatus = "todo" | "in_progress" | "done" | "blocked";
+export type SwarmTaskStatus = 'todo' | 'in_progress' | 'done' | 'blocked';
 
 export interface SwarmTaskEvidence {
   commits?: string[];
@@ -48,7 +48,6 @@ export interface SpawnRequest {
   message?: string; // Alias for objective
   context?: string;
   taskId?: string;
-  model?: string;
   name?: string;
   agentFile?: string; // Path to markdown file (with YAML frontmatter) to use as system prompt
 }
@@ -62,9 +61,8 @@ export interface SpawnedAgent {
   objective: string;
   context?: string;
   taskId?: string;
-  model?: string;
   systemPrompt?: string;
-  status: "running" | "completed" | "failed" | "stopped";
+  status: 'running' | 'completed' | 'failed' | 'stopped';
   startedAt: string;
   endedAt?: string;
   exitCode?: number;
