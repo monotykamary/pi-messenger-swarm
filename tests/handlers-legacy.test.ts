@@ -20,7 +20,7 @@ describe('handlers legacy compatibility', () => {
       registered: true,
       currentChannel: 'general',
       sessionChannel: 'general',
-      joinedChannels: ['general', 'memory', 'heartbeat'],
+      joinedChannels: ['general', 'memory'],
     });
     writeRegistration(dirs, {
       name: 'AgentA',

@@ -5,7 +5,6 @@ import type { ExtensionContext } from '@mariozechner/pi-coding-agent';
 import type { AgentRegistration, Dirs, MessengerState } from '../lib.js';
 import { isProcessAlive } from '../lib.js';
 import {
-  HEARTBEAT_CHANNEL_ID,
   MEMORY_CHANNEL_ID,
   ensureDefaultNamedChannels,
   ensureExistingOrCreateChannel,
@@ -64,7 +63,6 @@ export function normalizeJoinedChannels(
   if (sessionChannel) set.add(normalizeChannelId(sessionChannel));
   if (currentChannel) set.add(normalizeChannelId(currentChannel));
   set.add(MEMORY_CHANNEL_ID);
-  set.add(HEARTBEAT_CHANNEL_ID);
   return Array.from(set);
 }
 

@@ -32,7 +32,7 @@ describe('extension status controller', () => {
       registered: true,
       currentChannel: 'general',
       sessionChannel: 'general',
-      joinedChannels: ['general', 'memory', 'heartbeat'],
+      joinedChannels: ['general', 'memory'],
       activity: { lastActivityAt: new Date().toISOString(), currentActivity: 'editing index.ts' },
     });
     state.unreadCounts.set('Peer', 1);
@@ -44,7 +44,7 @@ describe('extension status controller', () => {
       sessionId: 'session-peer',
       currentChannel: 'general',
       sessionChannel: 'general',
-      joinedChannels: ['general', 'memory', 'heartbeat'],
+      joinedChannels: ['general', 'memory'],
     });
     swarmStore.createTask(cwd, { title: 'Task' }, 'general');
 

@@ -187,7 +187,7 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
     pi.sendMessage(
       {
         customType: 'messenger_context',
-        content: `You are agent "${state.agentName}" in ${locationPart}. Your current channel is ${displayChannelLabel(state.currentChannel)}. Named channels ${displayChannelLabel('memory')} and ${displayChannelLabel('heartbeat')} exist for durable cross-session notes. Send direct messages with pi_messenger({ action: "send", to: "AgentName", message: "..." }). Post durable channel updates with pi_messenger({ action: "send", to: "${displayChannelLabel(state.currentChannel)}", message: "..." }) or named channels like ${displayChannelLabel('memory')}. Use pi_messenger({ action: "swarm" }) to inspect swarm tasks in the current channel, task.* to claim/complete work, join with { channel: "..." } to switch channels, and spawn.* to manage subagents.`,
+        content: `You are agent "${state.agentName}" in ${locationPart}. Your current channel is ${displayChannelLabel(state.currentChannel)}. Named channel ${displayChannelLabel('memory')} exists for durable cross-session notes. Send direct messages with pi_messenger({ action: "send", to: "AgentName", message: "..." }). Post durable channel updates with pi_messenger({ action: "send", to: "${displayChannelLabel(state.currentChannel)}", message: "..." }) or named channels like ${displayChannelLabel('memory')}. Use pi_messenger({ action: "swarm" }) to inspect swarm tasks in the current channel, task.* to claim/complete work, join with { channel: "..." } to switch channels, and spawn.* to manage subagents.`,
         display: false,
       },
       { triggerTurn: false }

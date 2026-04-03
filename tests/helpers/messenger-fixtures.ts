@@ -59,7 +59,7 @@ export function createState(
     contextSessionId: undefined,
     currentChannel: 'general',
     sessionChannel: 'general',
-    joinedChannels: ['general', 'memory', 'heartbeat'],
+    joinedChannels: ['general', 'memory'],
     ...overrides,
   };
 }
