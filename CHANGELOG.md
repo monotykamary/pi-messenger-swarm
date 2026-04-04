@@ -2,6 +2,43 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.22.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.21.0...v0.22.0) (2026-04-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* Remove all backwards compatibility fields and legacy actions
+
+- Delete migrations/legacy-agents.ts and store/legacy-claims.ts
+- Remove backwards compatibility fields (prd, target, type, autoWork, etc)
+- Remove legacy disabled actions (plan, work, review, sync, crew)
+- Remove deprecated overlay view state fields
+- Remove dead code: getSpawnByTask() function
+
+Features:
+- Implement progress_log field in SwarmTask type
+- Store progress events in task JSONL and replay into progress_log
+- Update getTaskProgress() to read from task state
+- Fix listSpawned() default to show only running agents
+
+Tests:
+- Add task-event-sourcing.test.ts (14 tests)
+- Add task-progress-events.test.ts (6 tests)
+- Update router.test.ts for new behavior
+
+Total: 170 tests passing
+
+### Bug Fixes
+
+* **overlay:** remove stop and claim buttons from user TUI ([7d90f90](https://github.com/monotykamary/pi-messenger-swarm/commit/7d90f904a9857823cc3116267d884ae61693d7f8))
+* **overlay:** show completed agents in swarm list ([69a1d5d](https://github.com/monotykamary/pi-messenger-swarm/commit/69a1d5dfa53de8504120653ef703723a56529a9f))
+* **overlay:** use channel sessionId for loading spawned agents ([4b660cc](https://github.com/monotykamary/pi-messenger-swarm/commit/4b660cc29597afd32455ef18a89918c73076f9c6))
+* **swarm:** show all agents by default in overlay and spawn.list ([d741b5d](https://github.com/monotykamary/pi-messenger-swarm/commit/d741b5d6038ec0387f76125e65aab903834b65e1))
+* **swarm:** use channel sessionId consistently for storage ([f64ddc7](https://github.com/monotykamary/pi-messenger-swarm/commit/f64ddc7b9cd61208c49b726d35b811b67d20a008))
+
+
+* purge legacy code and implement progress log event sourcing ([159d32f](https://github.com/monotykamary/pi-messenger-swarm/commit/159d32f6446c794fda1de04c499df184b9e98f6f))
+
 ## [0.21.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.20.3...v0.21.0) (2026-04-04)
 
 
