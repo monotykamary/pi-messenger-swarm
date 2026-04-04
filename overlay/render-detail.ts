@@ -19,6 +19,7 @@ import { getLiveWorkers, type LiveWorkerInfo } from '../swarm/live-progress.js';
 import type { ToolEntry } from '../swarm/progress.js';
 import { loadConfig } from '../config.js';
 import type { MessengerViewState } from '../overlay-actions.js';
+import { getEffectiveSessionId } from '../store/shared.js';
 
 let listLegendCache: {
   task: Task;
@@ -94,7 +95,7 @@ export function renderAgentsRow(
   const activeAgents = store.getActiveAgents(state, dirs);
   const rowParts: string[] = [];
   const seen = new Set<string>();
-  const sessionId = state.contextSessionId ?? '';
+  const sessionId = getEffectiveSessionId(cwd, state);
   const sessionTasks = taskStore.getTasks(cwd, sessionId);
 
   const self = buildSelfRegistration(state);

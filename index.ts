@@ -35,6 +35,7 @@ import {
 import { displayChannelLabel } from './channel.js';
 import * as store from './store.js';
 import * as handlers from './handlers.js';
+import { getEffectiveSessionId } from './store/shared.js';
 import { MessengerOverlay, type OverlayCallbacks } from './overlay.js';
 import { MessengerConfigOverlay } from './config-overlay.js';
 import { loadConfig, matchesAutoRegisterPath, type MessengerConfig } from './config.js';
@@ -579,7 +580,7 @@ Usage (swarm-first API):
     overlayHandle = null;
     overlayTui = null;
     if (state.registered) {
-      const sessionId = state.contextSessionId ?? '';
+      const sessionId = getEffectiveSessionId(cwd, state);
       const { listSpawnedHistory } = await import('./swarm/spawn.js');
       const spawnedAgents = listSpawnedHistory(cwd, sessionId);
       const spawnedNames = new Set(spawnedAgents.map((s) => s.name));

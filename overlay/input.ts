@@ -4,6 +4,7 @@ import * as taskStore from '../swarm/task-store.js';
 import { listSpawned } from '../swarm/spawn.js';
 import type { SwarmTask as Task } from '../swarm/types.js';
 import { getFeedLineCount, readFeedEventsByRange } from '../feed.js';
+import { getEffectiveSessionId } from '../store/shared.js';
 import {
   calculateVisibleRange,
   isAtBottom,
@@ -86,14 +87,14 @@ export function handleOverlayInput({
       cwd,
       state.agentName,
       currentChannel(),
-      state.contextSessionId ?? '',
+      getEffectiveSessionId(cwd, state),
       tui
     );
     return;
   }
 
   if (viewState.inputMode === 'block-reason') {
-    const tasks = taskStore.getTasks(cwd, state.contextSessionId ?? '');
+    const tasks = taskStore.getTasks(cwd, getEffectiveSessionId(cwd, state));
     const task = tasks[viewState.selectedTaskIndex];
     handleBlockReasonInput(
       data,
@@ -102,7 +103,7 @@ export function handleOverlayInput({
       task as Task | undefined,
       state.agentName,
       currentChannel(),
-      state.contextSessionId ?? '',
+      getEffectiveSessionId(cwd, state),
       tui
     );
     return;
@@ -168,7 +169,7 @@ export function handleOverlayInput({
   const totalFeedLines = getFeedLineCount(cwd, channelId);
   const termRows = process.stdout.rows ?? 24;
   const sectionWidth = width - 4;
-  const taskList = taskStore.getTasks(cwd, state.contextSessionId ?? '');
+  const taskList = taskStore.getTasks(cwd, getEffectiveSessionId(cwd, state));
   const feedHeight = estimateFeedViewportHeight(
     termRows,
     sectionWidth,
@@ -244,8 +245,8 @@ export function handleOverlayInput({
     viewState.pendingG = false;
   }
 
-  const tasks = taskStore.getTasks(cwd, state.contextSessionId ?? '');
-  const spawned = listSpawned(cwd, state.contextSessionId ?? '');
+  const tasks = taskStore.getTasks(cwd, getEffectiveSessionId(cwd, state));
+  const spawned = listSpawned(cwd, getEffectiveSessionId(cwd, state));
   const task = tasks[viewState.selectedTaskIndex];
   const swarmAgent = spawned[viewState.selectedSwarmIndex];
 
@@ -387,7 +388,7 @@ export function handleOverlayInput({
       cwd,
       state.agentName,
       currentChannel(),
-      state.contextSessionId ?? '',
+      getEffectiveSessionId(cwd, state),
       tui
     );
   }

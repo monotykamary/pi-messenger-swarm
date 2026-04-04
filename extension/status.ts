@@ -7,6 +7,7 @@ import * as taskStore from '../swarm/task-store.js';
 import { logFeedEvent } from '../feed.js';
 import { getLiveWorkers } from '../swarm/live-progress.js';
 import { getRunningSpawnCount } from '../swarm/spawn.js';
+import { getEffectiveSessionId } from '../store/shared.js';
 
 interface StatusControllerOptions {
   state: MessengerState;
@@ -28,8 +29,9 @@ export function createStatusController({
 
     const thresholdMs = config.stuckThreshold * 1000;
     const peers = store.getActiveAgents(state, dirs);
-    const sessionId = state.contextSessionId ?? '';
-    const sessionTasks = taskStore.getTasks(ctx.cwd ?? process.cwd(), sessionId);
+    const cwd = ctx.cwd ?? process.cwd();
+    const sessionId = getEffectiveSessionId(cwd, state);
+    const sessionTasks = taskStore.getTasks(cwd, sessionId);
 
     const currentlyStuck = new Set<string>();
 
@@ -104,7 +106,7 @@ export function createStatusController({
       ? theme.fg('dim', ` · ${state.activity.currentActivity}`)
       : '';
 
-    const swarmSummary = taskStore.getSummary(cwd, state.contextSessionId ?? '');
+    const swarmSummary = taskStore.getSummary(cwd, getEffectiveSessionId(cwd, state));
     const taskStr =
       swarmSummary.total > 0
         ? theme.fg('accent', ` ☑ ${swarmSummary.done}/${swarmSummary.total} tasks`)

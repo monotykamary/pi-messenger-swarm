@@ -22,7 +22,7 @@ import { displayChannelLabel, normalizeChannelId } from '../channel.js';
 import * as store from '../store.js';
 import * as taskStore from '../swarm/task-store.js';
 import { findSpawnedAgentByName } from '../swarm/spawn.js';
-import { getContextSessionId } from '../store/shared.js';
+import { getEffectiveSessionId } from '../store/shared.js';
 import {
   formatFeedLine,
   isSwarmEvent,
@@ -165,7 +165,7 @@ export function executeStatus(state: MessengerState, dirs: Dirs, cwd: string = p
   const agents = store.getActiveAgents(state, dirs);
   const folder = extractFolder(cwd);
   const location = state.gitBranch ? `${folder} (${state.gitBranch})` : folder;
-  const sessionId = state.contextSessionId ?? '';
+  const sessionId = getEffectiveSessionId(cwd, state);
   const myClaim = taskStore
     .getTasks(cwd, sessionId)
     .find((task) => task.status === 'in_progress' && task.claimed_by === state.agentName);
@@ -274,7 +274,7 @@ export function executeList(
     return parts.join(' - ');
   }
 
-  const sessionId = state.contextSessionId ?? '';
+  const sessionId = getEffectiveSessionId(cwd, state);
   const sessionTasks = taskStore.getTasks(cwd, sessionId);
 
   lines.push(
@@ -335,7 +335,7 @@ export function executeWhois(
     dirs,
     cwd,
     thresholdMs,
-    state.contextSessionId ?? '',
+    getEffectiveSessionId(cwd, state),
     state.currentChannel
   );
 }
@@ -347,7 +347,7 @@ function executeWhoisSelf(state: MessengerState, dirs: Dirs, cwd: string, thresh
     dirs,
     cwd,
     thresholdMs,
-    state.contextSessionId ?? '',
+    getEffectiveSessionId(cwd, state),
     state.currentChannel
   );
 }
@@ -625,7 +625,7 @@ export function executeSend(
   // Check if targeting a completed/failed/stopped spawned agent
   let spawnWarning = '';
   if (typeof to === 'string' && !isChannelTarget) {
-    const sessionId = getContextSessionId({ cwd } as ExtensionContext);
+    const sessionId = getEffectiveSessionId(cwd, state);
     const spawnedAgent = findSpawnedAgentByName(cwd, sessionId, to);
     if (spawnedAgent && spawnedAgent.status !== 'running') {
       const statusEmoji =

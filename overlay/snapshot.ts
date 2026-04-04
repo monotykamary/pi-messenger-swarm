@@ -3,6 +3,7 @@ import { readFeedEvents, type FeedEvent } from '../feed.js';
 import * as taskStore from '../swarm/task-store.js';
 import type { SwarmTask as Task } from '../swarm/types.js';
 import { getLiveWorkers } from '../swarm/live-progress.js';
+import { getEffectiveSessionId } from '../store/shared.js';
 
 function snapshotIdleLabel(state: MessengerState): string {
   const last = state.activity.lastActivityAt || state.sessionStartedAt;
@@ -55,7 +56,7 @@ export function generateSwarmSnapshot(
   channelId: string,
   state: MessengerState
 ): string {
-  const sessionId = state.contextSessionId ?? '';
+  const sessionId = getEffectiveSessionId(cwd, state);
   const tasks = taskStore.getTasks(cwd, sessionId);
   const liveWorkers = getLiveWorkers(cwd);
 
