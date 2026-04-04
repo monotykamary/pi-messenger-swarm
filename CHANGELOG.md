@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.20.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.19.0...v0.20.0) (2026-04-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* Legacy spec-based claims system (claims.json/completions.json)
+has been removed. The new event-sourced session-scoped task system is now the
+only task management mechanism.
+
+Changes:
+- Remove handlers/legacy.ts (executeClaim, executeUnclaim, executeComplete, etc.)
+- Remove legacy-claims exports from store.ts
+- Remove legacy handlers export from handlers.ts
+- Update agentHasTask() to only check new session tasks
+- Update all callers (status.ts, render-detail.ts, coordination.ts) to use new API
+- Delete legacy test files
+
+The lib.ts types (ClaimEntry, AllClaims, etc.) are preserved for potential
+migration tooling but are no longer exported from main entry points.
+
+### Bug Fixes
+
+* **swarm:** restore auto-cleanup of stale task claims in getTasks ([b789e5a](https://github.com/monotykamary/pi-messenger-swarm/commit/b789e5afd5bbfe1dfb828df635267c0fb6b954d4))
+
+
+* remove legacy claims system and update all callers ([dfaeee0](https://github.com/monotykamary/pi-messenger-swarm/commit/dfaeee0a3025b1d06e29c13ec0ad13105d11f5f8))
+
 ## [0.19.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.18.2...v0.19.0) (2026-04-04)
 
 
