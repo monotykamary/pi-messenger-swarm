@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.22.1](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.22.0...v0.22.1) (2026-04-04)
+
+
+### Features
+
+* **swarm:** display model in agent overlay detail view ([8a55150](https://github.com/monotykamary/pi-messenger-swarm/commit/8a55150f1077d6a2b303647c4fdeff432f6b173f))
+
 ## [0.22.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.21.0...v0.22.0) (2026-04-04)
 
 
