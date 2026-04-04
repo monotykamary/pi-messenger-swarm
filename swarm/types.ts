@@ -1,4 +1,4 @@
-export type SwarmTaskStatus = 'todo' | 'in_progress' | 'done' | 'blocked';
+export type SwarmTaskStatus = 'todo' | 'in_progress' | 'done' | 'blocked' | 'archived';
 
 export interface SwarmTaskEvidence {
   commits?: string[];
@@ -16,13 +16,16 @@ export interface SwarmTask {
   created_by?: string;
   claimed_by?: string;
   claimed_at?: string;
+  claim_reason?: string;
   completed_by?: string;
   completed_at?: string;
   summary?: string;
   evidence?: SwarmTaskEvidence;
   blocked_reason?: string;
+  blocked_by?: string;
   attempt_count: number;
   channel?: string;
+  archived_at?: string;
 }
 
 export interface SwarmTaskCreateInput {

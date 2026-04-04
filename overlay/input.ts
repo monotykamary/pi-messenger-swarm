@@ -80,7 +80,15 @@ export function handleOverlayInput({
   }
 
   if (viewState.confirmAction) {
-    handleConfirmInput(data, viewState, cwd, state.agentName, currentChannel(), tui);
+    handleConfirmInput(
+      data,
+      viewState,
+      cwd,
+      state.agentName,
+      currentChannel(),
+      state.contextSessionId ?? '',
+      tui
+    );
     return;
   }
 
@@ -94,6 +102,7 @@ export function handleOverlayInput({
       task as Task | undefined,
       state.agentName,
       currentChannel(),
+      state.contextSessionId ?? '',
       tui
     );
     return;
@@ -378,6 +387,7 @@ export function handleOverlayInput({
       cwd,
       state.agentName,
       currentChannel(),
+      state.contextSessionId ?? '',
       tui
     );
   }

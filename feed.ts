@@ -4,38 +4,39 @@
  * Append-only JSONL feed stored at <cwd>/.pi/messenger/feed/<channel>.jsonl
  */
 
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { normalizeChannelId } from "./channel.js";
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { normalizeChannelId } from './channel.js';
 
 export type FeedEventType =
-  | "join"
-  | "leave"
-  | "reserve"
-  | "release"
-  | "message"
-  | "commit"
-  | "test"
-  | "edit"
-  | "task.start"
-  | "task.done"
-  | "task.block"
-  | "task.unblock"
-  | "task.reset"
-  | "task.delete"
-  | "task.archive"
-  | "task.split"
-  | "task.revise"
-  | "task.revise-tree"
-  | "plan.start"
-  | "plan.pass.start"
-  | "plan.pass.done"
-  | "plan.review.start"
-  | "plan.review.done"
-  | "plan.done"
-  | "plan.cancel"
-  | "plan.failed"
-  | "stuck";
+  | 'join'
+  | 'leave'
+  | 'reserve'
+  | 'release'
+  | 'message'
+  | 'commit'
+  | 'test'
+  | 'edit'
+  | 'task.start'
+  | 'task.done'
+  | 'task.block'
+  | 'task.unblock'
+  | 'task.reset'
+  | 'task.delete'
+  | 'task.archive'
+  | 'task.stop'
+  | 'task.split'
+  | 'task.revise'
+  | 'task.revise-tree'
+  | 'plan.start'
+  | 'plan.pass.start'
+  | 'plan.pass.done'
+  | 'plan.review.start'
+  | 'plan.review.done'
+  | 'plan.done'
+  | 'plan.cancel'
+  | 'plan.failed'
+  | 'stuck';
 
 export interface FeedEvent {
   ts: string;
@@ -58,24 +59,24 @@ const FEED_CACHE_TTL_MS = 100;
 const feedCache = new Map<string, FeedCacheEntry>();
 
 function feedDir(cwd: string): string {
-  return path.join(cwd, ".pi", "messenger", "feed");
+  return path.join(cwd, '.pi', 'messenger', 'feed');
 }
 
-function feedPath(cwd: string, channelId: string = "general"): string {
+function feedPath(cwd: string, channelId: string = 'general'): string {
   return path.join(feedDir(cwd), `${normalizeChannelId(channelId)}.jsonl`);
 }
 
-function invalidateFeedCache(cwd: string, channelId: string = "general"): void {
+function invalidateFeedCache(cwd: string, channelId: string = 'general'): void {
   feedCache.delete(feedPath(cwd, channelId));
 }
 
 function sanitizeInlineText(value?: string): string | undefined {
   if (!value) return undefined;
   const normalized = value
-    .replaceAll("\r", " ")
-    .replaceAll("\n", " ")
-    .replaceAll("\t", " ")
-    .replace(/\s+/g, " ")
+    .replaceAll('\r', ' ')
+    .replaceAll('\n', ' ')
+    .replaceAll('\t', ' ')
+    .replace(/\s+/g, ' ')
     .trim();
   return normalized.length > 0 ? normalized : undefined;
 }
@@ -83,16 +84,12 @@ function sanitizeInlineText(value?: string): string | undefined {
 function sanitizePreview(value?: string): string | undefined {
   if (!value) return undefined;
   // Preserve newlines for multi-line previews, but normalize other whitespace
-  const normalized = value
-    .replaceAll("\r", "\n")
-    .replaceAll("\t", " ")
-    .replace(/ +/g, " ")
-    .trim();
+  const normalized = value.replaceAll('\r', '\n').replaceAll('\t', ' ').replace(/ +/g, ' ').trim();
   return normalized.length > 0 ? normalized : undefined;
 }
 
 function sanitizeAgentName(value: string): string {
-  return sanitizeInlineText(value) ?? "unknown";
+  return sanitizeInlineText(value) ?? 'unknown';
 }
 
 export function sanitizeFeedEvent(event: FeedEvent): FeedEvent {
@@ -106,7 +103,7 @@ export function sanitizeFeedEvent(event: FeedEvent): FeedEvent {
   };
 }
 
-function loadFeedCache(cwd: string, channelId: string = "general"): FeedCacheEntry | null {
+function loadFeedCache(cwd: string, channelId: string = 'general'): FeedCacheEntry | null {
   const p = feedPath(cwd, channelId);
   const now = Date.now();
   const cached = feedCache.get(p);
@@ -126,7 +123,7 @@ function loadFeedCache(cwd: string, channelId: string = "general"): FeedCacheEnt
       return cached;
     }
 
-    const content = fs.readFileSync(p, "utf-8").trim();
+    const content = fs.readFileSync(p, 'utf-8').trim();
     if (!content) {
       const empty: FeedCacheEntry = {
         mtimeMs: stat.mtimeMs,
@@ -139,7 +136,7 @@ function loadFeedCache(cwd: string, channelId: string = "general"): FeedCacheEnt
       return empty;
     }
 
-    const lines = content.split("\n");
+    const lines = content.split('\n');
     const events: FeedEvent[] = [];
     for (const line of lines) {
       try {
@@ -165,7 +162,11 @@ function loadFeedCache(cwd: string, channelId: string = "general"): FeedCacheEnt
   }
 }
 
-export function appendFeedEvent(cwd: string, event: FeedEvent, channelId: string = "general"): void {
+export function appendFeedEvent(
+  cwd: string,
+  event: FeedEvent,
+  channelId: string = 'general'
+): void {
   const p = feedPath(cwd, channelId);
   try {
     const dir = path.dirname(p);
@@ -173,20 +174,29 @@ export function appendFeedEvent(cwd: string, event: FeedEvent, channelId: string
       fs.mkdirSync(dir, { recursive: true });
     }
     const sanitized = sanitizeFeedEvent({ ...event, channel: normalizeChannelId(channelId) });
-    fs.appendFileSync(p, JSON.stringify(sanitized) + "\n");
+    fs.appendFileSync(p, JSON.stringify(sanitized) + '\n');
     invalidateFeedCache(cwd, channelId);
   } catch {
     // Best effort
   }
 }
 
-export function readFeedEvents(cwd: string, limit?: number, channelId: string = "general"): FeedEvent[] {
+export function readFeedEvents(
+  cwd: string,
+  limit?: number,
+  channelId: string = 'general'
+): FeedEvent[] {
   const entry = loadFeedCache(cwd, channelId);
   if (!entry) return [];
   return limit ? entry.events.slice(-limit) : entry.events;
 }
 
-export function readFeedEventsWithOffset(cwd: string, offsetFromEnd: number, limit: number, channelId: string = "general"): FeedEvent[] {
+export function readFeedEventsWithOffset(
+  cwd: string,
+  offsetFromEnd: number,
+  limit: number,
+  channelId: string = 'general'
+): FeedEvent[] {
   const entry = loadFeedCache(cwd, channelId);
   if (!entry) return [];
 
@@ -199,7 +209,12 @@ export function readFeedEventsWithOffset(cwd: string, offsetFromEnd: number, lim
   return entry.events.slice(startIndex, endIndex);
 }
 
-export function readFeedEventsByRange(cwd: string, startIndex: number, endIndex: number, channelId: string = "general"): FeedEvent[] {
+export function readFeedEventsByRange(
+  cwd: string,
+  startIndex: number,
+  endIndex: number,
+  channelId: string = 'general'
+): FeedEvent[] {
   const entry = loadFeedCache(cwd, channelId);
   if (!entry) return [];
 
@@ -212,12 +227,12 @@ export function readFeedEventsByRange(cwd: string, startIndex: number, endIndex:
   return entry.events.slice(clampedStart, clampedEnd);
 }
 
-export function getFeedLineCount(cwd: string, channelId: string = "general"): number {
+export function getFeedLineCount(cwd: string, channelId: string = 'general'): number {
   const entry = loadFeedCache(cwd, channelId);
   return entry?.lines.length ?? 0;
 }
 
-export function pruneFeed(cwd: string, maxEvents: number, channelId: string = "general"): void {
+export function pruneFeed(cwd: string, maxEvents: number, channelId: string = 'general'): void {
   const p = feedPath(cwd, channelId);
   if (!fs.existsSync(p)) return;
 
@@ -225,7 +240,7 @@ export function pruneFeed(cwd: string, maxEvents: number, channelId: string = "g
     const entry = loadFeedCache(cwd, channelId);
     if (!entry || entry.lines.length <= maxEvents) return;
     const pruned = entry.lines.slice(-maxEvents);
-    fs.writeFileSync(p, pruned.join("\n") + "\n");
+    fs.writeFileSync(p, pruned.join('\n') + '\n');
     invalidateFeedCache(cwd, channelId);
   } catch {
     // Best effort
@@ -233,82 +248,138 @@ export function pruneFeed(cwd: string, maxEvents: number, channelId: string = "g
 }
 
 const SWARM_EVENT_TYPES = new Set<FeedEventType>([
-  "task.start",
-  "task.done",
-  "task.block",
-  "task.unblock",
-  "task.reset",
-  "task.delete",
-  "task.archive",
-  "task.split",
-  "task.revise",
-  "task.revise-tree",
-  "plan.start",
-  "plan.pass.start",
-  "plan.pass.done",
-  "plan.review.start",
-  "plan.review.done",
-  "plan.done",
-  "plan.cancel",
-  "plan.failed",
+  'task.start',
+  'task.done',
+  'task.block',
+  'task.unblock',
+  'task.reset',
+  'task.delete',
+  'task.archive',
+  'task.split',
+  'task.revise',
+  'task.revise-tree',
+  'plan.start',
+  'plan.pass.start',
+  'plan.pass.done',
+  'plan.review.start',
+  'plan.review.done',
+  'plan.done',
+  'plan.cancel',
+  'plan.failed',
 ]);
 
 export function formatFeedLine(event: FeedEvent): string {
   const sanitized = sanitizeFeedEvent(event);
-  const time = new Date(sanitized.ts).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+  const time = new Date(sanitized.ts).toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
   const isSwarm = SWARM_EVENT_TYPES.has(sanitized.type);
-  const prefix = isSwarm ? "[Swarm] " : "";
+  const prefix = isSwarm ? '[Swarm] ' : '';
   let line = `${time} ${prefix}${sanitized.agent}`;
 
   const rawPreview = sanitized.preview;
-  const normalizedPreview = rawPreview?.replace(/\n/g, " ");
+  const normalizedPreview = rawPreview?.replace(/\n/g, ' ');
   const preview = normalizedPreview
-    ? normalizedPreview.length > 90 ? normalizedPreview.slice(0, 87) + "..." : normalizedPreview
-    : "";
-  const withPreview = (base: string) => preview ? `${base} — ${preview}` : base;
-  const target = sanitized.target ?? "";
+    ? normalizedPreview.length > 90
+      ? normalizedPreview.slice(0, 87) + '...'
+      : normalizedPreview
+    : '';
+  const withPreview = (base: string) => (preview ? `${base} — ${preview}` : base);
+  const target = sanitized.target ?? '';
 
   switch (sanitized.type) {
-    case "join": line += " joined"; break;
-    case "leave": line = withPreview(line + " left"); break;
-    case "reserve": line += ` reserved ${target}`; break;
-    case "release": line += ` released ${target}`; break;
-    case "message":
+    case 'join':
+      line += ' joined';
+      break;
+    case 'leave':
+      line = withPreview(line + ' left');
+      break;
+    case 'reserve':
+      line += ` reserved ${target}`;
+      break;
+    case 'release':
+      line += ` released ${target}`;
+      break;
+    case 'message':
       if (target) {
         line += ` → ${target}`;
         if (preview) line += `: ${preview}`;
       } else {
-        line += " ✦";
+        line += ' ✦';
         if (preview) line += ` ${preview}`;
       }
       break;
-    case "commit":
-      line += preview ? ` committed "${preview}"` : " committed";
+    case 'commit':
+      line += preview ? ` committed "${preview}"` : ' committed';
       break;
-    case "test":
-      line += preview ? ` ran tests (${preview})` : " ran tests";
+    case 'test':
+      line += preview ? ` ran tests (${preview})` : ' ran tests';
       break;
-    case "edit": line += ` editing ${target}`; break;
-    case "task.start": line += withPreview(` started ${target}`); break;
-    case "task.done": line += withPreview(` completed ${target}`); break;
-    case "task.block": line += withPreview(` blocked ${target}`); break;
-    case "task.unblock": line += withPreview(` unblocked ${target}`); break;
-    case "task.reset": line += withPreview(` reset ${target}`); break;
-    case "task.delete": line += withPreview(` deleted ${target}`); break;
-    case "task.archive": line += withPreview(` archived ${target || "done tasks"}`); break;
-    case "task.split": line += withPreview(` split ${target}`); break;
-    case "task.revise": line += withPreview(` revised ${target}`); break;
-    case "task.revise-tree": line += withPreview(` revised ${target} + dependents`); break;
-    case "plan.start": line += withPreview(" planning started"); break;
-    case "plan.pass.start": line += withPreview(" planning pass started"); break;
-    case "plan.pass.done": line += withPreview(" planning pass finished"); break;
-    case "plan.review.start": line += withPreview(" planning review started"); break;
-    case "plan.review.done": line += withPreview(" planning review finished"); break;
-    case "plan.done": line += withPreview(" planning completed"); break;
-    case "plan.cancel": line += " planning cancelled"; break;
-    case "plan.failed": line += withPreview(" planning failed"); break;
-    case "stuck": line += " appears stuck"; break;
-    default: line += ` ${sanitized.type}`; break;
+    case 'edit':
+      line += ` editing ${target}`;
+      break;
+    case 'task.start':
+      line += withPreview(` started ${target}`);
+      break;
+    case 'task.done':
+      line += withPreview(` completed ${target}`);
+      break;
+    case 'task.block':
+      line += withPreview(` blocked ${target}`);
+      break;
+    case 'task.unblock':
+      line += withPreview(` unblocked ${target}`);
+      break;
+    case 'task.reset':
+      line += withPreview(` reset ${target}`);
+      break;
+    case 'task.delete':
+      line += withPreview(` deleted ${target}`);
+      break;
+    case 'task.archive':
+      line += withPreview(` archived ${target || 'done tasks'}`);
+      break;
+    case 'task.split':
+      line += withPreview(` split ${target}`);
+      break;
+    case 'task.revise':
+      line += withPreview(` revised ${target}`);
+      break;
+    case 'task.revise-tree':
+      line += withPreview(` revised ${target} + dependents`);
+      break;
+    case 'plan.start':
+      line += withPreview(' planning started');
+      break;
+    case 'plan.pass.start':
+      line += withPreview(' planning pass started');
+      break;
+    case 'plan.pass.done':
+      line += withPreview(' planning pass finished');
+      break;
+    case 'plan.review.start':
+      line += withPreview(' planning review started');
+      break;
+    case 'plan.review.done':
+      line += withPreview(' planning review finished');
+      break;
+    case 'plan.done':
+      line += withPreview(' planning completed');
+      break;
+    case 'plan.cancel':
+      line += ' planning cancelled';
+      break;
+    case 'plan.failed':
+      line += withPreview(' planning failed');
+      break;
+    case 'stuck':
+      line += ' appears stuck';
+      break;
+    default:
+      line += ` ${sanitized.type}`;
+      break;
   }
   return line;
 }
@@ -323,14 +394,18 @@ export function logFeedEvent(
   type: FeedEventType,
   target?: string,
   preview?: string,
-  channelId: string = "general"
+  channelId: string = 'general'
 ): void {
-  appendFeedEvent(cwd, {
-    ts: new Date().toISOString(),
-    agent,
-    type,
-    target,
-    preview,
-    channel: channelId,
-  }, channelId);
+  appendFeedEvent(
+    cwd,
+    {
+      ts: new Date().toISOString(),
+      agent,
+      type,
+      target,
+      preview,
+      channel: channelId,
+    },
+    channelId
+  );
 }

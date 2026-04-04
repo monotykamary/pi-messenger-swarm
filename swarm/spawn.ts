@@ -40,19 +40,19 @@ interface SpawnEvent {
   agent: Partial<SpawnedAgent>;
 }
 
-function getSpawnedJsonlPath(cwd: string, sessionId: string): string {
+function getAgentEventsJsonlPath(cwd: string, sessionId: string): string {
   const safeSessionId = sessionId.replace(/[^\w.-]/g, '_');
-  return path.join(cwd, '.pi', 'messenger', 'spawned', `${safeSessionId}.jsonl`);
+  return path.join(cwd, '.pi', 'messenger', 'agents', `${safeSessionId}.jsonl`);
 }
 
-function getSpawnedAgentsDir(cwd: string, sessionId: string): string {
+function getAgentDefinitionsDir(cwd: string, sessionId: string): string {
   const safeSessionId = sessionId.replace(/[^\w.-]/g, '_');
   return path.join(cwd, '.pi', 'messenger', 'agents', safeSessionId);
 }
 
 function agentFilePath(cwd: string, sessionId: string, name: string, id: string): string {
   const safeName = name.replace(/[^\w.-]/g, '_');
-  return path.join(getSpawnedAgentsDir(cwd, sessionId), `${safeName}-${id}.md`);
+  return path.join(getAgentDefinitionsDir(cwd, sessionId), `${safeName}-${id}.md`);
 }
 
 function ensureDir(dir: string): void {
@@ -60,7 +60,7 @@ function ensureDir(dir: string): void {
 }
 
 function appendEvent(cwd: string, sessionId: string, event: SpawnEvent): void {
-  const filePath = getSpawnedJsonlPath(cwd, sessionId);
+  const filePath = getAgentEventsJsonlPath(cwd, sessionId);
   ensureDir(path.dirname(filePath));
   fs.appendFileSync(filePath, JSON.stringify(event) + '\n', 'utf-8');
 }
@@ -70,7 +70,7 @@ function appendEvent(cwd: string, sessionId: string, event: SpawnEvent): void {
  * Events are applied in order, with later events overriding earlier state for the same agent.
  */
 export function loadSpawnedAgents(cwd: string, sessionId: string): SpawnedAgent[] {
-  const filePath = getSpawnedJsonlPath(cwd, sessionId);
+  const filePath = getAgentEventsJsonlPath(cwd, sessionId);
   if (!fs.existsSync(filePath)) return [];
 
   const agentsById = new Map<string, SpawnedAgent>();
@@ -106,7 +106,7 @@ export function getAgentEventHistory(
   sessionId: string,
   agentId: string
 ): SpawnEvent[] {
-  const filePath = getSpawnedJsonlPath(cwd, sessionId);
+  const filePath = getAgentEventsJsonlPath(cwd, sessionId);
   if (!fs.existsSync(filePath)) return [];
 
   const events: SpawnEvent[] = [];

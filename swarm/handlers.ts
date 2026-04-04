@@ -4,19 +4,21 @@ import { displayChannelLabel, normalizeChannelId } from '../channel.js';
 import { result } from './result.js';
 import { logFeedEvent } from '../feed.js';
 import * as store from './store.js';
+import * as taskStore from './task-store.js';
 import { cleanupExitedSpawned, listSpawned, spawnSubagent, stopSpawn } from './spawn.js';
 import type { SpawnRequest, SwarmTaskEvidence } from './types.js';
 import { formatRoleLabel } from './labels.js';
+import { executeTaskAction } from './task-actions.js';
 
-function summaryLine(cwd: string, channelId: string): string {
-  const s = store.getSummary(cwd, channelId);
+function summaryLine(cwd: string, sessionId: string): string {
+  const s = taskStore.getSummary(cwd, sessionId);
   return `${s.done}/${s.total} done · ${s.in_progress} in progress · ${s.todo} todo · ${s.blocked} blocked`;
 }
 
 export function executeSwarmStatus(cwd: string, channelId: string, sessionId: string) {
   cleanupExitedSpawned(cwd, sessionId);
-  const tasks = store.getTasks(cwd, channelId);
-  const summary = store.getSummary(cwd, channelId);
+  const tasks = taskStore.getTasks(cwd, sessionId);
+  const summary = taskStore.getSummary(cwd, sessionId);
   const spawned = listSpawned(cwd, sessionId);
   const channelLabel = displayChannelLabel(channelId);
 
@@ -36,7 +38,7 @@ export function executeSwarmStatus(cwd: string, channelId: string, sessionId: st
   const lines: string[] = [
     `# Agent Swarm ${channelLabel}`,
     '',
-    `Summary: ${summaryLine(cwd, channelId)}`,
+    `Summary: ${summaryLine(cwd, sessionId)}`,
     '',
   ];
 
@@ -80,37 +82,38 @@ export function executeTask(
   params: MessengerActionParams,
   state: MessengerState,
   cwd: string,
-  channelId: string
+  channelId: string,
+  sessionId: string
 ) {
   switch (op) {
     case 'create':
-      return taskCreate(params, state, cwd, channelId);
+      return taskCreate(params, state, cwd, channelId, sessionId);
     case 'list':
-      return taskList(cwd, channelId);
+      return taskList(cwd, channelId, sessionId);
     case 'show':
-      return taskShow(params, cwd, channelId);
+      return taskShow(params, cwd, channelId, sessionId);
     case 'start':
     case 'claim':
-      return taskClaim(params, state, cwd, channelId);
+      return taskClaim(params, state, cwd, channelId, sessionId);
     case 'unclaim':
     case 'stop':
-      return taskUnclaim(params, state, cwd, channelId);
+      return taskUnclaim(params, state, cwd, channelId, sessionId);
     case 'done':
-      return taskDone(params, state, cwd, channelId);
+      return taskDone(params, state, cwd, channelId, sessionId);
     case 'block':
-      return taskBlock(params, state, cwd, channelId);
+      return taskBlock(params, state, cwd, channelId, sessionId);
     case 'unblock':
-      return taskUnblock(params, state, cwd, channelId);
+      return taskUnblock(params, state, cwd, channelId, sessionId);
     case 'ready':
-      return taskReady(cwd, channelId);
+      return taskReady(cwd, channelId, sessionId);
     case 'progress':
-      return taskProgress(params, state, cwd, channelId);
+      return taskProgress(params, state, cwd, channelId, sessionId);
     case 'reset':
-      return taskReset(params, state, cwd, channelId);
+      return taskReset(params, state, cwd, channelId, sessionId);
     case 'delete':
-      return taskDelete(params, state, cwd, channelId);
+      return taskDelete(params, state, cwd, channelId, sessionId);
     case 'archive_done':
-      return taskArchiveDone(state, cwd, channelId);
+      return taskArchiveDone(state, cwd, channelId, sessionId);
     default:
       return result(`Unknown task operation: ${op}`, {
         mode: 'task',
@@ -124,7 +127,8 @@ function taskCreate(
   params: MessengerActionParams,
   state: MessengerState,
   cwd: string,
-  channelId: string
+  channelId: string,
+  sessionId: string
 ) {
   if (!params.title) {
     return result('Error: title required for task.create', {
@@ -135,7 +139,7 @@ function taskCreate(
 
   const dependsOn = params.dependsOn ?? [];
   for (const depId of dependsOn) {
-    if (!store.getTask(cwd, depId, channelId)) {
+    if (!taskStore.getTask(cwd, sessionId, depId)) {
       return result(`Error: dependency ${depId} not found`, {
         mode: 'task.create',
         error: 'dependency_not_found',
@@ -144,8 +148,9 @@ function taskCreate(
     }
   }
 
-  const task = store.createTask(
+  const task = taskStore.createTask(
     cwd,
+    sessionId,
     {
       title: params.title,
       content: params.content,
@@ -170,8 +175,8 @@ function taskCreate(
   );
 }
 
-function taskList(cwd: string, channelId: string) {
-  const tasks = store.getTasks(cwd, channelId);
+function taskList(cwd: string, channelId: string, sessionId: string) {
+  const tasks = taskStore.getTasks(cwd, sessionId);
   if (tasks.length === 0) {
     return result(
       `No tasks yet in ${displayChannelLabel(channelId)}. Create one with task.create.`,
@@ -182,7 +187,7 @@ function taskList(cwd: string, channelId: string) {
   const lines: string[] = [
     `# Swarm Tasks ${displayChannelLabel(channelId)}`,
     '',
-    `Summary: ${summaryLine(cwd, channelId)}`,
+    `Summary: ${summaryLine(cwd, sessionId)}`,
     '',
   ];
   for (const task of tasks) {
@@ -206,11 +211,16 @@ function taskList(cwd: string, channelId: string) {
   });
 }
 
-function taskShow(params: MessengerActionParams, cwd: string, channelId: string) {
+function taskShow(
+  params: MessengerActionParams,
+  cwd: string,
+  channelId: string,
+  sessionId: string
+) {
   if (!params.id)
     return result('Error: id required for task.show', { mode: 'task.show', error: 'missing_id' });
 
-  const task = store.getTask(cwd, params.id, channelId);
+  const task = taskStore.getTask(cwd, sessionId, params.id);
   if (!task)
     return result(`Error: task ${params.id} not found`, {
       mode: 'task.show',
@@ -218,8 +228,8 @@ function taskShow(params: MessengerActionParams, cwd: string, channelId: string)
       id: params.id,
     });
 
-  const spec = store.getTaskSpec(cwd, task.id, channelId) ?? '*No spec*';
-  const progress = store.getTaskProgress(cwd, task.id, channelId);
+  const spec = taskStore.getTaskSpec(cwd, sessionId, task.id) ?? '*No spec*';
+  const progress = taskStore.getTaskProgress(cwd, sessionId, task.id);
 
   const lines: string[] = [
     `# ${task.id}: ${task.title}`,
@@ -249,14 +259,15 @@ function taskClaim(
   params: MessengerActionParams,
   state: MessengerState,
   cwd: string,
-  channelId: string
+  channelId: string,
+  sessionId: string
 ) {
   if (!params.id)
     return result('Error: id required for task.claim', { mode: 'task.claim', error: 'missing_id' });
 
-  const claimed = store.claimTask(cwd, params.id, state.agentName, params.reason, channelId);
+  const claimed = taskStore.claimTask(cwd, sessionId, params.id, state.agentName, params.reason);
   if (!claimed) {
-    const existing = store.getTask(cwd, params.id, channelId);
+    const existing = taskStore.getTask(cwd, sessionId, params.id);
     if (!existing)
       return result(`Error: task ${params.id} not found`, {
         mode: 'task.claim',
@@ -301,7 +312,8 @@ function taskUnclaim(
   params: MessengerActionParams,
   state: MessengerState,
   cwd: string,
-  channelId: string
+  channelId: string,
+  sessionId: string
 ) {
   if (!params.id)
     return result('Error: id required for task.unclaim', {
@@ -309,9 +321,9 @@ function taskUnclaim(
       error: 'missing_id',
     });
 
-  const unclaimed = store.unclaimTask(cwd, params.id, state.agentName, channelId);
+  const unclaimed = taskStore.unclaimTask(cwd, sessionId, params.id, state.agentName);
   if (!unclaimed) {
-    const existing = store.getTask(cwd, params.id, channelId);
+    const existing = taskStore.getTask(cwd, sessionId, params.id);
     if (!existing)
       return result(`Error: task ${params.id} not found`, {
         mode: 'task.unclaim',
@@ -339,24 +351,25 @@ function taskDone(
   params: MessengerActionParams,
   state: MessengerState,
   cwd: string,
-  channelId: string
+  channelId: string,
+  sessionId: string
 ) {
   if (!params.id)
     return result('Error: id required for task.done', { mode: 'task.done', error: 'missing_id' });
 
   const summary = params.summary ?? 'Task completed';
   const evidence = params.evidence as SwarmTaskEvidence | undefined;
-  const completed = store.completeTask(
+  const completed = taskStore.completeTask(
     cwd,
+    sessionId,
     params.id,
     state.agentName,
     summary,
-    evidence,
-    channelId
+    evidence
   );
 
   if (!completed) {
-    const task = store.getTask(cwd, params.id, channelId);
+    const task = taskStore.getTask(cwd, sessionId, params.id);
     if (!task)
       return result(`Error: task ${params.id} not found`, {
         mode: 'task.done',
@@ -384,7 +397,7 @@ function taskDone(
     mode: 'task.done',
     channel: normalizeChannelId(channelId),
     task: completed,
-    summary: store.getSummary(cwd, channelId),
+    summary: taskStore.getSummary(cwd, sessionId),
   });
 }
 
@@ -392,7 +405,8 @@ function taskBlock(
   params: MessengerActionParams,
   state: MessengerState,
   cwd: string,
-  channelId: string
+  channelId: string,
+  sessionId: string
 ) {
   if (!params.id)
     return result('Error: id required for task.block', { mode: 'task.block', error: 'missing_id' });
@@ -402,7 +416,7 @@ function taskBlock(
       error: 'missing_reason',
     });
 
-  const blocked = store.blockTask(cwd, params.id, state.agentName, params.reason, channelId);
+  const blocked = taskStore.blockTask(cwd, sessionId, params.id, state.agentName, params.reason);
   if (!blocked)
     return result(`Error: failed to block ${params.id}.`, {
       mode: 'task.block',
@@ -423,7 +437,8 @@ function taskUnblock(
   params: MessengerActionParams,
   state: MessengerState,
   cwd: string,
-  channelId: string
+  channelId: string,
+  sessionId: string
 ) {
   if (!params.id)
     return result('Error: id required for task.unblock', {
@@ -431,7 +446,7 @@ function taskUnblock(
       error: 'missing_id',
     });
 
-  const task = store.unblockTask(cwd, params.id, channelId);
+  const task = taskStore.unblockTask(cwd, sessionId, params.id);
   if (!task)
     return result(`Error: failed to unblock ${params.id}.`, {
       mode: 'task.unblock',
@@ -448,14 +463,14 @@ function taskUnblock(
   });
 }
 
-function taskReady(cwd: string, channelId: string) {
-  const ready = store.getReadyTasks(cwd, channelId);
+function taskReady(cwd: string, channelId: string, sessionId: string) {
+  const ready = taskStore.getReadyTasks(cwd, sessionId);
   if (ready.length === 0) {
     return result('No ready tasks right now.', {
       mode: 'task.ready',
       channel: normalizeChannelId(channelId),
       ready: [],
-      summary: store.getSummary(cwd, channelId),
+      summary: taskStore.getSummary(cwd, sessionId),
     });
   }
 
@@ -475,7 +490,8 @@ function taskProgress(
   params: MessengerActionParams,
   state: MessengerState,
   cwd: string,
-  channelId: string
+  channelId: string,
+  sessionId: string
 ) {
   if (!params.id)
     return result('Error: id required for task.progress', {
@@ -488,7 +504,7 @@ function taskProgress(
       error: 'missing_message',
     });
 
-  const task = store.getTask(cwd, params.id, channelId);
+  const task = taskStore.getTask(cwd, sessionId, params.id);
   if (!task)
     return result(`Error: task ${params.id} not found`, {
       mode: 'task.progress',
@@ -496,7 +512,7 @@ function taskProgress(
       id: params.id,
     });
 
-  store.appendTaskProgress(cwd, task.id, state.agentName, params.message, channelId);
+  taskStore.appendTaskProgress(cwd, sessionId, task.id, state.agentName, params.message);
   return result(`Progress logged for ${task.id}.`, {
     mode: 'task.progress',
     channel: normalizeChannelId(channelId),
@@ -508,13 +524,14 @@ function taskReset(
   params: MessengerActionParams,
   state: MessengerState,
   cwd: string,
-  channelId: string
+  channelId: string,
+  sessionId: string
 ) {
   if (!params.id)
     return result('Error: id required for task.reset', { mode: 'task.reset', error: 'missing_id' });
 
   const cascade = params.cascade === true;
-  const reset = store.resetTask(cwd, params.id, cascade, channelId);
+  const reset = taskStore.resetTask(cwd, sessionId, params.id, cascade);
   if (reset.length === 0) {
     return result(`Error: failed to reset ${params.id}.`, {
       mode: 'task.reset',
@@ -544,7 +561,8 @@ function taskDelete(
   params: MessengerActionParams,
   state: MessengerState,
   cwd: string,
-  channelId: string
+  channelId: string,
+  sessionId: string
 ) {
   if (!params.id)
     return result('Error: id required for task.delete', {
@@ -552,7 +570,7 @@ function taskDelete(
       error: 'missing_id',
     });
 
-  const task = store.getTask(cwd, params.id, channelId);
+  const task = taskStore.getTask(cwd, sessionId, params.id);
   if (!task) {
     return result(`Error: task ${params.id} not found`, {
       mode: 'task.delete',
@@ -569,7 +587,7 @@ function taskDelete(
     });
   }
 
-  if (!store.deleteTask(cwd, task.id, channelId)) {
+  if (!taskStore.deleteTask(cwd, sessionId, task.id)) {
     return result(`Error: failed to delete ${params.id}.`, {
       mode: 'task.delete',
       error: 'delete_failed',
@@ -586,38 +604,29 @@ function taskDelete(
   });
 }
 
-function taskArchiveDone(state: MessengerState, cwd: string, channelId: string) {
-  const archived = store.archiveDoneTasks(cwd, channelId);
-  if (archived.archived === 0) {
+function taskArchiveDone(state: MessengerState, cwd: string, channelId: string, sessionId: string) {
+  const doneTasks = taskStore.getTasks(cwd, sessionId).filter((t) => t.status === 'done');
+  if (doneTasks.length === 0) {
     return result('No done tasks to archive.', {
       mode: 'task.archive_done',
       channel: normalizeChannelId(channelId),
       archived: 0,
       archivedIds: [],
-      archiveDir: null,
     });
   }
 
-  logFeedEvent(
-    cwd,
-    state.agentName,
-    'task.archive',
-    undefined,
-    `${archived.archived} done task(s)`,
-    channelId
-  );
+  const archivedIds = doneTasks.map((t) => t.id);
+  const count = taskStore.archiveDoneTasks(cwd, sessionId);
 
-  return result(
-    `Archived ${archived.archived} done task(s): ${archived.archivedIds.join(', ')}\nArchive: ${archived.archiveDir}`,
-    {
-      mode: 'task.archive_done',
-      channel: normalizeChannelId(channelId),
-      archived: archived.archived,
-      archivedIds: archived.archivedIds,
-      archiveDir: archived.archiveDir,
-      summary: store.getSummary(cwd, channelId),
-    }
-  );
+  logFeedEvent(cwd, state.agentName, 'task.archive', undefined, `${count} done task(s)`, channelId);
+
+  return result(`Archived ${count} done task(s): ${archivedIds.join(', ')}`, {
+    mode: 'task.archive_done',
+    channel: normalizeChannelId(channelId),
+    archived: count,
+    archivedIds,
+    summary: taskStore.getSummary(cwd, sessionId),
+  });
 }
 
 export function executeSpawn(

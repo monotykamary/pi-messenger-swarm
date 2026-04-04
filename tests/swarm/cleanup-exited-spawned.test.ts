@@ -64,8 +64,8 @@ function cleanupTempDir(dir: string): void {
   }
 }
 
-function getSpawnedJsonlPath(cwd: string, sessionId: string): string {
-  return path.join(cwd, '.pi', 'messenger', 'spawned', `${sessionId}.jsonl`);
+function getAgentEventsJsonlPath(cwd: string, sessionId: string): string {
+  return path.join(cwd, '.pi', 'messenger', 'agents', `${sessionId}.jsonl`);
 }
 
 describe('cleanupExitedSpawned with event-sourced persistence', () => {
@@ -98,7 +98,7 @@ describe('cleanupExitedSpawned with event-sourced persistence', () => {
     expect(listSpawned(cwd, sessionId)).toHaveLength(1);
 
     // Check event log has spawn event
-    const jsonlPath = getSpawnedJsonlPath(cwd, sessionId);
+    const jsonlPath = getAgentEventsJsonlPath(cwd, sessionId);
     expect(fs.existsSync(jsonlPath)).toBe(true);
     const events = fs.readFileSync(jsonlPath, 'utf-8').trim().split('\n');
     expect(events).toHaveLength(1);
@@ -267,8 +267,8 @@ describe('cleanupExitedSpawned with event-sourced persistence', () => {
     expect(listSpawned(cwd, session2)[0]?.name).toBe('SessionBot2');
 
     // Verify separate JSONL files exist
-    expect(fs.existsSync(getSpawnedJsonlPath(cwd, session1))).toBe(true);
-    expect(fs.existsSync(getSpawnedJsonlPath(cwd, session2))).toBe(true);
+    expect(fs.existsSync(getAgentEventsJsonlPath(cwd, session1))).toBe(true);
+    expect(fs.existsSync(getAgentEventsJsonlPath(cwd, session2))).toBe(true);
 
     // Complete first agent
     proc1.exitCode = 0;

@@ -110,6 +110,7 @@ function isPrintable(data: string): boolean {
 
 function executeTaskAction(
   cwd: string,
+  sessionId: string,
   action: string,
   taskId: string,
   agentName: string,
@@ -129,6 +130,7 @@ function executeTaskAction(
 
   const result = runTaskAction(
     cwd,
+    sessionId,
     action,
     taskId,
     agentName,
@@ -198,12 +200,20 @@ export function handleConfirmInput(
   cwd: string,
   agentName: string,
   channelId: string = 'general',
+  sessionId: string,
   tui: TUI
 ): void {
   const action = viewState.confirmAction;
   if (!action) return;
   if (matchesKey(data, 'y')) {
-    const result = executeTaskAction(cwd, action.type, action.taskId, agentName, channelId);
+    const result = executeTaskAction(
+      cwd,
+      sessionId,
+      action.type,
+      action.taskId,
+      agentName,
+      channelId
+    );
     if (action.type === 'delete' || action.type === 'archive') {
       const tasks = swarmStore.getTasks(cwd, channelId);
       if (tasks.length > 0) {
@@ -234,6 +244,7 @@ export function handleBlockReasonInput(
   task: Task | undefined,
   agentName: string,
   channelId: string = 'general',
+  sessionId: string,
   tui: TUI
 ): void {
   if (matchesKey(data, 'escape')) {
@@ -245,7 +256,15 @@ export function handleBlockReasonInput(
   if (matchesKey(data, 'enter')) {
     const reason = viewState.blockReasonInput.trim();
     if (!reason || !task) return;
-    const result = executeTaskAction(cwd, 'block', task.id, agentName, channelId, reason);
+    const result = executeTaskAction(
+      cwd,
+      sessionId,
+      'block',
+      task.id,
+      agentName,
+      channelId,
+      reason
+    );
     viewState.inputMode = 'normal';
     viewState.blockReasonInput = '';
     setNotification(viewState, tui, result.success, result.message);
@@ -499,16 +518,17 @@ export function handleTaskKeyBinding(
   cwd: string,
   agentName: string,
   channelId: string = 'general',
+  sessionId: string,
   tui: TUI
 ): void {
   if (matchesKey(data, 's') && task.status === 'todo') {
-    const result = executeTaskAction(cwd, 'start', task.id, agentName, channelId);
+    const result = executeTaskAction(cwd, sessionId, 'start', task.id, agentName, channelId);
     setNotification(viewState, tui, result.success, result.message);
     tui.requestRender();
     return;
   }
   if (matchesKey(data, 'u') && task.status === 'blocked') {
-    const result = executeTaskAction(cwd, 'unblock', task.id, agentName, channelId);
+    const result = executeTaskAction(cwd, sessionId, 'unblock', task.id, agentName, channelId);
     setNotification(viewState, tui, result.success, result.message);
     tui.requestRender();
     return;

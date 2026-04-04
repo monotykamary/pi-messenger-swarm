@@ -150,7 +150,8 @@ export async function executeAction(
         params,
         state,
         cwd,
-        params.channel ?? state.currentChannel ?? 'general'
+        params.channel ?? state.currentChannel ?? 'general',
+        sessionId
       );
     }
 
@@ -168,7 +169,8 @@ export async function executeAction(
         { ...params, id: taskId },
         state,
         cwd,
-        params.channel ?? state.currentChannel ?? 'general'
+        params.channel ?? state.currentChannel ?? 'general',
+        sessionId
       );
     }
 
@@ -185,7 +187,8 @@ export async function executeAction(
         { ...params, id: taskId },
         state,
         cwd,
-        params.channel ?? state.currentChannel ?? 'general'
+        params.channel ?? state.currentChannel ?? 'general',
+        sessionId
       );
     }
 
@@ -202,7 +205,8 @@ export async function executeAction(
         { ...params, id: taskId },
         state,
         cwd,
-        params.channel ?? state.currentChannel ?? 'general'
+        params.channel ?? state.currentChannel ?? 'general',
+        sessionId
       );
     }
 
