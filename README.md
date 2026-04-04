@@ -227,35 +227,62 @@ Planning UI and worker +/- controls were removed in swarm mode.
 
 ## Storage Layout
 
-By default, swarm state is **project-scoped** (isolated per project):
+By default, swarm state is **project-scoped** (isolated per project). All channel state uses a unified event-sourced JSONL format:
 
 ```text
 .pi/messenger/
-├── channels/
-│   ├── memory.json
-│   ├── heartbeat.json
-│   └── quiet-river.json
-├── feed/
-│   ├── memory.jsonl
+├── channels/                    # Unified event-sourced channel files
+│   ├── memory.jsonl           # Line 1: metadata header, Line 2+: feed events
 │   ├── heartbeat.jsonl
 │   └── quiet-river.jsonl
-├── tasks/
+├── tasks/                     # Per-channel task storage
 │   ├── memory/
 │   │   ├── task-1.json
 │   │   ├── task-1.md
 │   │   ├── task-1.progress.md
 │   │   └── blocks/
 │   └── quiet-river/
-├── archive/
+├── archive/                   # Per-channel archived tasks
 │   ├── memory/
 │   └── quiet-river/
-├── registry/
-├── inbox/
+├── registry/                  # Agent registrations
+├── inbox/                     # Agent message inboxes
 └── swarm/
-    └── locks/
+    └── locks/                 # Coordination locks
 ```
 
-This ensures agents in different projects never interfere with each other, while still isolating work further by channel inside a project.
+### Unified Channel Format (Event-Sourced)
+
+Each channel file at `channels/<channel>.jsonl` uses an append-only JSONL format:
+
+**Line 1** — Metadata header:
+
+```json
+{
+  "_meta": true,
+  "v": 1,
+  "id": "memory",
+  "type": "named",
+  "createdAt": "2026-04-04T22:00:00.000Z",
+  "description": "Cross-session knowledge and insights"
+}
+```
+
+**Line 2+** — Append-only feed events:
+
+```json
+{"ts":"2026-04-04T22:05:00.000Z","agent":"Alpha","type":"join"}
+{"ts":"2026-04-04T22:10:00.000Z","agent":"Alpha","type":"message","preview":"Investigating auth timeout"}
+{"ts":"2026-04-04T22:15:00.000Z","agent":"Alpha","type":"task.start","target":"task-1"}
+```
+
+This design provides:
+
+- **Atomic channel creation** — metadata and first event written together
+- **Append-only feeds** — events never modified, only added
+- **Natural event sourcing** — full history preserved in file order
+- **Efficient tail reads** — recent events at end of file
+- **Simple caching** — stat mtime + size for invalidation
 
 ## Breaking Changes
 
