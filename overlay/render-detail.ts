@@ -355,6 +355,7 @@ export function renderSwarmDetail(
 
   lines.push(`${agent.name} (${agent.id})`);
   lines.push(`Role: ${formatRoleLabel(agent.role)}  │  Status: ${agent.status}`);
+  if (agent.model?.trim()) lines.push(`Model: ${agent.model.trim()}`);
   if (agent.persona?.trim()) lines.push(`Persona: ${agent.persona.trim()}`);
   lines.push(`Started: ${formatRelativeTime(agent.startedAt)}`);
   if (agent.endedAt) {

@@ -61,6 +61,7 @@ export interface SpawnedAgent {
   cwd: string;
   name: string;
   role: string;
+  model?: string;
   persona?: string;
   objective: string;
   context?: string;

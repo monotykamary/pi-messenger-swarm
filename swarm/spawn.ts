@@ -133,6 +133,7 @@ function generateAgentFile(cwd: string, sessionId: string, agent: SpawnedAgent):
   const lines: string[] = [
     '---',
     `role: ${agent.role}`,
+    ...(agent.model ? [`model: ${agent.model}`] : []),
     ...(agent.persona ? [`persona: ${agent.persona}`] : []),
     ...(agent.objective ? [`objective: ${agent.objective}`] : []),
     `created: ${agent.startedAt}`,
@@ -428,6 +429,7 @@ export function spawnSubagent(
     cwd,
     name,
     role,
+    model: agentFileModel,
     persona: request.persona,
     objective,
     context: request.context,
