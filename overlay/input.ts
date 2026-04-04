@@ -1,6 +1,7 @@
 import { matchesKey, type TUI } from '@mariozechner/pi-tui';
 import type { Dirs, MessengerState } from '../lib.js';
 import * as swarmStore from '../swarm/store.js';
+import * as taskStore from '../swarm/task-store.js';
 import { listSpawned } from '../swarm/spawn.js';
 import type { SwarmTask as Task } from '../swarm/types.js';
 import { getFeedLineCount, readFeedEventsByRange } from '../feed.js';
@@ -93,7 +94,7 @@ export function handleOverlayInput({
   }
 
   if (viewState.inputMode === 'block-reason') {
-    const tasks = swarmStore.getTasks(cwd, currentChannel());
+    const tasks = taskStore.getTasks(cwd, state.contextSessionId ?? '');
     const task = tasks[viewState.selectedTaskIndex];
     handleBlockReasonInput(
       data,
@@ -168,7 +169,7 @@ export function handleOverlayInput({
   const totalFeedLines = getFeedLineCount(cwd, channelId);
   const termRows = process.stdout.rows ?? 24;
   const sectionWidth = width - 4;
-  const taskList = swarmStore.getTasks(cwd, channelId);
+  const taskList = taskStore.getTasks(cwd, state.contextSessionId ?? '');
   const feedHeight = estimateFeedViewportHeight(
     termRows,
     sectionWidth,
@@ -244,7 +245,7 @@ export function handleOverlayInput({
     viewState.pendingG = false;
   }
 
-  const tasks = swarmStore.getTasks(cwd, currentChannel());
+  const tasks = taskStore.getTasks(cwd, state.contextSessionId ?? '');
   const spawned = listSpawned(cwd, state.contextSessionId ?? '');
   const task = tasks[viewState.selectedTaskIndex];
   const swarmAgent = spawned[viewState.selectedSwarmIndex];

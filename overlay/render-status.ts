@@ -2,6 +2,7 @@ import { truncateToWidth } from '@mariozechner/pi-tui';
 import type { Theme } from '@mariozechner/pi-coding-agent';
 import { formatDuration } from '../lib.js';
 import * as swarmStore from '../swarm/store.js';
+import * as taskStore from '../swarm/task-store.js';
 import type { SwarmTask as Task, SpawnedAgent } from '../swarm/types.js';
 import { formatRoleLabel } from '../swarm/labels.js';
 import { getLiveWorkers, type LiveWorkerInfo } from '../swarm/live-progress.js';
@@ -28,7 +29,8 @@ export function renderStatusBar(
   width: number,
   channelId: string = 'general',
   liveWorkers: ReadonlyMap<string, LiveWorkerInfo> = getLiveWorkers(cwd),
-  tasks: Task[] = swarmStore.getTasks(cwd, channelId)
+  tasks: Task[],
+  sessionId: string = ''
 ): string {
   const liveCount = liveWorkers.size;
   if (
@@ -41,8 +43,8 @@ export function renderStatusBar(
     return statusBarCache.line;
   }
 
-  const summary = swarmStore.getSummaryForTasks(tasks);
-  const ready = swarmStore.getReadyTasksForTasks(tasks);
+  const summary = taskStore.getSummaryForTasks(tasks);
+  const ready = taskStore.getReadyTasksForTasks(tasks);
 
   let line: string;
   if (summary.total === 0) {
@@ -102,7 +104,7 @@ export function renderTaskList(
   viewState: MessengerViewState,
   channelId: string = 'general',
   liveWorkers: ReadonlyMap<string, LiveWorkerInfo> = getLiveWorkers(cwd),
-  tasks: Task[] = swarmStore.getTasks(cwd, channelId)
+  tasks: Task[]
 ): string[] {
   const lines: string[] = [];
 

@@ -21,6 +21,7 @@ import {
 import { displayChannelLabel } from '../channel.js';
 import * as store from '../store.js';
 import * as swarmStore from '../swarm/store.js';
+import * as taskStore from '../swarm/task-store.js';
 import { formatFeedLine, logFeedEvent, pruneFeed, readFeedEvents } from '../feed.js';
 import { notRegisteredError, result } from './result.js';
 
@@ -269,24 +270,20 @@ export function executeList(
   }
 
   const allClaims = store.getClaims(dirs);
+  const sessionId = state.contextSessionId ?? '';
+  const sessionTasks = taskStore.getTasks(cwd, sessionId);
 
   lines.push(
     formatAgentLine(
       buildSelfRegistration(state),
       true,
-      agentHasTask(state.agentName, allClaims, swarmStore.getTasks(cwd, state.currentChannel))
+      agentHasTask(state.agentName, allClaims, sessionTasks)
     )
   );
 
   for (const a of peers) {
-    const channel = a.currentChannel ?? a.sessionChannel ?? state.currentChannel;
-    lines.push(
-      formatAgentLine(
-        a,
-        false,
-        agentHasTask(a.name, allClaims, swarmStore.getTasks(a.cwd, channel))
-      )
-    );
+    // With session-scoped tasks, we can only see tasks from our own session
+    lines.push(formatAgentLine(a, false, agentHasTask(a.name, allClaims, sessionTasks)));
   }
 
   const recentEvents = readFeedEvents(cwd, 5, state.currentChannel);
@@ -333,11 +330,18 @@ export function executeWhois(
     });
   }
 
-  return formatWhoisOutput(agent, false, dirs, cwd, thresholdMs);
+  return formatWhoisOutput(agent, false, dirs, cwd, thresholdMs, state.contextSessionId ?? '');
 }
 
 function executeWhoisSelf(state: MessengerState, dirs: Dirs, cwd: string, thresholdMs: number) {
-  return formatWhoisOutput(buildSelfRegistration(state), true, dirs, cwd, thresholdMs);
+  return formatWhoisOutput(
+    buildSelfRegistration(state),
+    true,
+    dirs,
+    cwd,
+    thresholdMs,
+    state.contextSessionId ?? ''
+  );
 }
 
 function formatWhoisOutput(
@@ -345,11 +349,12 @@ function formatWhoisOutput(
   isSelf: boolean,
   dirs: Dirs,
   cwd: string,
-  thresholdMs: number
+  thresholdMs: number,
+  sessionId: string
 ) {
   const allClaims = store.getClaims(dirs);
-  const agentChannel = agent.currentChannel ?? agent.sessionChannel ?? 'general';
-  const hasTask = agentHasTask(agent.name, allClaims, swarmStore.getTasks(agent.cwd, agentChannel));
+  const sessionTasks = taskStore.getTasks(cwd, sessionId);
+  const hasTask = agentHasTask(agent.name, allClaims, sessionTasks);
 
   const computed = computeStatus(
     agent.activity?.lastActivityAt ?? agent.startedAt,

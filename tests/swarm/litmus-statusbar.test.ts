@@ -1,60 +1,55 @@
-import * as fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import * as swarmStore from "../../swarm/store.js";
-
-vi.mock("@mariozechner/pi-tui", () => ({
-  truncateToWidth: (s: string) => s,
-}));
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import * as taskStore from '../../swarm/task-store.js';
 
 const roots = new Set<string>();
+const TEST_SESSION = 'test-session-statusbar';
 
 function createTempCwd(): string {
-  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-messenger-swarm-statusbar-"));
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-messenger-statusbar-'));
   roots.add(cwd);
   return cwd;
 }
 
-afterEach(() => {
+afterAll(() => {
   for (const root of roots) {
-    try { fs.rmSync(root, { recursive: true, force: true }); } catch {}
+    try {
+      fs.rmSync(root, { recursive: true, force: true });
+    } catch {}
   }
-  roots.clear();
 });
 
-const theme = {
-  fg: (_name: string, text: string) => text,
-};
+describe('swarm status bar litmus', () => {
+  let renderStatusBar: typeof import('../../overlay-render.js').renderStatusBar;
 
-describe("swarm status bar litmus", () => {
-  let renderStatusBar: typeof import("../../overlay-render.js").renderStatusBar;
-
-  beforeEach(async () => {
-    vi.resetModules();
-    const mod = await import("../../overlay-render.js");
+  beforeAll(async () => {
+    const mod = await import('../../overlay-render.js');
     renderStatusBar = mod.renderStatusBar;
   });
 
-  it("shows empty-state status when no tasks exist", () => {
+  it('shows empty-state status when no tasks exist', () => {
     const cwd = createTempCwd();
-    const line = renderStatusBar(theme as any, cwd, 120);
-    expect(line).toContain("No swarm tasks");
+    const tasks = taskStore.getTasks(cwd, TEST_SESSION);
+    const line = renderStatusBar({} as any, cwd, 120, 'general', new Map(), tasks, TEST_SESSION);
+    expect(line).toContain('No swarm tasks');
   });
 
-  it("shows summary counts when tasks exist", () => {
+  it('shows summary counts when tasks exist', () => {
     const cwd = createTempCwd();
 
-    const t1 = swarmStore.createTask(cwd, { title: "Done" });
-    const t2 = swarmStore.createTask(cwd, { title: "In progress" });
+    const t1 = taskStore.createTask(cwd, TEST_SESSION, { title: 'Done' });
+    const t2 = taskStore.createTask(cwd, TEST_SESSION, { title: 'In progress' });
 
-    swarmStore.claimTask(cwd, t1.id, "AgentA");
-    swarmStore.completeTask(cwd, t1.id, "AgentA", "done");
-    swarmStore.claimTask(cwd, t2.id, "AgentB");
+    taskStore.claimTask(cwd, TEST_SESSION, t1.id, 'AgentA');
+    taskStore.completeTask(cwd, TEST_SESSION, t1.id, 'AgentA', 'done');
+    taskStore.claimTask(cwd, TEST_SESSION, t2.id, 'AgentB');
 
-    const line = renderStatusBar(theme as any, cwd, 120);
-    expect(line).toContain("☑ 1/2 tasks");
-    expect(line).toContain("ready 0");
-    expect(line).toContain("in progress 1");
+    const tasks = taskStore.getTasks(cwd, TEST_SESSION);
+    const line = renderStatusBar({} as any, cwd, 120, 'general', new Map(), tasks, TEST_SESSION);
+    expect(line).toContain('☑ 1/2 tasks');
+    expect(line).toContain('ready 0');
+    expect(line).toContain('in progress 1');
   });
 });

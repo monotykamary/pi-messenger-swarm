@@ -74,6 +74,7 @@ function makeState(): MessengerState {
     currentChannel: 'general',
     sessionChannel: 'general',
     joinedChannels: ['general'],
+    contextSessionId: 'test-session-layout',
   };
 }
 
@@ -111,11 +112,11 @@ describe('overlay layout', () => {
     process.chdir(cwd);
 
     try {
-      const swarmStore = await import('../swarm/store.js');
+      const taskStore = await import('../swarm/task-store.js');
       const { logFeedEvent } = await import('../feed.js');
       const { MessengerOverlay } = await import('../overlay.js');
 
-      swarmStore.createTask(cwd, {
+      taskStore.createTask(cwd, state.contextSessionId!, {
         title: 'Single visible task',
         createdBy: 'BenchAgent',
       });

@@ -751,7 +751,10 @@ export function updateTaskSpec(
 // =============================================================================
 
 export function getSummary(cwd: string, sessionId: string): SwarmSummary {
-  const tasks = getTasks(cwd, sessionId);
+  return getSummaryForTasks(getTasks(cwd, sessionId));
+}
+
+export function getSummaryForTasks(tasks: SwarmTask[]): SwarmSummary {
   return {
     total: tasks.length,
     todo: tasks.filter((t) => t.status === 'todo').length,
@@ -762,12 +765,13 @@ export function getSummary(cwd: string, sessionId: string): SwarmSummary {
 }
 
 export function getReadyTasks(cwd: string, sessionId: string): SwarmTask[] {
-  const allTasks = getTasks(cwd, sessionId);
-  const doneIds = new Set(allTasks.filter((t) => t.status === 'done').map((t) => t.id));
+  return getReadyTasksForTasks(getTasks(cwd, sessionId));
+}
 
-  return allTasks.filter(
-    (t) => t.status === 'todo' && t.depends_on.every((dep) => doneIds.has(dep))
-  );
+export function getReadyTasksForTasks(tasks: SwarmTask[]): SwarmTask[] {
+  const doneIds = new Set(tasks.filter((t) => t.status === 'done').map((t) => t.id));
+
+  return tasks.filter((t) => t.status === 'todo' && t.depends_on.every((dep) => doneIds.has(dep)));
 }
 
 export function cleanupStaleLocks(cwd: string, maxAgeMs: number = 5 * 60 * 1000): number {

@@ -8,6 +8,7 @@ import type { Theme } from '@mariozechner/pi-coding-agent';
 import type { MessengerState, Dirs } from './lib.js';
 import { displayChannelLabel } from './channel.js';
 import * as swarmStore from './swarm/store.js';
+import * as taskStore from './swarm/task-store.js';
 import { readFeedEventsByRange, type FeedEvent } from './feed.js';
 import type { SwarmTask as Task } from './swarm/types.js';
 import {
@@ -336,7 +337,7 @@ export class MessengerOverlay implements Component, Focusable {
       return initialCachedRender.lines;
     }
 
-    const tasks = swarmStore.getTasks(this.cwd, channelId);
+    const tasks = taskStore.getTasks(this.cwd, this.state.contextSessionId ?? '');
     const spawned = listSpawned(this.cwd, this.state.contextSessionId ?? '');
 
     if (tasks.length === 0) {

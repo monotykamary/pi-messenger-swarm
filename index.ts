@@ -42,6 +42,7 @@ import { executeAction } from './router.js';
 import { logFeedEvent, pruneFeed } from './feed.js';
 import type { MessengerActionParams } from './action-types.js';
 import * as swarmStore from './swarm/store.js';
+import * as taskStore from './swarm/task-store.js';
 import { runLegacyAgentCleanup } from './migrations/legacy-agents.js';
 import { onLiveWorkersChanged } from './swarm/live-progress.js';
 import { stopAllSpawned } from './swarm/spawn.js';
@@ -602,45 +603,46 @@ Usage (swarm-first API):
     overlayHandle = null;
     overlayTui = null;
     if (state.registered) {
-      const channels =
-        state.joinedChannels.length > 0 ? state.joinedChannels : [state.currentChannel];
-      for (const channel of channels) {
-        const claimedTasks = swarmStore
-          .getTasks(cwd, channel)
-          .filter((t) => t.status === 'in_progress' && t.claimed_by === state.agentName);
-        for (const task of claimedTasks) {
-          swarmStore.unclaimTask(cwd, task.id, state.agentName, channel);
-          logFeedEvent(
-            cwd,
-            state.agentName,
-            'task.reset',
-            task.id,
-            'agent left - task unclaimed',
-            channel
-          );
-        }
-      }
+      const sessionId = state.contextSessionId ?? '';
       const { listSpawned } = await import('./swarm/spawn.js');
-      const spawnedAgents = listSpawned(cwd, state.contextSessionId ?? '');
+      const spawnedAgents = listSpawned(cwd, sessionId);
       const spawnedNames = new Set(spawnedAgents.map((s) => s.name));
-      for (const channel of channels) {
-        const spawnedClaimedTasks = swarmStore
-          .getTasks(cwd, channel)
-          .filter(
-            (t) => t.status === 'in_progress' && t.claimed_by && spawnedNames.has(t.claimed_by)
-          );
-        for (const task of spawnedClaimedTasks) {
-          swarmStore.unclaimTask(cwd, task.id, task.claimed_by!, channel);
-          logFeedEvent(
-            cwd,
-            task.claimed_by!,
-            'task.reset',
-            task.id,
-            'parent agent left - task unclaimed',
-            channel
-          );
-        }
+
+      // Get all tasks for this session
+      const allTasks = taskStore.getTasks(cwd, sessionId);
+
+      // Unclaim tasks held by this agent
+      const claimedTasks = allTasks.filter(
+        (t) => t.status === 'in_progress' && t.claimed_by === state.agentName
+      );
+      for (const task of claimedTasks) {
+        taskStore.unclaimTask(cwd, sessionId, task.id, state.agentName);
+        logFeedEvent(
+          cwd,
+          state.agentName,
+          'task.reset',
+          task.id,
+          'agent left - task unclaimed',
+          state.currentChannel
+        );
       }
+
+      // Unclaim tasks held by spawned agents
+      const spawnedClaimedTasks = allTasks.filter(
+        (t) => t.status === 'in_progress' && t.claimed_by && spawnedNames.has(t.claimed_by)
+      );
+      for (const task of spawnedClaimedTasks) {
+        taskStore.unclaimTask(cwd, sessionId, task.id, task.claimed_by!);
+        logFeedEvent(
+          cwd,
+          task.claimed_by!,
+          'task.reset',
+          task.id,
+          'parent agent left - task unclaimed',
+          state.currentChannel
+        );
+      }
+
       logFeedEvent(cwd, state.agentName, 'leave', undefined, undefined, state.currentChannel);
     }
     activityTracker.dispose();
