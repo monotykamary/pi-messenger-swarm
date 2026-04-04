@@ -272,20 +272,15 @@ export function executeList(
     return parts.join(' - ');
   }
 
-  const allClaims = store.getClaims(dirs);
   const sessionId = state.contextSessionId ?? '';
   const sessionTasks = taskStore.getTasks(cwd, sessionId);
 
   lines.push(
-    formatAgentLine(
-      buildSelfRegistration(state),
-      true,
-      agentHasTask(state.agentName, allClaims, sessionTasks)
-    )
+    formatAgentLine(buildSelfRegistration(state), true, agentHasTask(state.agentName, sessionTasks))
   );
 
   for (const a of peers) {
-    lines.push(formatAgentLine(a, false, agentHasTask(a.name, allClaims, sessionTasks)));
+    lines.push(formatAgentLine(a, false, agentHasTask(a.name, sessionTasks)));
   }
 
   const recentEvents = readFeedEvents(cwd, 5, state.currentChannel);
@@ -364,9 +359,8 @@ function formatWhoisOutput(
   sessionId: string,
   fallbackChannel: string
 ) {
-  const allClaims = store.getClaims(dirs);
   const sessionTasks = taskStore.getTasks(cwd, sessionId);
-  const hasTask = agentHasTask(agent.name, allClaims, sessionTasks);
+  const hasTask = agentHasTask(agent.name, sessionTasks);
 
   const computed = computeStatus(
     agent.activity?.lastActivityAt ?? agent.startedAt,

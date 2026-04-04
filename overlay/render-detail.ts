@@ -92,7 +92,6 @@ export function renderAgentsRow(
   liveWorkers: ReadonlyMap<string, LiveWorkerInfo> = getLiveWorkers(cwd)
 ): string {
   const activeAgents = store.getActiveAgents(state, dirs);
-  let allClaims: ReturnType<typeof store.getClaims> | null = null;
   const rowParts: string[] = [];
   const seen = new Set<string>();
   const sessionId = state.contextSessionId ?? '';
@@ -104,10 +103,9 @@ export function renderAgentsRow(
 
   for (const agent of activeAgents) {
     if (seen.has(agent.name)) continue;
-    allClaims ??= store.getClaims(dirs);
     const computed = computeStatus(
       agent.activity?.lastActivityAt ?? agent.startedAt,
-      agentHasTask(agent.name, allClaims, sessionTasks),
+      agentHasTask(agent.name, sessionTasks),
       (agent.reservations?.length ?? 0) > 0,
       stuckThresholdMs
     );

@@ -538,14 +538,8 @@ export function buildSelfRegistration(state: MessengerState): AgentRegistration 
 
 export function agentHasTask(
   name: string,
-  allClaims: AllClaims,
   crewTasks: Array<{ assigned_to?: string; claimed_by?: string; status: string }>
 ): boolean {
-  for (const tasks of Object.values(allClaims)) {
-    for (const claim of Object.values(tasks)) {
-      if (claim.agent === name) return true;
-    }
-  }
   return crewTasks.some(
     (t) => (t.assigned_to === name || t.claimed_by === name) && t.status === 'in_progress'
   );

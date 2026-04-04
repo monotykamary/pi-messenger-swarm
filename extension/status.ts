@@ -28,14 +28,13 @@ export function createStatusController({
 
     const thresholdMs = config.stuckThreshold * 1000;
     const peers = store.getActiveAgents(state, dirs);
-    const allClaims = store.getClaims(dirs);
     const sessionId = state.contextSessionId ?? '';
     const sessionTasks = taskStore.getTasks(ctx.cwd ?? process.cwd(), sessionId);
 
     const currentlyStuck = new Set<string>();
 
     for (const agent of peers) {
-      const hasTask = agentHasTask(agent.name, allClaims, sessionTasks);
+      const hasTask = agentHasTask(agent.name, sessionTasks);
       const computed = computeStatus(
         agent.activity?.lastActivityAt ?? agent.startedAt,
         hasTask,
