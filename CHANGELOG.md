@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.21.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.20.3...v0.21.0) (2026-04-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* **storage:** Removes legacy .json channel files and feed/ directory.
+Removes migrateLegacyChannelFiles() and legacy path helpers.
+
+Updates tests and documentation to reflect new unified format.
+
+### Bug Fixes
+
+* **overlay:** dim entire status bar line when no swarm tasks ([d21f5c3](https://github.com/monotykamary/pi-messenger-swarm/commit/d21f5c35ceb54984bdf4947375acbe8320b0b0f4))
+
+
+* **storage:** merge channel metadata and feed into unified jsonl ([8dc5817](https://github.com/monotykamary/pi-messenger-swarm/commit/8dc58175e5d21f7587440b47ac94bf444dba66ab))
+
 ### [0.20.3](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.20.2...v0.20.3) (2026-04-04)
 
 
