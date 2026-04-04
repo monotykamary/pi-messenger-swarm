@@ -144,9 +144,14 @@ export function replayTasks(cwd: string, sessionId: string): SwarmTask[] {
 
         case 'progress': {
           if (!existing) continue;
-          // Progress events don't change status, just log activity
+          const payload = event.payload as ProgressPayload;
+          if (!existing.progress_log) existing.progress_log = [];
+          existing.progress_log.push({
+            timestamp: event.timestamp,
+            agent: event.agent ?? 'unknown',
+            message: payload.message,
+          });
           existing.updated_at = event.timestamp;
-          // Could store progress log in a separate array if needed
           break;
         }
 
@@ -279,6 +284,13 @@ export function replayAllTasks(cwd: string, sessionId: string): SwarmTask[] {
 
         case 'progress': {
           if (!existing) continue;
+          const payload = event.payload as ProgressPayload;
+          if (!existing.progress_log) existing.progress_log = [];
+          existing.progress_log.push({
+            timestamp: event.timestamp,
+            agent: event.agent ?? 'unknown',
+            message: payload.message,
+          });
           existing.updated_at = event.timestamp;
           break;
         }
@@ -819,19 +831,16 @@ export function cleanupStaleTaskClaims(cwd: string, sessionId: string): number {
 }
 
 /**
- * Get progress log for a task from progress events.
+ * Get progress log for a task from the task's progress_log field.
  */
 export function getTaskProgress(cwd: string, sessionId: string, taskId: string): string | null {
-  const history = getTaskEventHistory(cwd, sessionId, taskId);
-  const progressEvents = history.filter((e) => e.type === 'progress');
+  const task = getTask(cwd, sessionId, taskId);
+  if (!task?.progress_log || task.progress_log.length === 0) return null;
 
-  if (progressEvents.length === 0) return null;
-
-  return progressEvents
-    .map((e) => {
-      const payload = e.payload as ProgressPayload;
-      const timestamp = new Date(e.timestamp).toLocaleString();
-      return `[${timestamp}] ${e.agent}: ${payload.message}`;
+  return task.progress_log
+    .map((entry) => {
+      const timestamp = new Date(entry.timestamp).toLocaleString();
+      return `[${timestamp}] ${entry.agent}: ${entry.message}`;
     })
     .join('\n');
 }

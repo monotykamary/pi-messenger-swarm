@@ -49,8 +49,6 @@ export interface MessengerViewState {
   lastSeenEventTs: string | null;
   notification: { message: string; expiresAt: number } | null;
   notificationTimer: ReturnType<typeof setTimeout> | null;
-  /** @deprecated Use feedAbsoluteTopIndex instead */
-  feedScrollOffset: number;
   mentionCandidates: string[];
   mentionIndex: number;
   pendingG: boolean;
@@ -63,8 +61,6 @@ export interface MessengerViewState {
   // Line-based feed scroll state
   feedLineScrollOffset: number; // lines from bottom (0 = at bottom, >0 = scrolled up)
   wasAtBottom: boolean; // track if we were at bottom before new events arrive
-  /** @deprecated Replaced by feedLineScrollOffset */
-  feedAbsoluteTopIndex?: number;
 }
 
 export function createMessengerViewState(): MessengerViewState {
@@ -84,7 +80,6 @@ export function createMessengerViewState(): MessengerViewState {
     lastSeenEventTs: null,
     notification: null,
     notificationTimer: null,
-    feedScrollOffset: 0, // deprecated, kept for compatibility
     mentionCandidates: [],
     mentionIndex: -1,
     pendingG: false,

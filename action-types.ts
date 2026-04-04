@@ -8,16 +8,6 @@ export interface MessengerActionParams {
   // Action
   action?: string;
 
-  // Legacy plan fields (ignored in swarm mode, kept for compatibility)
-  prd?: string;
-  target?: string;
-  type?: "plan" | "impl";
-  autoWork?: boolean;
-  autonomous?: boolean;
-  concurrency?: number;
-  count?: number;
-  subtasks?: { title: string; content?: string }[];
-
   // Task IDs
   id?: string;
   taskId?: string;
@@ -34,22 +24,21 @@ export interface MessengerActionParams {
   prompt?: string;
   message?: string;
   reason?: string;
-  notes?: string;
 
   // Coordination
   to?: string | string[];
   replyTo?: string;
   paths?: string[];
   name?: string;
-  spec?: string;
   channel?: string;
   create?: boolean;
   limit?: number;
-  autoRegisterPath?: "add" | "remove" | "list";
+  autoRegisterPath?: 'add' | 'remove' | 'list';
+  spec?: string; // Spec file path for join action
 
   // Spawn
   role?: string;
   persona?: string;
   model?: string;
-  agentFile?: string; // Path to markdown file (with YAML frontmatter) to use as system prompt
+  agentFile?: string;
 }

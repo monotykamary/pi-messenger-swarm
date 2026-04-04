@@ -311,7 +311,7 @@ describe('swarm router', () => {
       () => {},
       () => {}
     );
-    expect(res.content[0]?.text).toContain('No running spawned agents');
+    expect(res.content[0]?.text).toContain('No spawned agents');
   });
 
   it('requires explicit send targets and rejects broadcast', async () => {
@@ -346,7 +346,7 @@ describe('swarm router', () => {
     expect(broadcast.content[0]?.text).toContain('action: "send", to: "#channel"');
   });
 
-  it('disables legacy orchestration actions', async () => {
+  it('rejects unknown legacy actions', async () => {
     const cwd = createTempCwd();
     const dirs = createDirs(cwd);
     const state = createState('AgentLegacy');
@@ -365,8 +365,7 @@ describe('swarm router', () => {
         () => {},
         vi.fn()
       );
-      expect(res.content[0]?.text).toContain('Legacy action');
-      expect(res.content[0]?.text).toContain('disabled in swarm mode');
+      expect(res.content[0]?.text).toContain('Unknown action');
     }
   });
 });

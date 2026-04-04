@@ -494,7 +494,7 @@ export function spawnSubagent(
 export function listSpawned(
   cwd: string,
   sessionId: string,
-  includeAll: boolean = true
+  includeAll: boolean = false
 ): SpawnedAgent[] {
   // First, get persisted agents for this session from event log
   const persisted = loadSpawnedAgents(cwd, sessionId);
@@ -630,19 +630,6 @@ export function getRunningSpawnCount(cwd?: string): number {
     if (runtime.process.exitCode === null && runtime.record.status === 'running') count++;
   }
   return count;
-}
-
-function getSpawnByTask(cwd: string, sessionId: string, taskId: string): SpawnedAgent | null {
-  for (const runtime of runtimes.values()) {
-    if (runtime.record.cwd !== cwd) continue;
-    if (runtime.record.taskId !== taskId) continue;
-    return runtime.record;
-  }
-  // Also check persisted agents
-  for (const agent of loadSpawnedAgents(cwd, sessionId)) {
-    if (agent.taskId === taskId) return agent;
-  }
-  return null;
 }
 
 export function clearSpawnStateForTests(): void {

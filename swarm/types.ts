@@ -26,6 +26,7 @@ export interface SwarmTask {
   attempt_count: number;
   channel?: string;
   archived_at?: string;
+  progress_log?: Array<{ timestamp: string; agent: string; message: string }>;
 }
 
 export interface SwarmTaskCreateInput {

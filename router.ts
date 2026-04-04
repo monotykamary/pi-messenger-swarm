@@ -218,20 +218,6 @@ export async function executeAction(
     case 'spawn':
       return executeSpawn(op, params, state, cwd, sessionId);
 
-    // Legacy orchestration actions are intentionally disabled in swarm mode.
-    case 'plan':
-    case 'work':
-    case 'review':
-    case 'sync':
-    case 'crew':
-      return result(
-        `Legacy action "${action}" is disabled in swarm mode.\n\nUse:\n- pi_messenger({ action: \"task.create\", ... })\n- pi_messenger({ action: \"task.claim\", id: \"task-N\" })\n- pi_messenger({ action: \"spawn\", role: \"...\", message: \"...\" })\n- pi_messenger({ action: \"swarm\" })`,
-        {
-          mode: 'legacy_disabled',
-          action,
-        }
-      );
-
     default:
       return result(`Unknown action: ${action}`, {
         mode: 'error',

@@ -43,7 +43,6 @@ import { executeAction } from './router.js';
 import { logFeedEvent, pruneFeed } from './feed.js';
 import type { MessengerActionParams } from './action-types.js';
 import * as taskStore from './swarm/task-store.js';
-import { runLegacyAgentCleanup } from './migrations/legacy-agents.js';
 import { onLiveWorkersChanged } from './swarm/live-progress.js';
 import { stopAllSpawned } from './swarm/spawn.js';
 import { createDeliverMessage } from './extension/deliver-message.js';
@@ -55,9 +54,6 @@ let overlayHandle: OverlayHandle | null = null;
 let overlayOpening = false;
 
 export default function piMessengerExtension(pi: ExtensionAPI) {
-  // One-time migration: remove stale legacy agent markdown files from ~/.pi/agent/agents/
-  runLegacyAgentCleanup();
-
   // ===========================================================================
   // State & Configuration
   // ===========================================================================
@@ -289,28 +285,6 @@ Usage (swarm-first API):
       autoRegisterPath: Type.Optional(
         StringEnum(['add', 'remove', 'list'], { description: 'Manage auto-register paths' })
       ),
-
-      // Legacy fields retained for backwards compatibility
-      prd: Type.Optional(Type.String({ description: 'Legacy (unused in swarm mode)' })),
-      target: Type.Optional(Type.String({ description: 'Legacy (unused in swarm mode)' })),
-      type: Type.Optional(
-        StringEnum(['plan', 'impl'], { description: 'Legacy (unused in swarm mode)' })
-      ),
-      autoWork: Type.Optional(Type.Boolean({ description: 'Legacy (unused in swarm mode)' })),
-      autonomous: Type.Optional(Type.Boolean({ description: 'Legacy (unused in swarm mode)' })),
-      concurrency: Type.Optional(Type.Number({ description: 'Legacy (unused in swarm mode)' })),
-      count: Type.Optional(Type.Number({ description: 'Legacy (unused in swarm mode)' })),
-      subtasks: Type.Optional(
-        Type.Array(
-          Type.Object({
-            title: Type.String(),
-            content: Type.Optional(Type.String()),
-          }),
-          { description: 'Legacy (unused in swarm mode)' }
-        )
-      ),
-      spec: Type.Optional(Type.String({ description: 'Legacy (unused in swarm mode)' })),
-      notes: Type.Optional(Type.String({ description: 'Legacy completion notes' })),
     }),
 
     async execute(_toolCallId, rawParams, signal, _onUpdate, ctx) {
