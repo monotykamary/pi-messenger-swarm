@@ -109,7 +109,6 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
     return {
       base: baseDir,
       registry: join(baseDir, 'registry'),
-      inbox: join(baseDir, 'inbox'),
     };
   }
   const dirs = getMessengerDirs();

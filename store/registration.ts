@@ -15,7 +15,6 @@ import {
   isValidChannelId,
   normalizeChannelId,
 } from '../channel.js';
-import { processAllPendingMessages } from './messaging.js';
 import { findAvailableName, invalidateAgentsCache } from './agents.js';
 import {
   applyRegistrationDefaults,
@@ -23,8 +22,6 @@ import {
   ensureStateChannels,
   getContextSessionId,
   getGitBranch,
-  getMyInbox,
-  getMyInboxRoot,
   normalizeCwd,
   updateChannelsInRegistration,
 } from './shared.js';
@@ -100,9 +97,6 @@ export function register(
         // Ignore
       }
     }
-
-    ensureDirSync(getMyInboxRoot(state, dirs));
-    ensureDirSync(getMyInbox(state, dirs, state.currentChannel));
 
     const cwd = normalizeCwd(process.cwd());
     const gitBranch = getGitBranch(cwd);
@@ -370,10 +364,6 @@ export function renameAgent(
 
   const oldName = state.agentName;
   const oldRegPath = getRegistrationPath(state, dirs);
-  const oldInboxRoot = getMyInboxRoot(state, dirs);
-  const newInboxRoot = join(dirs.inbox, newName);
-
-  processAllPendingMessages(state, dirs, deliverFn);
 
   const cwd = normalizeCwd(process.cwd());
   const gitBranch = getGitBranch(cwd);
@@ -438,17 +428,6 @@ export function renameAgent(
 
   state.agentName = newName;
 
-  ensureDirSync(newInboxRoot);
-  for (const channel of state.joinedChannels) {
-    ensureDirSync(join(newInboxRoot, normalizeChannelId(channel)));
-  }
-
-  try {
-    fs.rmSync(oldInboxRoot, { recursive: true, force: true });
-  } catch {
-    // Ignore
-  }
-
   state.model =
     (ctx.model as { id?: string } | undefined)?.id ??
     (typeof ctx.model === 'string' ? ctx.model : 'unknown');
@@ -491,7 +470,6 @@ export function joinChannel(
     state.joinedChannels = [...state.joinedChannels, normalized];
   }
   state.currentChannel = normalized;
-  ensureDirSync(getMyInbox(state, dirs, normalized));
   syncChannelsToRegistration(state, dirs);
 
   return {

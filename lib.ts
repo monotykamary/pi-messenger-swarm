@@ -96,7 +96,6 @@ export interface MessengerState {
 export interface Dirs {
   base: string;
   registry: string;
-  inbox: string;
 }
 
 export interface ClaimEntry {

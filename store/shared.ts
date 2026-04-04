@@ -242,15 +242,3 @@ export async function withSwarmLock<T>(baseDir: string, fn: () => T): Promise<T>
     }
   }
 }
-
-export function getMyInboxRoot(state: MessengerState, dirs: Dirs): string {
-  return join(dirs.inbox, state.agentName);
-}
-
-export function getMyInbox(
-  state: MessengerState,
-  dirs: Dirs,
-  channelId: string = state.currentChannel
-): string {
-  return join(getMyInboxRoot(state, dirs), normalizeChannelId(channelId));
-}

@@ -16,10 +16,8 @@ function createTempCwd(): string {
 function createDirs(cwd: string): Dirs {
   const base = path.join(cwd, '.pi', 'messenger');
   const registry = path.join(base, 'registry');
-  const inbox = path.join(base, 'inbox');
   fs.mkdirSync(registry, { recursive: true });
-  fs.mkdirSync(inbox, { recursive: true });
-  return { base, registry, inbox };
+  return { base, registry };
 }
 
 function createState(agentName: string): MessengerState {
@@ -90,11 +88,7 @@ describe('channel-targeted send', () => {
     });
 
     const res = executeSend(state, dirs, cwd, '#memory', 'remember this');
-    expect(res.content[0]?.text).toContain('Message posted to #memory and delivered to 1 peer');
-
-    const inboxDir = path.join(dirs.inbox, 'MintZenith', 'memory');
-    expect(fs.existsSync(inboxDir)).toBe(true);
-    expect(fs.readdirSync(inboxDir)).toHaveLength(1);
+    expect(res.content[0]?.text).toContain('Message posted to #memory');
 
     const feedPath = path.join(dirs.base, 'feed', 'memory.jsonl');
     expect(fs.existsSync(feedPath)).toBe(true);
