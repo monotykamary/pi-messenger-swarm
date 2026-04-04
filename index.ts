@@ -41,7 +41,6 @@ import { loadConfig, matchesAutoRegisterPath, type MessengerConfig } from './con
 import { executeAction } from './router.js';
 import { logFeedEvent, pruneFeed } from './feed.js';
 import type { MessengerActionParams } from './action-types.js';
-import * as swarmStore from './swarm/store.js';
 import * as taskStore from './swarm/task-store.js';
 import { runLegacyAgentCleanup } from './migrations/legacy-agents.js';
 import { onLiveWorkersChanged } from './swarm/live-progress.js';

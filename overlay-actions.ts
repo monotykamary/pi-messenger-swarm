@@ -4,7 +4,6 @@ import type { AgentMailMessage, Dirs, MessengerState } from './lib.js';
 import { MAX_CHAT_HISTORY } from './lib.js';
 import { sendMessageToAgent, getActiveAgents, resolveTargetChannel } from './store.js';
 import { logFeedEvent, type FeedEvent } from './feed.js';
-import * as swarmStore from './swarm/store.js';
 import * as taskStore from './swarm/task-store.js';
 import { executeTaskAction as runTaskAction } from './swarm/task-actions.js';
 import type { SwarmTask as Task } from './swarm/types.js';

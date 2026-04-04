@@ -1,6 +1,5 @@
 import { formatDuration, type MessengerState } from '../lib.js';
 import { readFeedEvents, type FeedEvent } from '../feed.js';
-import * as swarmStore from '../swarm/store.js';
 import * as taskStore from '../swarm/task-store.js';
 import type { SwarmTask as Task } from '../swarm/types.js';
 import { getLiveWorkers } from '../swarm/live-progress.js';

@@ -20,7 +20,6 @@ import {
 } from '../lib.js';
 import { displayChannelLabel } from '../channel.js';
 import * as store from '../store.js';
-import * as swarmStore from '../swarm/store.js';
 import * as taskStore from '../swarm/task-store.js';
 import { formatFeedLine, logFeedEvent, pruneFeed, readFeedEvents } from '../feed.js';
 import { notRegisteredError, result } from './result.js';

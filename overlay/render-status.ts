@@ -1,7 +1,6 @@
 import { truncateToWidth } from '@mariozechner/pi-tui';
 import type { Theme } from '@mariozechner/pi-coding-agent';
 import { formatDuration } from '../lib.js';
-import * as swarmStore from '../swarm/store.js';
 import * as taskStore from '../swarm/task-store.js';
 import type { SwarmTask as Task, SpawnedAgent } from '../swarm/types.js';
 import { formatRoleLabel } from '../swarm/labels.js';

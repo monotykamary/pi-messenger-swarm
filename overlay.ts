@@ -7,7 +7,6 @@ import { truncateToWidth, visibleWidth } from '@mariozechner/pi-tui';
 import type { Theme } from '@mariozechner/pi-coding-agent';
 import type { MessengerState, Dirs } from './lib.js';
 import { displayChannelLabel } from './channel.js';
-import * as swarmStore from './swarm/store.js';
 import * as taskStore from './swarm/task-store.js';
 import { readFeedEventsByRange, type FeedEvent } from './feed.js';
 import type { SwarmTask as Task } from './swarm/types.js';

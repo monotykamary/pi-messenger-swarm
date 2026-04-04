@@ -3,7 +3,6 @@ import type { Dirs, MessengerState } from '../lib.js';
 import { agentHasTask, computeStatus } from '../lib.js';
 import type { MessengerConfig } from '../config.js';
 import * as store from '../store.js';
-import * as swarmStore from '../swarm/store.js';
 import * as taskStore from '../swarm/task-store.js';
 import { logFeedEvent } from '../feed.js';
 import { getLiveWorkers } from '../swarm/live-progress.js';

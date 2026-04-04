@@ -1,6 +1,5 @@
 import { matchesKey, type TUI } from '@mariozechner/pi-tui';
 import type { Dirs, MessengerState } from '../lib.js';
-import * as swarmStore from '../swarm/store.js';
 import * as taskStore from '../swarm/task-store.js';
 import { listSpawned } from '../swarm/spawn.js';
 import type { SwarmTask as Task } from '../swarm/types.js';
