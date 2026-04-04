@@ -3,7 +3,6 @@ import type { MessengerState } from '../lib.js';
 import { displayChannelLabel, normalizeChannelId } from '../channel.js';
 import { result } from './result.js';
 import { logFeedEvent } from '../feed.js';
-import * as store from './store.js';
 import * as taskStore from './task-store.js';
 import { cleanupExitedSpawned, listSpawned, spawnSubagent, stopSpawn } from './spawn.js';
 import type { SpawnRequest, SwarmTaskEvidence } from './types.js';

@@ -67,10 +67,6 @@ export interface ReservationConflict {
 export interface MessengerState {
   agentName: string;
   registered: boolean;
-  watcher: fs.FSWatcher | null;
-  watcherRetries: number;
-  watcherRetryTimer: ReturnType<typeof setTimeout> | null;
-  watcherDebounceTimer: ReturnType<typeof setTimeout> | null;
   reservations: FileReservation[];
   chatHistory: Map<string, AgentMailMessage[]>;
   unreadCounts: Map<string, number>;

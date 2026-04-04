@@ -31,9 +31,9 @@ export function executeTaskAction(
   action: TaskAction,
   taskId: string,
   agentName: string,
+  channelId: string,
   reason?: string,
-  options?: TaskActionOptions,
-  channelId: string
+  options?: TaskActionOptions
 ): TaskActionResult {
   const task = taskStore.getTask(cwd, sessionId, taskId);
   if (!task) return { success: false, error: 'not_found', message: `Task ${taskId} not found` };

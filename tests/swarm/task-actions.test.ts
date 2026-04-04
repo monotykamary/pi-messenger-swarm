@@ -29,16 +29,7 @@ describe('swarm/task-actions', () => {
     const cwd = createTempCwd();
     const task = taskStore.createTask(cwd, TEST_SESSION, { title: 'Start me' }, TEST_CHANNEL);
 
-    const res = executeTaskAction(
-      cwd,
-      TEST_SESSION,
-      'start',
-      task.id,
-      'AgentA',
-      undefined,
-      undefined,
-      TEST_CHANNEL
-    );
+    const res = executeTaskAction(cwd, TEST_SESSION, 'start', task.id, 'AgentA', TEST_CHANNEL);
 
     expect(res.success).toBe(true);
     expect(res.task?.status).toBe('in_progress');
@@ -55,16 +46,7 @@ describe('swarm/task-actions', () => {
       TEST_CHANNEL
     );
 
-    const res = executeTaskAction(
-      cwd,
-      TEST_SESSION,
-      'start',
-      task.id,
-      'AgentA',
-      undefined,
-      undefined,
-      TEST_CHANNEL
-    );
+    const res = executeTaskAction(cwd, TEST_SESSION, 'start', task.id, 'AgentA', TEST_CHANNEL);
 
     expect(res.success).toBe(false);
     expect(res.error).toBe('unmet_dependencies');
@@ -76,16 +58,7 @@ describe('swarm/task-actions', () => {
     const task = taskStore.createTask(cwd, TEST_SESSION, { title: 'Block flow' }, TEST_CHANNEL);
 
     // Claim first
-    executeTaskAction(
-      cwd,
-      TEST_SESSION,
-      'start',
-      task.id,
-      'AgentA',
-      undefined,
-      undefined,
-      TEST_CHANNEL
-    );
+    executeTaskAction(cwd, TEST_SESSION, 'start', task.id, 'AgentA', TEST_CHANNEL);
 
     // Block
     const blocked = executeTaskAction(
@@ -94,9 +67,8 @@ describe('swarm/task-actions', () => {
       'block',
       task.id,
       'AgentA',
-      'Needs review',
-      undefined,
-      TEST_CHANNEL
+      TEST_CHANNEL,
+      'Needs review'
     );
     expect(blocked.success).toBe(true);
     expect(blocked.task?.status).toBe('blocked');
@@ -108,8 +80,6 @@ describe('swarm/task-actions', () => {
       'unblock',
       task.id,
       'AgentA',
-      undefined,
-      undefined,
       TEST_CHANNEL
     );
     expect(unblocked.success).toBe(true);
@@ -120,16 +90,7 @@ describe('swarm/task-actions', () => {
     const cwd = createTempCwd();
     const task = taskStore.createTask(cwd, TEST_SESSION, { title: 'Delete me' }, TEST_CHANNEL);
 
-    const res = executeTaskAction(
-      cwd,
-      TEST_SESSION,
-      'delete',
-      task.id,
-      'AgentA',
-      undefined,
-      undefined,
-      TEST_CHANNEL
-    );
+    const res = executeTaskAction(cwd, TEST_SESSION, 'delete', task.id, 'AgentA', TEST_CHANNEL);
 
     expect(res.success).toBe(true);
     expect(taskStore.getTask(cwd, TEST_SESSION, task.id)).toBeUndefined();
@@ -146,24 +107,13 @@ describe('swarm/task-actions', () => {
       'archive',
       task.id,
       'AgentA',
-      undefined,
-      undefined,
       TEST_CHANNEL
     );
     expect(todoRes.success).toBe(false);
     expect(todoRes.error).toBe('invalid_status');
 
     // Claim and complete
-    executeTaskAction(
-      cwd,
-      TEST_SESSION,
-      'start',
-      task.id,
-      'AgentA',
-      undefined,
-      undefined,
-      TEST_CHANNEL
-    );
+    executeTaskAction(cwd, TEST_SESSION, 'start', task.id, 'AgentA', TEST_CHANNEL);
     taskStore.completeTask(cwd, TEST_SESSION, task.id, 'AgentA', 'Done!');
 
     // Now archive should work
@@ -173,8 +123,6 @@ describe('swarm/task-actions', () => {
       'archive',
       task.id,
       'AgentA',
-      undefined,
-      undefined,
       TEST_CHANNEL
     );
     expect(archived.success).toBe(true);
@@ -195,43 +143,16 @@ describe('swarm/task-actions', () => {
     );
 
     // Complete both
-    executeTaskAction(
-      cwd,
-      TEST_SESSION,
-      'start',
-      parent.id,
-      'AgentA',
-      undefined,
-      undefined,
-      TEST_CHANNEL
-    );
+    executeTaskAction(cwd, TEST_SESSION, 'start', parent.id, 'AgentA', TEST_CHANNEL);
     taskStore.completeTask(cwd, TEST_SESSION, parent.id, 'AgentA', 'Done');
-    executeTaskAction(
-      cwd,
-      TEST_SESSION,
-      'start',
-      child.id,
-      'AgentA',
-      undefined,
-      undefined,
-      TEST_CHANNEL
-    );
+    executeTaskAction(cwd, TEST_SESSION, 'start', child.id, 'AgentA', TEST_CHANNEL);
     taskStore.completeTask(cwd, TEST_SESSION, child.id, 'AgentA', 'Done');
 
     expect(taskStore.getTask(cwd, TEST_SESSION, parent.id)?.status).toBe('done');
     expect(taskStore.getTask(cwd, TEST_SESSION, child.id)?.status).toBe('done');
 
     // Reset only parent
-    const single = executeTaskAction(
-      cwd,
-      TEST_SESSION,
-      'reset',
-      parent.id,
-      'AgentA',
-      undefined,
-      undefined,
-      TEST_CHANNEL
-    );
+    const single = executeTaskAction(cwd, TEST_SESSION, 'reset', parent.id, 'AgentA', TEST_CHANNEL);
     expect(single.success).toBe(true);
     expect(taskStore.getTask(cwd, TEST_SESSION, parent.id)?.status).toBe('todo');
     expect(taskStore.getTask(cwd, TEST_SESSION, child.id)?.status).toBe('done');
@@ -251,27 +172,9 @@ describe('swarm/task-actions', () => {
     );
 
     // Complete both
-    executeTaskAction(
-      cwd,
-      TEST_SESSION,
-      'start',
-      parent.id,
-      'AgentA',
-      undefined,
-      undefined,
-      TEST_CHANNEL
-    );
+    executeTaskAction(cwd, TEST_SESSION, 'start', parent.id, 'AgentA', TEST_CHANNEL);
     taskStore.completeTask(cwd, TEST_SESSION, parent.id, 'AgentA', 'Done');
-    executeTaskAction(
-      cwd,
-      TEST_SESSION,
-      'start',
-      child.id,
-      'AgentA',
-      undefined,
-      undefined,
-      TEST_CHANNEL
-    );
+    executeTaskAction(cwd, TEST_SESSION, 'start', child.id, 'AgentA', TEST_CHANNEL);
     taskStore.completeTask(cwd, TEST_SESSION, child.id, 'AgentA', 'Done');
 
     // Cascade reset parent
@@ -281,8 +184,6 @@ describe('swarm/task-actions', () => {
       'cascade-reset',
       parent.id,
       'AgentA',
-      undefined,
-      undefined,
       TEST_CHANNEL
     );
     expect(cascade.success).toBe(true);
@@ -296,29 +197,11 @@ describe('swarm/task-actions', () => {
     const task = taskStore.createTask(cwd, TEST_SESSION, { title: 'Stop me' }, TEST_CHANNEL);
 
     // Claim first
-    executeTaskAction(
-      cwd,
-      TEST_SESSION,
-      'start',
-      task.id,
-      'AgentA',
-      undefined,
-      undefined,
-      TEST_CHANNEL
-    );
+    executeTaskAction(cwd, TEST_SESSION, 'start', task.id, 'AgentA', TEST_CHANNEL);
     expect(taskStore.getTask(cwd, TEST_SESSION, task.id)?.status).toBe('in_progress');
 
     // Stop
-    const stopped = executeTaskAction(
-      cwd,
-      TEST_SESSION,
-      'stop',
-      task.id,
-      'AgentA',
-      undefined,
-      undefined,
-      TEST_CHANNEL
-    );
+    const stopped = executeTaskAction(cwd, TEST_SESSION, 'stop', task.id, 'AgentA', TEST_CHANNEL);
     expect(stopped.success).toBe(true);
     expect(stopped.task?.status).toBe('todo');
     expect(stopped.task?.claimed_by).toBeUndefined();

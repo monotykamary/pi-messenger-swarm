@@ -66,10 +66,6 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
   const state: MessengerState = {
     agentName: process.env.PI_AGENT_NAME || '',
     registered: false,
-    watcher: null,
-    watcherRetries: 0,
-    watcherRetryTimer: null,
-    watcherDebounceTimer: null,
     reservations: [],
     chatHistory: new Map(),
     unreadCounts: new Map(),
@@ -146,10 +142,7 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
       );
     }
 
-    store.stopWatcher(state);
     resetChannelScopedUiState();
-    state.watcherRetries = 0;
-    store.startWatcher(state, dirs, deliverMessage);
     logFeedEvent(cwd, state.agentName, 'join', undefined, undefined, state.currentChannel);
     overlayTui?.requestRender();
     updateStatus(ctx);
@@ -383,7 +376,6 @@ Usage (swarm-first API):
           ctx.ui.notify('Failed to join agent mesh', 'error');
           return;
         }
-        store.startWatcher(state, dirs, deliverMessage);
         updateStatus(ctx);
       }
 
@@ -409,10 +401,7 @@ Usage (swarm-first API):
         onSwitchChannel: (channelId) => {
           const switched = store.joinChannel(state, dirs, channelId);
           if (!switched.success) return false;
-          store.stopWatcher(state);
           resetChannelScopedUiState();
-          state.watcherRetries = 0;
-          store.startWatcher(state, dirs, deliverMessage);
           updateStatus(ctx);
           return true;
         },
@@ -520,10 +509,9 @@ Usage (swarm-first API):
 
     const wasRegistered = state.registered;
     if (store.register(state, dirs, ctx, nameTheme)) {
-      const cwd = ctx.cwd ?? process.cwd();
-      store.startWatcher(state, dirs, deliverMessage);
       updateStatus(ctx);
       if (!wasRegistered) {
+        const cwd = ctx.cwd ?? process.cwd();
         pruneFeed(cwd, config.feedRetention, state.currentChannel);
         logFeedEvent(cwd, state.agentName, 'join', undefined, undefined, state.currentChannel);
       }
@@ -536,13 +524,6 @@ Usage (swarm-first API):
     maybeAutoOpenSwarmOverlay(ctx);
   });
 
-  function recoverWatcherIfNeeded(): void {
-    if (state.registered && !state.watcher && !state.watcherRetryTimer) {
-      state.watcherRetries = 0;
-      store.startWatcher(state, dirs, deliverMessage);
-    }
-  }
-
   function maybeAutoOpenSwarmOverlay(_ctx: ExtensionContext): void {
     // Swarm mode intentionally disables planning/autonomous auto-overlay behavior.
   }
@@ -552,7 +533,6 @@ Usage (swarm-first API):
     if (event.reason === 'startup' || event.reason === 'reload') return;
     latestCtx = ctx;
     syncContextSession(ctx);
-    recoverWatcherIfNeeded();
     updateStatus(ctx);
     maybeAutoOpenSwarmOverlay(ctx);
   });
@@ -565,7 +545,6 @@ Usage (swarm-first API):
   pi.on('turn_end', async (event, ctx) => {
     latestCtx = ctx;
     syncContextSession(ctx);
-    recoverWatcherIfNeeded();
     updateStatus(ctx);
 
     if (state.registered) {
@@ -643,7 +622,6 @@ Usage (swarm-first API):
       logFeedEvent(cwd, state.agentName, 'leave', undefined, undefined, state.currentChannel);
     }
     activityTracker.dispose();
-    store.stopWatcher(state);
     store.unregister(state, dirs);
   });
 

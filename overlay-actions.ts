@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { matchesKey, type TUI } from '@mariozechner/pi-tui';
 import type { AgentMailMessage, Dirs, MessengerState } from './lib.js';
 import { MAX_CHAT_HISTORY } from './lib.js';
-import { sendMessageToAgent, getActiveAgents, resolveTargetChannel } from './store.js';
+import { getActiveAgents, resolveTargetChannel } from './store.js';
 import { logFeedEvent, type FeedEvent } from './feed.js';
 import * as taskStore from './swarm/task-store.js';
 import { executeTaskAction as runTaskAction } from './swarm/task-actions.js';
@@ -128,18 +128,9 @@ function executeTaskAction(
     return { success: false, message: `Unknown action: ${action}` };
   }
 
-  const result = runTaskAction(
-    cwd,
-    sessionId,
-    action,
-    taskId,
-    agentName,
-    reason,
-    {
-      isWorkerActive: (id) => hasLiveWorker(cwd, id),
-    },
-    channelId
-  );
+  const result = runTaskAction(cwd, sessionId, action, taskId, agentName, channelId, reason, {
+    isWorkerActive: (id) => hasLiveWorker(cwd, id),
+  });
   return { success: result.success, message: result.message };
 }
 
@@ -333,80 +324,34 @@ function sendDirectMessage(
 ): void {
   try {
     const targetChannel = resolveTargetChannel(dirs, target) ?? state.currentChannel;
-    const msg = sendMessageToAgent(state, dirs, target, text, undefined, targetChannel);
-    addToChatHistory(state, target, msg);
+    // Log to feed as @mention - all messaging is now feed-based
     logFeedEvent(cwd, state.agentName, 'message', target, previewText(text), targetChannel);
     resetMessageInput(viewState);
-    setNotification(viewState, tui, true, `Sent to ${target}`);
+    setNotification(viewState, tui, true, `Posted to ${targetChannel}`);
     tui.requestRender();
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'unknown error';
-    setNotification(viewState, tui, false, `Failed to send to ${target}: ${msg}`);
+    setNotification(viewState, tui, false, `Failed to send: ${msg}`);
     tui.requestRender();
   }
 }
 
 function sendChannelPost(
   state: MessengerState,
-  dirs: Dirs,
+  _dirs: Dirs,
   cwd: string,
   text: string,
   tui: TUI,
   viewState: MessengerViewState
 ): void {
-  const peers = getActiveAgents(state, dirs).filter((peer) => {
-    const joined = peer.joinedChannels ?? [];
-    if (joined.length === 0 && !peer.currentChannel && !peer.sessionChannel) return true;
-    return (
-      joined.includes(state.currentChannel) ||
-      peer.currentChannel === state.currentChannel ||
-      peer.sessionChannel === state.currentChannel
-    );
-  });
-
-  let sentCount = 0;
-  for (const peer of peers) {
-    try {
-      sendMessageToAgent(state, dirs, peer.name, text, undefined, state.currentChannel);
-      sentCount++;
-    } catch {
-      // Ignore per-recipient failures
-    }
-  }
-
-  if (sentCount === 0) {
-    addToChannelPostHistory(state, text);
-    logFeedEvent(
-      cwd,
-      state.agentName,
-      'message',
-      undefined,
-      previewText(text),
-      state.currentChannel
-    );
-    resetMessageInput(viewState);
-    setNotification(
-      viewState,
-      tui,
-      true,
-      `Posted to ${state.currentChannel.startsWith('#') ? state.currentChannel : `#${state.currentChannel}`}`
-    );
-    tui.requestRender();
-    return;
-  }
-
+  // All messaging is now feed-based - no inbox delivery
   addToChannelPostHistory(state, text);
   logFeedEvent(cwd, state.agentName, 'message', undefined, previewText(text), state.currentChannel);
   resetMessageInput(viewState);
   const channelLabel = state.currentChannel.startsWith('#')
     ? state.currentChannel
     : `#${state.currentChannel}`;
-  setNotification(
-    viewState,
-    tui,
-    true,
-    `Posted to ${channelLabel} and delivered to ${sentCount} peer${sentCount === 1 ? '' : 's'}`
-  );
+  setNotification(viewState, tui, true, `Posted to ${channelLabel}`);
   tui.requestRender();
 }
 

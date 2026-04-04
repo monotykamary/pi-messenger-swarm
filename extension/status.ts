@@ -48,6 +48,7 @@ export function createStatusController({
 
         if (!notifiedStuck.has(agent.name)) {
           notifiedStuck.add(agent.name);
+          const agentChannel = agent.currentChannel || agent.sessionChannel || state.currentChannel;
           logFeedEvent(
             ctx.cwd ?? process.cwd(),
             agent.name,
