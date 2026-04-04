@@ -57,9 +57,9 @@ export function createState(
     registryFlushTimer: null,
     sessionStartedAt: new Date().toISOString(),
     contextSessionId: overrides.contextSessionId ?? 'test-session-default',
-    currentChannel: 'general',
-    sessionChannel: 'general',
-    joinedChannels: ['general', 'memory'],
+    currentChannel: overrides.currentChannel ?? 'test-channel',
+    sessionChannel: overrides.sessionChannel ?? 'test-channel',
+    joinedChannels: overrides.joinedChannels ?? ['test-channel', 'memory'],
     ...overrides,
   };
 }

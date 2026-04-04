@@ -26,13 +26,13 @@ export function getChannelsDir(dirs: Dirs): string {
   return path.join(dirs.base, 'channels');
 }
 
-export function normalizeChannelId(value: string | undefined | null): string {
-  const trimmed = (value ?? 'general').trim();
+export function normalizeChannelId(value: string): string {
+  const trimmed = value.trim();
   const withoutHash = trimmed.startsWith('#') ? trimmed.slice(1) : trimmed;
-  return (withoutHash || 'general').toLowerCase();
+  return (withoutHash || value).toLowerCase();
 }
 
-export function isValidChannelId(value: string): boolean {
+export function isValidChannelId(value: string | undefined | null): boolean {
   if (!value) return false;
   return /^[a-z0-9][a-z0-9._-]{0,79}$/.test(normalizeChannelId(value));
 }

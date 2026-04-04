@@ -419,7 +419,7 @@ export function createTask(
   cwd: string,
   sessionId: string,
   input: SwarmTaskCreateInput,
-  channelId: string = input.channel ?? 'general'
+  channelId: string
 ): SwarmTask {
   const normalizedChannel = normalizeChannelId(channelId);
   const id = allocateTaskId(cwd, sessionId);
@@ -853,7 +853,7 @@ export function cleanupStaleTaskClaims(cwd: string, sessionId: string): number {
         'task.reset',
         task.id,
         'agent crashed - task auto-unclaimed',
-        task.channel ?? 'general'
+        task.channel ?? 'unknown'
       );
       cleaned++;
     } else if (active === null && knownAgents.length > 0) {
@@ -864,7 +864,7 @@ export function cleanupStaleTaskClaims(cwd: string, sessionId: string): number {
         'task.reset',
         task.id,
         'agent left - task auto-unclaimed',
-        task.channel ?? 'general'
+        task.channel ?? 'unknown'
       );
       cleaned++;
     }

@@ -8,6 +8,7 @@ import { createTempMessengerDirs } from '../helpers/temp-dirs.js';
 import type { MessengerState, Dirs } from '../../lib.js';
 
 const TEST_SESSION = 'test-session-shutdown';
+const TEST_CHANNEL = 'test-channel';
 
 describe('swarm/session-shutdown-cleanup', () => {
   afterEach(() => {
@@ -19,18 +20,33 @@ describe('swarm/session-shutdown-cleanup', () => {
     const agentName = 'TestAgent';
 
     // Create and claim multiple tasks
-    const task1 = taskStore.createTask(dirs.cwd, TEST_SESSION, {
-      title: 'Task 1',
-      createdBy: agentName,
-    });
-    const task2 = taskStore.createTask(dirs.cwd, TEST_SESSION, {
-      title: 'Task 2',
-      createdBy: agentName,
-    });
-    const task3 = taskStore.createTask(dirs.cwd, TEST_SESSION, {
-      title: 'Task 3',
-      createdBy: 'OtherAgent',
-    });
+    const task1 = taskStore.createTask(
+      dirs.cwd,
+      TEST_SESSION,
+      {
+        title: 'Task 1',
+        createdBy: agentName,
+      },
+      TEST_CHANNEL
+    );
+    const task2 = taskStore.createTask(
+      dirs.cwd,
+      TEST_SESSION,
+      {
+        title: 'Task 2',
+        createdBy: agentName,
+      },
+      TEST_CHANNEL
+    );
+    const task3 = taskStore.createTask(
+      dirs.cwd,
+      TEST_SESSION,
+      {
+        title: 'Task 3',
+        createdBy: 'OtherAgent',
+      },
+      TEST_CHANNEL
+    );
 
     // Claim tasks as the agent
     taskStore.claimTask(dirs.cwd, TEST_SESSION, task1.id, agentName);
@@ -71,8 +87,8 @@ describe('swarm/session-shutdown-cleanup', () => {
     const agentName = 'TestAgent';
 
     // Create tasks claimed by other agents
-    const task1 = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Task 1' });
-    const task2 = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Task 2' });
+    const task1 = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Task 1' }, TEST_CHANNEL);
+    const task2 = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Task 2' }, TEST_CHANNEL);
     taskStore.claimTask(dirs.cwd, TEST_SESSION, task1.id, 'OtherAgent1');
     taskStore.claimTask(dirs.cwd, TEST_SESSION, task2.id, 'OtherAgent2');
 
@@ -102,10 +118,30 @@ describe('swarm/session-shutdown-cleanup', () => {
     const otherAgent = 'OtherAgent';
 
     // Create tasks
-    const task1 = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Spawned Task 1' });
-    const task2 = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Spawned Task 2' });
-    const task3 = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Other Task' });
-    const parentTask = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Parent Task' });
+    const task1 = taskStore.createTask(
+      dirs.cwd,
+      TEST_SESSION,
+      { title: 'Spawned Task 1' },
+      TEST_CHANNEL
+    );
+    const task2 = taskStore.createTask(
+      dirs.cwd,
+      TEST_SESSION,
+      { title: 'Spawned Task 2' },
+      TEST_CHANNEL
+    );
+    const task3 = taskStore.createTask(
+      dirs.cwd,
+      TEST_SESSION,
+      { title: 'Other Task' },
+      TEST_CHANNEL
+    );
+    const parentTask = taskStore.createTask(
+      dirs.cwd,
+      TEST_SESSION,
+      { title: 'Parent Task' },
+      TEST_CHANNEL
+    );
 
     // Claim tasks as spawned agents and parent
     taskStore.claimTask(dirs.cwd, TEST_SESSION, task1.id, spawnedAgent1);
@@ -153,10 +189,30 @@ describe('swarm/session-shutdown-cleanup', () => {
     const agentName = 'TestAgent';
 
     // Create tasks in various states
-    const todoTask = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Todo Task' });
-    const claimedTask = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Claimed Task' });
-    const doneTask = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Done Task' });
-    const blockedTask = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Blocked Task' });
+    const todoTask = taskStore.createTask(
+      dirs.cwd,
+      TEST_SESSION,
+      { title: 'Todo Task' },
+      TEST_CHANNEL
+    );
+    const claimedTask = taskStore.createTask(
+      dirs.cwd,
+      TEST_SESSION,
+      { title: 'Claimed Task' },
+      TEST_CHANNEL
+    );
+    const doneTask = taskStore.createTask(
+      dirs.cwd,
+      TEST_SESSION,
+      { title: 'Done Task' },
+      TEST_CHANNEL
+    );
+    const blockedTask = taskStore.createTask(
+      dirs.cwd,
+      TEST_SESSION,
+      { title: 'Blocked Task' },
+      TEST_CHANNEL
+    );
 
     // Set up different task states
     taskStore.claimTask(dirs.cwd, TEST_SESSION, claimedTask.id, agentName);
@@ -195,9 +251,9 @@ describe('swarm/session-shutdown-cleanup', () => {
     const stayingAgent = 'StayingAgent';
 
     // Create and claim tasks by different agents
-    const task1 = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Task 1' });
-    const task2 = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Task 2' });
-    const task3 = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Task 3' });
+    const task1 = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Task 1' }, TEST_CHANNEL);
+    const task2 = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Task 2' }, TEST_CHANNEL);
+    const task3 = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Task 3' }, TEST_CHANNEL);
 
     taskStore.claimTask(dirs.cwd, TEST_SESSION, task1.id, leavingAgent);
     taskStore.claimTask(dirs.cwd, TEST_SESSION, task2.id, stayingAgent);
@@ -229,12 +285,12 @@ describe('swarm/session-shutdown-cleanup', () => {
     const agentName = 'TestAgent';
 
     // Verify feed file doesn't exist yet
-    const feedFile = path.join(dirs.cwd, '.pi', 'messenger', 'feed', 'general.jsonl');
+    const feedFile = path.join(dirs.cwd, '.pi', 'messenger', 'feed', 'test-channel.jsonl');
     expect(fs.existsSync(feedFile)).toBe(false);
 
     // Create and claim tasks
-    const task1 = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Task 1' });
-    const task2 = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Task 2' });
+    const task1 = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Task 1' }, TEST_CHANNEL);
+    const task2 = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Task 2' }, TEST_CHANNEL);
     taskStore.claimTask(dirs.cwd, TEST_SESSION, task1.id, agentName);
     taskStore.claimTask(dirs.cwd, TEST_SESSION, task2.id, agentName);
 
@@ -245,13 +301,20 @@ describe('swarm/session-shutdown-cleanup', () => {
 
     for (const task of claimedTasks) {
       taskStore.unclaimTask(dirs.cwd, TEST_SESSION, task.id, agentName);
-      logFeedEvent(dirs.cwd, agentName, 'task.reset', task.id, 'agent left - task unclaimed');
+      logFeedEvent(
+        dirs.cwd,
+        agentName,
+        'task.reset',
+        task.id,
+        'agent left - task unclaimed',
+        TEST_CHANNEL
+      );
     }
-    logFeedEvent(dirs.cwd, agentName, 'leave');
+    logFeedEvent(dirs.cwd, agentName, 'leave', undefined, undefined, TEST_CHANNEL);
 
     // Verify feed events were logged
     expect(fs.existsSync(feedFile)).toBe(true);
-    const events = readFeedEvents(dirs.cwd, 20);
+    const events = readFeedEvents(dirs.cwd, 20, TEST_CHANNEL);
     expect(events).toHaveLength(3); // 2 task resets + 1 leave
 
     // Verify task reset events
@@ -274,7 +337,12 @@ describe('swarm/session-shutdown-cleanup', () => {
     const spawnedAgent = 'SpawnedAgent-Alpha';
 
     // Create and claim task as spawned agent
-    const task = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Spawned Task' });
+    const task = taskStore.createTask(
+      dirs.cwd,
+      TEST_SESSION,
+      { title: 'Spawned Task' },
+      TEST_CHANNEL
+    );
     taskStore.claimTask(dirs.cwd, TEST_SESSION, task.id, spawnedAgent);
 
     // Simulate parent agent cleaning up spawned agent's tasks
@@ -290,12 +358,13 @@ describe('swarm/session-shutdown-cleanup', () => {
         t.claimed_by!,
         'task.reset',
         t.id,
-        'parent agent left - task unclaimed'
+        'parent agent left - task unclaimed',
+        TEST_CHANNEL
       );
     }
 
     // Verify feed event was logged
-    const events = readFeedEvents(dirs.cwd, 20);
+    const events = readFeedEvents(dirs.cwd, 20, TEST_CHANNEL);
     expect(events).toHaveLength(1);
     expect(events[0]?.type).toBe('task.reset');
     expect(events[0]?.agent).toBe(spawnedAgent);
@@ -384,7 +453,12 @@ describe('swarm/session-shutdown-cleanup', () => {
     fs.mkdirSync(registryDir, { recursive: true });
 
     // Create a task claimed by a dead agent (PID 99999 doesn't exist)
-    const deadTask = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Dead Agent Task' });
+    const deadTask = taskStore.createTask(
+      dirs.cwd,
+      TEST_SESSION,
+      { title: 'Dead Agent Task' },
+      TEST_CHANNEL
+    );
     taskStore.claimTask(dirs.cwd, TEST_SESSION, deadTask.id, deadAgent);
 
     // Create registration for dead agent with invalid PID
@@ -406,7 +480,12 @@ describe('swarm/session-shutdown-cleanup', () => {
     );
 
     // Create a task claimed by live agent (current process)
-    const liveTask = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Live Agent Task' });
+    const liveTask = taskStore.createTask(
+      dirs.cwd,
+      TEST_SESSION,
+      { title: 'Live Agent Task' },
+      TEST_CHANNEL
+    );
     taskStore.claimTask(dirs.cwd, TEST_SESSION, liveTask.id, liveAgent);
 
     // Create registration for live agent with valid PID
@@ -448,7 +527,7 @@ describe('swarm/session-shutdown-cleanup', () => {
     expect(taskStore.getTask(dirs.cwd, TEST_SESSION, liveTask.id)?.claimed_by).toBe(liveAgent);
 
     // Verify feed event was logged
-    const events = readFeedEvents(dirs.cwd, 20);
+    const events = readFeedEvents(dirs.cwd, 20, TEST_CHANNEL);
     const cleanupEvent = events.find((e) => e.type === 'task.reset' && e.agent === deadAgent);
     expect(cleanupEvent).toBeDefined();
     expect(cleanupEvent?.target).toBe(deadTask.id);
@@ -460,7 +539,13 @@ describe('swarm/session-shutdown-cleanup', () => {
     const agentName = 'SomeAgent';
 
     // Create a task claimed by agent (no registry exists)
-    const task = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Unknown Agent Task' });
+    const task = taskStore.createTask(
+      dirs.cwd,
+      TEST_SESSION,
+      { title: 'Unknown Agent Task' },
+      TEST_CHANNEL,
+      TEST_CHANNEL
+    );
     taskStore.claimTask(dirs.cwd, TEST_SESSION, task.id, agentName);
 
     // Verify initial state

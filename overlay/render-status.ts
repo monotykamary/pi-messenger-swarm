@@ -26,7 +26,7 @@ export function renderStatusBar(
   _theme: Theme,
   cwd: string,
   width: number,
-  channelId: string = 'general',
+  channelId: string,
   liveWorkers: ReadonlyMap<string, LiveWorkerInfo> = getLiveWorkers(cwd),
   tasks: Task[],
   sessionId: string = ''
@@ -101,7 +101,7 @@ export function renderTaskList(
   width: number,
   height: number,
   viewState: MessengerViewState,
-  channelId: string = 'general',
+  channelId: string,
   liveWorkers: ReadonlyMap<string, LiveWorkerInfo> = getLiveWorkers(cwd),
   tasks: Task[]
 ): string[] {

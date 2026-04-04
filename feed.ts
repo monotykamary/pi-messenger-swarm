@@ -62,11 +62,11 @@ function feedDir(cwd: string): string {
   return path.join(cwd, '.pi', 'messenger', 'feed');
 }
 
-function feedPath(cwd: string, channelId: string = 'general'): string {
+function feedPath(cwd: string, channelId: string): string {
   return path.join(feedDir(cwd), `${normalizeChannelId(channelId)}.jsonl`);
 }
 
-function invalidateFeedCache(cwd: string, channelId: string = 'general'): void {
+function invalidateFeedCache(cwd: string, channelId: string): void {
   feedCache.delete(feedPath(cwd, channelId));
 }
 
@@ -103,7 +103,7 @@ export function sanitizeFeedEvent(event: FeedEvent): FeedEvent {
   };
 }
 
-function loadFeedCache(cwd: string, channelId: string = 'general'): FeedCacheEntry | null {
+function loadFeedCache(cwd: string, channelId: string): FeedCacheEntry | null {
   const p = feedPath(cwd, channelId);
   const now = Date.now();
   const cached = feedCache.get(p);
@@ -162,11 +162,7 @@ function loadFeedCache(cwd: string, channelId: string = 'general'): FeedCacheEnt
   }
 }
 
-export function appendFeedEvent(
-  cwd: string,
-  event: FeedEvent,
-  channelId: string = 'general'
-): void {
+export function appendFeedEvent(cwd: string, event: FeedEvent, channelId: string): void {
   const p = feedPath(cwd, channelId);
   try {
     const dir = path.dirname(p);
@@ -183,8 +179,8 @@ export function appendFeedEvent(
 
 export function readFeedEvents(
   cwd: string,
-  limit?: number,
-  channelId: string = 'general'
+  limit: number | undefined,
+  channelId: string
 ): FeedEvent[] {
   const entry = loadFeedCache(cwd, channelId);
   if (!entry) return [];
@@ -195,7 +191,7 @@ export function readFeedEventsWithOffset(
   cwd: string,
   offsetFromEnd: number,
   limit: number,
-  channelId: string = 'general'
+  channelId: string
 ): FeedEvent[] {
   const entry = loadFeedCache(cwd, channelId);
   if (!entry) return [];
@@ -213,7 +209,7 @@ export function readFeedEventsByRange(
   cwd: string,
   startIndex: number,
   endIndex: number,
-  channelId: string = 'general'
+  channelId: string
 ): FeedEvent[] {
   const entry = loadFeedCache(cwd, channelId);
   if (!entry) return [];
@@ -227,12 +223,12 @@ export function readFeedEventsByRange(
   return entry.events.slice(clampedStart, clampedEnd);
 }
 
-export function getFeedLineCount(cwd: string, channelId: string = 'general'): number {
+export function getFeedLineCount(cwd: string, channelId: string): number {
   const entry = loadFeedCache(cwd, channelId);
   return entry?.lines.length ?? 0;
 }
 
-export function pruneFeed(cwd: string, maxEvents: number, channelId: string = 'general'): void {
+export function pruneFeed(cwd: string, maxEvents: number, channelId: string): void {
   const p = feedPath(cwd, channelId);
   if (!fs.existsSync(p)) return;
 
@@ -392,9 +388,9 @@ export function logFeedEvent(
   cwd: string,
   agent: string,
   type: FeedEventType,
-  target?: string,
-  preview?: string,
-  channelId: string = 'general'
+  target: string | undefined,
+  preview: string | undefined,
+  channelId: string
 ): void {
   appendFeedEvent(
     cwd,

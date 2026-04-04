@@ -131,7 +131,7 @@ export function renderEmptyState(
   cwd: string,
   width: number,
   height: number,
-  channelId: string = 'general'
+  channelId: string
 ): string[] {
   const lines: string[] = [];
   const config = loadConfig(cwd);
@@ -157,7 +157,7 @@ export function renderLegend(
   viewState: MessengerViewState,
   task: Task | null,
   swarmAgent: SpawnedAgent | null,
-  channelId: string = 'general'
+  channelId: string
 ): string[] {
   if (viewState.confirmAction) {
     const text = renderConfirmBar(
@@ -237,7 +237,7 @@ export function renderDetailView(
   width: number,
   height: number,
   viewState: MessengerViewState,
-  channelId: string = 'general',
+  channelId: string,
   sessionId: string = '',
   liveWorkers: ReadonlyMap<string, LiveWorkerInfo> = getLiveWorkers(cwd)
 ): string[] {

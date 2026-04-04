@@ -199,7 +199,7 @@ export function handleConfirmInput(
   viewState: MessengerViewState,
   cwd: string,
   agentName: string,
-  channelId: string = 'general',
+  channelId: string,
   sessionId: string,
   tui: TUI
 ): void {
@@ -243,7 +243,7 @@ export function handleBlockReasonInput(
   cwd: string,
   task: Task | undefined,
   agentName: string,
-  channelId: string = 'general',
+  channelId: string,
   sessionId: string,
   tui: TUI
 ): void {
@@ -517,7 +517,7 @@ export function handleTaskKeyBinding(
   viewState: MessengerViewState,
   cwd: string,
   agentName: string,
-  channelId: string = 'general',
+  channelId: string,
   sessionId: string,
   tui: TUI
 ): void {

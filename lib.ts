@@ -513,7 +513,10 @@ export function truncatePathLeft(filePath: string, maxLen: number): string {
 }
 
 export function buildSelfRegistration(state: MessengerState): AgentRegistration {
-  const currentChannel = state.currentChannel || state.sessionChannel || 'general';
+  const currentChannel = state.currentChannel || state.sessionChannel;
+  if (!currentChannel) {
+    throw new Error('No current or session channel set');
+  }
   const joinedChannels = Array.isArray(state.joinedChannels)
     ? [...state.joinedChannels]
     : [currentChannel];

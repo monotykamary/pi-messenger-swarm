@@ -33,7 +33,7 @@ export function executeTaskAction(
   agentName: string,
   reason?: string,
   options?: TaskActionOptions,
-  channelId: string = 'general'
+  channelId: string
 ): TaskActionResult {
   const task = taskStore.getTask(cwd, sessionId, taskId);
   if (!task) return { success: false, error: 'not_found', message: `Task ${taskId} not found` };

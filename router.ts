@@ -38,6 +38,15 @@ export async function executeAction(
   const cwd = ctx.cwd ?? process.cwd();
   const sessionId = getContextSessionId(ctx);
 
+  // Helper to get current channel or throw
+  function requireChannel(): string {
+    const channel = state.currentChannel ?? state.sessionChannel;
+    if (!channel) {
+      throw new Error('No current or session channel set');
+    }
+    return channel;
+  }
+
   if (group === 'join') {
     return handlers.executeJoin(
       state,
@@ -92,7 +101,7 @@ export async function executeAction(
     case 'feed':
       return handlers.executeFeed(
         cwd,
-        state.currentChannel ?? 'general',
+        requireChannel(),
         params.limit,
         config?.swarmEventsInFeed ?? true,
         params.channel
@@ -106,7 +115,7 @@ export async function executeAction(
         params.to,
         params.message,
         params.replyTo,
-        params.channel ?? state.currentChannel ?? 'general'
+        params.channel ?? requireChannel()
       );
 
     case 'broadcast':
@@ -137,11 +146,7 @@ export async function executeAction(
       return handlers.executeRename(state, dirs, ctx, params.name, deliverMessage, updateStatus);
 
     case 'swarm':
-      return executeSwarmStatus(
-        cwd,
-        params.channel ?? state.currentChannel ?? 'general',
-        sessionId
-      );
+      return executeSwarmStatus(cwd, params.channel ?? requireChannel(), sessionId);
 
     case 'task': {
       const operation = op ?? 'list';
@@ -150,7 +155,7 @@ export async function executeAction(
         params,
         state,
         cwd,
-        params.channel ?? state.currentChannel ?? 'general',
+        params.channel ?? requireChannel(),
         sessionId
       );
     }
@@ -169,7 +174,7 @@ export async function executeAction(
         { ...params, id: taskId },
         state,
         cwd,
-        params.channel ?? state.currentChannel ?? 'general',
+        params.channel ?? requireChannel(),
         sessionId
       );
     }
@@ -187,7 +192,7 @@ export async function executeAction(
         { ...params, id: taskId },
         state,
         cwd,
-        params.channel ?? state.currentChannel ?? 'general',
+        params.channel ?? requireChannel(),
         sessionId
       );
     }
@@ -205,7 +210,7 @@ export async function executeAction(
         { ...params, id: taskId },
         state,
         cwd,
-        params.channel ?? state.currentChannel ?? 'general',
+        params.channel ?? requireChannel(),
         sessionId
       );
     }
