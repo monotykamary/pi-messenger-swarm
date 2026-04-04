@@ -466,12 +466,6 @@ export function handleTaskKeyBinding(
   sessionId: string,
   tui: TUI
 ): void {
-  if (matchesKey(data, 's') && task.status === 'todo') {
-    const result = executeTaskAction(cwd, sessionId, 'start', task.id, agentName, channelId);
-    setNotification(viewState, tui, result.success, result.message);
-    tui.requestRender();
-    return;
-  }
   if (matchesKey(data, 'u') && task.status === 'blocked') {
     const result = executeTaskAction(cwd, sessionId, 'unblock', task.id, agentName, channelId);
     setNotification(viewState, tui, result.success, result.message);

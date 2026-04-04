@@ -402,9 +402,7 @@ export function renderSwarmDetail(
 
 function renderDetailStatusBar(cwd: string, task: Task): string {
   const hints: string[] = [];
-  if (task.status === 'in_progress') hints.push('q:Stop');
   if (task.status === 'blocked') hints.push('u:Unblock');
-  if (task.status === 'todo') hints.push('s:Claim');
   if (task.status === 'in_progress') hints.push('b:Block');
   if (task.status === 'done') hints.push('x:Archive');
   hints.push('m:Chat', 'f:Swarm', 'j/k/gg/G:Feed', 'e:Expand', '←→:Nav');
@@ -413,9 +411,7 @@ function renderDetailStatusBar(cwd: string, task: Task): string {
 
 function renderListStatusBar(cwd: string, task: Task): string {
   const hints: string[] = ['Enter:Detail'];
-  if (task.status === 'in_progress') hints.push('q:Stop');
   if (task.status === 'blocked') hints.push('u:Unblock');
-  if (task.status === 'todo') hints.push('s:Claim');
   if (task.status === 'in_progress') hints.push('b:Block');
   if (task.status === 'done') hints.push('x:Archive');
   hints.push('m:Chat', 'f:Swarm', 'j/k/gg/G:Feed', 'e:Expand');
