@@ -5,8 +5,10 @@
 import type { Component, Focusable, TUI } from '@mariozechner/pi-tui';
 import { truncateToWidth, visibleWidth } from '@mariozechner/pi-tui';
 import type { Theme } from '@mariozechner/pi-coding-agent';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import type { MessengerState, Dirs } from './lib.js';
-import { displayChannelLabel, getChannel } from './channel.js';
+import { displayChannelLabel } from './channel.js';
 import * as taskStore from './swarm/task-store.js';
 import { readFeedEventsByRange, type FeedEvent } from './feed.js';
 import type { SwarmTask as Task } from './swarm/types.js';
@@ -143,12 +145,24 @@ export class MessengerOverlay implements Component, Focusable {
 
   private getSessionIdForChannel(): string {
     const channelId = this.currentChannel();
-    const channel = getChannel(this.dirs, channelId);
-    // For session channels, use the channel's sessionId where data is stored
-    if (channel?.sessionId) {
-      return channel.sessionId;
+    // Read from project-scoped channel file (same as router logic)
+    const normalized = channelId.replace(/^#/, '').toLowerCase();
+    const channelPath = path.join(this.cwd, '.pi', 'messenger', 'channels', `${normalized}.jsonl`);
+    try {
+      if (fs.existsSync(channelPath)) {
+        const content = fs.readFileSync(channelPath, 'utf-8');
+        const lines = content.split('\n');
+        if (lines.length > 0) {
+          const header = JSON.parse(lines[0]) as { _meta?: boolean; sessionId?: string };
+          if (header._meta && header.sessionId) {
+            return header.sessionId;
+          }
+        }
+      }
+    } catch {
+      // Fall through to fallback
     }
-    // Fall back to context session ID for non-session channels
+    // Fall back to context session ID
     return this.state.contextSessionId ?? '';
   }
 

@@ -3,12 +3,52 @@
  */
 
 import type { ExtensionContext } from '@mariozechner/pi-coding-agent';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import type { MessengerState, Dirs, AgentMailMessage, NameThemeConfig } from './lib.js';
 import * as handlers from './handlers.js';
 import type { MessengerActionParams } from './action-types.js';
 import { result } from './swarm/result.js';
 import { executeSpawn, executeSwarmStatus, executeTask } from './swarm/handlers.js';
-import { getContextSessionId } from './store/shared.js';
+import { normalizeChannelId } from './channel.js';
+
+/**
+ * Read a channel's sessionId from the project-scoped location.
+ * Returns null if channel doesn't exist or has no sessionId.
+ */
+function getProjectChannelSessionId(cwd: string, channelId: string): string | null {
+  const normalized = normalizeChannelId(channelId);
+  const channelPath = path.join(cwd, '.pi', 'messenger', 'channels', `${normalized}.jsonl`);
+  try {
+    if (!fs.existsSync(channelPath)) return null;
+    const content = fs.readFileSync(channelPath, 'utf-8');
+    const lines = content.split('\n');
+    if (lines.length === 0) return null;
+    const header = JSON.parse(lines[0]) as { _meta?: boolean; sessionId?: string };
+    if (header._meta && header.sessionId) {
+      return header.sessionId;
+    }
+  } catch {
+    // Fall through
+  }
+  return null;
+}
+
+/**
+ * Get the effective session ID for swarm operations.
+ * Uses the current channel's stored sessionId if available,
+ * otherwise falls back to the current pi context session.
+ */
+function getEffectiveSessionId(cwd: string, state: MessengerState): string {
+  const currentChannel = state.currentChannel ?? state.sessionChannel;
+  if (currentChannel) {
+    const channelSessionId = getProjectChannelSessionId(cwd, currentChannel);
+    if (channelSessionId) {
+      return channelSessionId;
+    }
+  }
+  return state.contextSessionId ?? '';
+}
 
 type DeliverFn = (msg: AgentMailMessage) => void;
 type UpdateStatusFn = (ctx: ExtensionContext) => void;
@@ -36,7 +76,7 @@ export async function executeAction(
   const group = dotIndex > 0 ? action.slice(0, dotIndex) : action;
   const op = dotIndex > 0 ? action.slice(dotIndex + 1) : null;
   const cwd = ctx.cwd ?? process.cwd();
-  const sessionId = getContextSessionId(ctx);
+  const sessionId = getEffectiveSessionId(cwd, state);
 
   // Helper to get current channel or throw
   function requireChannel(): string {
