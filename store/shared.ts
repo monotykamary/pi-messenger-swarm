@@ -86,6 +86,46 @@ export function getContextSessionId(ctx: ExtensionContext): string {
   }
 }
 
+/**
+ * Read a channel's sessionId from the project-scoped location.
+ * Returns null if channel doesn't exist or has no sessionId.
+ */
+export function getProjectChannelSessionId(cwd: string, channelId: string): string | null {
+  const normalized = normalizeChannelId(channelId);
+  const channelPath = join(cwd, '.pi', 'messenger', 'channels', `${normalized}.jsonl`);
+  try {
+    if (!fs.existsSync(channelPath)) return null;
+    const content = fs.readFileSync(channelPath, 'utf-8');
+    const lines = content.split('\n');
+    if (lines.length === 0) return null;
+    const header = JSON.parse(lines[0]) as { _meta?: boolean; sessionId?: string };
+    if (header._meta && header.sessionId) {
+      return header.sessionId;
+    }
+  } catch {
+    // Fall through
+  }
+  return null;
+}
+
+/**
+ * Get the effective session ID for swarm operations.
+ * Uses the current channel's stored sessionId if available,
+ * otherwise falls back to the current pi context session.
+ * This ensures all operations in a channel use consistent storage,
+ * regardless of which pi process (parent or subagent) performs them.
+ */
+export function getEffectiveSessionId(cwd: string, state: MessengerState): string {
+  const currentChannel = state.currentChannel ?? state.sessionChannel;
+  if (currentChannel) {
+    const channelSessionId = getProjectChannelSessionId(cwd, currentChannel);
+    if (channelSessionId) {
+      return channelSessionId;
+    }
+  }
+  return state.contextSessionId ?? '';
+}
+
 export function ensureStateChannels(
   state: MessengerState,
   dirs: Dirs,
