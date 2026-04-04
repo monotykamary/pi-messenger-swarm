@@ -235,20 +235,15 @@ By default, swarm state is **project-scoped** (isolated per project). All channe
 │   ├── memory.jsonl           # Line 1: metadata header, Line 2+: feed events
 │   ├── heartbeat.jsonl
 │   └── quiet-river.jsonl
-├── tasks/                     # Per-channel task storage
-│   ├── memory/
-│   │   ├── task-1.json
-│   │   ├── task-1.md
-│   │   ├── task-1.progress.md
-│   │   └── blocks/
-│   └── quiet-river/
-├── archive/                   # Per-channel archived tasks
-│   ├── memory/
-│   └── quiet-river/
-├── registry/                  # Agent registrations
-├── inbox/                     # Agent message inboxes
-└── swarm/
-    └── locks/                 # Coordination locks
+├── tasks/                       # Per-session task storage
+│   ├── session-abc.jsonl      # Task event log (created, claimed, done, etc.)
+│   └── session-abc/           # Task specs directory
+│       ├── task-1.md
+│       └── task-1.progress.md
+├── registry/                    # Agent registrations
+│   ├── AgentA.json
+│   └── AgentB.json
+└── swarm.lock                   # Coordination lock file
 ```
 
 ### Unified Channel Format (Event-Sourced)
@@ -291,8 +286,7 @@ This design intentionally breaks older messaging assumptions.
 - `broadcast` action was removed
 - `send` without `to` was removed
 - feed history is now stored per channel at `.pi/messenger/channels/<channel>.jsonl` (unified format: metadata header + events)
-- tasks are now stored per channel at `.pi/messenger/tasks/<channel>/...`
-- archives are now stored per channel at `.pi/messenger/archive/<channel>/...`
+- tasks are now stored per session at `.pi/messenger/tasks/<session>.jsonl`
 - session channels are phrase-based instead of `session-*` timestamp-like ids
 
 Use these patterns instead:
