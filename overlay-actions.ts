@@ -5,6 +5,7 @@ import { MAX_CHAT_HISTORY } from './lib.js';
 import { sendMessageToAgent, getActiveAgents, resolveTargetChannel } from './store.js';
 import { logFeedEvent, type FeedEvent } from './feed.js';
 import * as swarmStore from './swarm/store.js';
+import * as taskStore from './swarm/task-store.js';
 import { executeTaskAction as runTaskAction } from './swarm/task-actions.js';
 import type { SwarmTask as Task } from './swarm/types.js';
 import { getLiveWorkers } from './swarm/live-progress.js';
@@ -215,7 +216,7 @@ export function handleConfirmInput(
       channelId
     );
     if (action.type === 'delete' || action.type === 'archive') {
-      const tasks = swarmStore.getTasks(cwd, channelId);
+      const tasks = taskStore.getTasks(cwd, sessionId);
       if (tasks.length > 0) {
         viewState.selectedTaskIndex = Math.max(
           0,

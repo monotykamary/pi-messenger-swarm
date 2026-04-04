@@ -96,6 +96,8 @@ export function renderAgentsRow(
   let allClaims: ReturnType<typeof store.getClaims> | null = null;
   const rowParts: string[] = [];
   const seen = new Set<string>();
+  const sessionId = state.contextSessionId ?? '';
+  const sessionTasks = taskStore.getTasks(cwd, sessionId);
 
   const self = buildSelfRegistration(state);
   rowParts.push(`🟢 You (${idleLabel(self.activity?.lastActivityAt ?? self.startedAt)})`);
@@ -106,14 +108,7 @@ export function renderAgentsRow(
     allClaims ??= store.getClaims(dirs);
     const computed = computeStatus(
       agent.activity?.lastActivityAt ?? agent.startedAt,
-      agentHasTask(
-        agent.name,
-        allClaims,
-        swarmStore.getTasks(
-          agent.cwd,
-          agent.currentChannel ?? agent.sessionChannel ?? state.currentChannel
-        )
-      ),
+      agentHasTask(agent.name, allClaims, sessionTasks),
       (agent.reservations?.length ?? 0) > 0,
       stuckThresholdMs
     );

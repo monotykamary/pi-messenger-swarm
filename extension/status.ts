@@ -4,6 +4,7 @@ import { agentHasTask, computeStatus } from '../lib.js';
 import type { MessengerConfig } from '../config.js';
 import * as store from '../store.js';
 import * as swarmStore from '../swarm/store.js';
+import * as taskStore from '../swarm/task-store.js';
 import { logFeedEvent } from '../feed.js';
 import { getLiveWorkers } from '../swarm/live-progress.js';
 import { getRunningSpawnCount } from '../swarm/spawn.js';
@@ -29,16 +30,13 @@ export function createStatusController({
     const thresholdMs = config.stuckThreshold * 1000;
     const peers = store.getActiveAgents(state, dirs);
     const allClaims = store.getClaims(dirs);
+    const sessionId = state.contextSessionId ?? '';
+    const sessionTasks = taskStore.getTasks(ctx.cwd ?? process.cwd(), sessionId);
 
     const currentlyStuck = new Set<string>();
 
     for (const agent of peers) {
-      const agentChannel = agent.currentChannel ?? agent.sessionChannel ?? state.currentChannel;
-      const hasTask = agentHasTask(
-        agent.name,
-        allClaims,
-        swarmStore.getTasks(agent.cwd, agentChannel)
-      );
+      const hasTask = agentHasTask(agent.name, allClaims, sessionTasks);
       const computed = computeStatus(
         agent.activity?.lastActivityAt ?? agent.startedAt,
         hasTask,
@@ -107,7 +105,7 @@ export function createStatusController({
       ? theme.fg('dim', ` · ${state.activity.currentActivity}`)
       : '';
 
-    const swarmSummary = swarmStore.getSummary(cwd, state.currentChannel);
+    const swarmSummary = taskStore.getSummary(cwd, state.contextSessionId ?? '');
     const taskStr =
       swarmSummary.total > 0
         ? theme.fg('accent', ` ☑ ${swarmSummary.done}/${swarmSummary.total} tasks`)
