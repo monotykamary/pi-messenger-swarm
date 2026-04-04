@@ -509,6 +509,7 @@ export class MessengerOverlay implements Component, Focusable {
           contentHeight,
           this.viewState,
           channelId,
+          this.state.contextSessionId ?? '',
           liveWorkers
         );
       } else {

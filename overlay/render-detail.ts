@@ -13,6 +13,7 @@ import {
 } from '../lib.js';
 import * as store from '../store.js';
 import * as swarmStore from '../swarm/store.js';
+import * as taskStore from '../swarm/task-store.js';
 import type { SwarmTask as Task, SpawnedAgent } from '../swarm/types.js';
 import { formatRoleLabel } from '../swarm/labels.js';
 import { getLiveWorkers, type LiveWorkerInfo } from '../swarm/live-progress.js';
@@ -243,6 +244,7 @@ export function renderDetailView(
   height: number,
   viewState: MessengerViewState,
   channelId: string = 'general',
+  sessionId: string = '',
   liveWorkers: ReadonlyMap<string, LiveWorkerInfo> = getLiveWorkers(cwd)
 ): string[] {
   const live = liveWorkers.get(task.id);
@@ -287,7 +289,7 @@ export function renderDetailView(
     if (task.depends_on.length > 0) {
       lines.push('Dependencies:');
       for (const depId of task.depends_on) {
-        const dep = swarmStore.getTask(cwd, depId, channelId);
+        const dep = taskStore.getTask(cwd, sessionId, depId);
         if (!dep) lines.push(`  ○ ${depId}: (missing)`);
         else
           lines.push(
@@ -297,7 +299,7 @@ export function renderDetailView(
       lines.push('');
     }
 
-    const progress = swarmStore.getTaskProgress(cwd, task.id, channelId);
+    const progress = sessionId ? taskStore.getTaskProgress(cwd, sessionId, task.id) : null;
     if (progress) {
       lines.push('Progress:');
       for (const line of progress.trimEnd().split('\n')) lines.push(`  ${line}`);
@@ -306,11 +308,6 @@ export function renderDetailView(
 
     if (task.status === 'blocked') {
       lines.push(`Block Reason: ${task.blocked_reason ?? 'Unknown'}`);
-      const blockContext = swarmStore.getBlockContext(cwd, task.id, channelId);
-      if (blockContext) {
-        lines.push('', 'Block Context:');
-        for (const line of blockContext.trimEnd().split('\n')) lines.push(`  ${line}`);
-      }
       lines.push('');
     }
 
@@ -330,7 +327,7 @@ export function renderDetailView(
     }
 
     lines.push('Spec:');
-    const spec = swarmStore.getTaskSpec(cwd, task.id, channelId);
+    const spec = sessionId ? taskStore.getTaskSpec(cwd, sessionId, task.id) : null;
     if (!spec || spec.trimEnd().length === 0) lines.push('  *No spec available*');
     else for (const line of spec.trimEnd().split('\n')) lines.push(`  ${line}`);
   }
