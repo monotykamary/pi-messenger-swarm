@@ -134,7 +134,7 @@ export function renderEmptyState(
   const lines: string[] = [];
   const config = loadConfig(cwd);
 
-  lines.push('No swarm tasks yet — create one or spawn a specialist.');
+  lines.push(theme.fg('dim', 'No swarm tasks yet — create one or spawn a specialist.'));
   lines.push('task.create: pi_messenger({ action: "task.create", title: "Investigate bug" })');
   lines.push(
     'spawn: pi_messenger({ action: "spawn", role: "Researcher", message: "Analyze issue" })'
