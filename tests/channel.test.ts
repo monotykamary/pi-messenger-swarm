@@ -88,7 +88,7 @@ describe('channel-aware registration', () => {
     const channelsDir = path.join(dirs.base, 'channels');
     fs.mkdirSync(channelsDir, { recursive: true });
     fs.writeFileSync(
-      path.join(channelsDir, 'memory.json'),
+      path.join(channelsDir, 'memory.jsonl'),
       JSON.stringify({ description: 'legacy file missing id' }, null, 2)
     );
 
@@ -209,6 +209,6 @@ describe('channel-aware registration', () => {
     expect(joined.success).toBe(true);
     expect(state.currentChannel).toBe('architecture');
     expect(state.joinedChannels).toContain('architecture');
-    expect(fs.existsSync(path.join(dirs.base, 'channels', 'architecture.json'))).toBe(true);
+    expect(fs.existsSync(path.join(dirs.base, 'channels', 'architecture.jsonl'))).toBe(true);
   });
 });

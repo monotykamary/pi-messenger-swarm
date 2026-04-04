@@ -21,11 +21,11 @@ https://github.com/nicobailon/pi-messenger
 
 ## Screenshots
 
-| Swarm Details | Swarm Messenger |
-| --- | --- |
+| Swarm Details                              | Swarm Messenger                                |
+| ------------------------------------------ | ---------------------------------------------- |
 | ![Swarm Details](assets/swarm_details.jpg) | ![Swarm Messenger](assets/swarm_messenger.jpg) |
-| Memory Channel | Session Channel |
-| ![Memory Channel](assets/memory.jpg) | ![Session Channel](assets/session.jpg) |
+| Memory Channel                             | Session Channel                                |
+| ![Memory Channel](assets/memory.jpg)       | ![Session Channel](assets/session.jpg)         |
 
 ## Install
 
@@ -39,9 +39,7 @@ From git (Pi package settings):
 
 ```json
 {
-  "packages": [
-    "git:github.com/monotykamary/pi-messenger-swarm@main"
-  ]
+  "packages": ["git:github.com/monotykamary/pi-messenger-swarm@main"]
 }
 ```
 
@@ -52,24 +50,28 @@ From git (Pi package settings):
 Join the messenger and start collaborating in your session channel:
 
 ```ts
-pi_messenger({ action: "join" })
-pi_messenger({ action: "send", to: "#memory", message: "Investigating auth timeout in refresh flow" })
-pi_messenger({ action: "task.create", title: "Investigate auth timeout", content: "Repro + fix" })
-pi_messenger({ action: "task.claim", id: "task-1" })
-pi_messenger({ action: "task.progress", id: "task-1", message: "Found race in refresh flow" })
-pi_messenger({ action: "task.done", id: "task-1", summary: "Fixed refresh lock + tests" })
+pi_messenger({ action: 'join' });
+pi_messenger({
+  action: 'send',
+  to: '#memory',
+  message: 'Investigating auth timeout in refresh flow',
+});
+pi_messenger({ action: 'task.create', title: 'Investigate auth timeout', content: 'Repro + fix' });
+pi_messenger({ action: 'task.claim', id: 'task-1' });
+pi_messenger({ action: 'task.progress', id: 'task-1', message: 'Found race in refresh flow' });
+pi_messenger({ action: 'task.done', id: 'task-1', summary: 'Fixed refresh lock + tests' });
 ```
 
 Spawn a specialized subagent:
 
 ```ts
 pi_messenger({
-  action: "spawn",
-  role: "Packaging Gap Analyst",
-  persona: "Skeptical market researcher",
-  message: "Find productization gaps in idea aggregation tools",
-  content: "Focus on onboarding, monetization, and UX friction"
-})
+  action: 'spawn',
+  role: 'Packaging Gap Analyst',
+  persona: 'Skeptical market researcher',
+  message: 'Find productization gaps in idea aggregation tools',
+  content: 'Focus on onboarding, monetization, and UX friction',
+});
 ```
 
 ## Channel Model
@@ -169,28 +171,32 @@ Compatibility aliases:
 ### Direct message an agent
 
 ```ts
-pi_messenger({ action: "send", to: "OtherAgent", message: "Need your API shape before I commit" })
+pi_messenger({ action: 'send', to: 'OtherAgent', message: 'Need your API shape before I commit' });
 ```
 
 ### Post durably to a channel
 
 ```ts
-pi_messenger({ action: "send", to: "#memory", message: "Claimed task-4, touching src/auth/session.ts" })
-pi_messenger({ action: "send", to: "#heartbeat", message: "Nightly sync complete" })
+pi_messenger({
+  action: 'send',
+  to: '#memory',
+  message: 'Claimed task-4, touching src/auth/session.ts',
+});
+pi_messenger({ action: 'send', to: '#heartbeat', message: 'Nightly sync complete' });
 ```
 
 ### Switch channels explicitly
 
 ```ts
-pi_messenger({ action: "join", channel: "memory" })
-pi_messenger({ action: "join", channel: "architecture", create: true })
+pi_messenger({ action: 'join', channel: 'memory' });
+pi_messenger({ action: 'join', channel: 'architecture', create: true });
 ```
 
 ### Read a channel feed
 
 ```ts
-pi_messenger({ action: "feed", limit: 20 })
-pi_messenger({ action: "feed", channel: "memory", limit: 20 })
+pi_messenger({ action: 'feed', limit: 20 });
+pi_messenger({ action: 'feed', channel: 'memory', limit: 20 });
 ```
 
 ### Notes
@@ -257,7 +263,7 @@ This design intentionally breaks older messaging assumptions.
 
 - `broadcast` action was removed
 - `send` without `to` was removed
-- feed history is now stored per channel at `.pi/messenger/feed/<channel>.jsonl`
+- feed history is now stored per channel at `.pi/messenger/channels/<channel>.jsonl` (unified format: metadata header + events)
 - tasks are now stored per channel at `.pi/messenger/tasks/<channel>/...`
 - archives are now stored per channel at `.pi/messenger/archive/<channel>/...`
 - session channels are phrase-based instead of `session-*` timestamp-like ids
@@ -265,18 +271,18 @@ This design intentionally breaks older messaging assumptions.
 Use these patterns instead:
 
 ```ts
-pi_messenger({ action: "send", to: "AgentName", message: "..." })
-pi_messenger({ action: "send", to: "#channel", message: "..." })
+pi_messenger({ action: 'send', to: 'AgentName', message: '...' });
+pi_messenger({ action: 'send', to: '#channel', message: '...' });
 ```
 
 ## Environment Variables
 
 Override the default project-scoped behavior:
 
-| Variable | Effect |
-|----------|--------|
-| `PI_MESSENGER_DIR=/path/to/dir` | Use custom directory for all state |
-| `PI_MESSENGER_GLOBAL=1` | Use legacy global mode (`~/.pi/agent/messenger`) |
+| Variable                        | Effect                                           |
+| ------------------------------- | ------------------------------------------------ |
+| `PI_MESSENGER_DIR=/path/to/dir` | Use custom directory for all state               |
+| `PI_MESSENGER_GLOBAL=1`         | Use legacy global mode (`~/.pi/agent/messenger`) |
 
 ```bash
 # Custom location

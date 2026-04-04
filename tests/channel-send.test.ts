@@ -90,9 +90,9 @@ describe('channel-targeted send', () => {
     const res = executeSend(state, dirs, cwd, '#memory', 'remember this');
     expect(res.content[0]?.text).toContain('Message posted to #memory');
 
-    const feedPath = path.join(dirs.base, 'feed', 'memory.jsonl');
-    expect(fs.existsSync(feedPath)).toBe(true);
-    expect(fs.readFileSync(feedPath, 'utf8')).toContain('remember this');
+    const channelPath = path.join(dirs.base, 'channels', 'memory.jsonl');
+    expect(fs.existsSync(channelPath)).toBe(true);
+    expect(fs.readFileSync(channelPath, 'utf8')).toContain('remember this');
   });
 
   it("allows posting to '#memory' even when no agents are currently joined", () => {
@@ -103,9 +103,9 @@ describe('channel-targeted send', () => {
     const res = executeSend(state, dirs, cwd, '#memory', 'store this for later');
     expect(res.content[0]?.text).toContain('Message posted to #memory.');
 
-    const feedPath = path.join(dirs.base, 'feed', 'memory.jsonl');
-    expect(fs.existsSync(feedPath)).toBe(true);
-    expect(fs.readFileSync(feedPath, 'utf8')).toContain('store this for later');
+    const channelPath = path.join(dirs.base, 'channels', 'memory.jsonl');
+    expect(fs.existsSync(channelPath)).toBe(true);
+    expect(fs.readFileSync(channelPath, 'utf8')).toContain('store this for later');
   });
 
   it('allows posting into the current session channel when explicitly targeted', () => {
@@ -116,9 +116,9 @@ describe('channel-targeted send', () => {
     const res = executeSend(state, dirs, cwd, '#wild-viper', 'pick this up later');
     expect(res.content[0]?.text).toContain('Message posted to #wild-viper.');
 
-    const feedPath = path.join(dirs.base, 'feed', 'wild-viper.jsonl');
-    expect(fs.existsSync(feedPath)).toBe(true);
-    expect(fs.readFileSync(feedPath, 'utf8')).toContain('pick this up later');
+    const channelPath = path.join(dirs.base, 'channels', 'wild-viper.jsonl');
+    expect(fs.existsSync(channelPath)).toBe(true);
+    expect(fs.readFileSync(channelPath, 'utf8')).toContain('pick this up later');
   });
 
   it('requires an explicit to target', () => {

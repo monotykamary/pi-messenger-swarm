@@ -1,7 +1,7 @@
 /**
  * Pi Messenger - Feed Scroll Core Logic
  *
- * Pure line-based scroll calculations without rendering dependencies.
+ * Pure event-based scroll calculations without rendering dependencies.
  * This module can be tested independently.
  */
 
@@ -9,13 +9,13 @@
  * Line-based scroll state interface
  */
 export interface FeedScrollState {
-  /** Absolute index in feed.jsonl of first loaded event (sparse window) */
+  /** Absolute index in channel JSONL (events only, excluding metadata header) of first loaded event (sparse window) */
   feedWindowStart: number;
-  /** Absolute index in feed.jsonl of last loaded event */
+  /** Absolute index in channel JSONL (events only) of last loaded event */
   feedWindowEnd: number;
-  /** Total lines in feed.jsonl */
+  /** Total event count in channel JSONL (events only, excluding metadata header) */
   feedTotalLines: number;
-  /** 
+  /**
    * Line-based scroll offset - number of lines from the bottom of the rendered feed.
    * 0 = at bottom (showing newest content)
    * >0 = scrolled up by N screen lines
@@ -56,10 +56,7 @@ export function scrollUp(
  * Scroll down by N screen lines (toward newer content).
  * Returns new lineScrollOffset.
  */
-export function scrollDown(
-  currentOffset: number,
-  lines: number = 1
-): number {
+export function scrollDown(currentOffset: number, lines: number = 1): number {
   return Math.max(0, currentOffset - lines);
 }
 
@@ -73,10 +70,7 @@ export function jumpToBottom(): number {
 /**
  * Jump to top (oldest content).
  */
-export function jumpToTop(
-  totalRenderedLines: number,
-  feedHeight: number
-): number {
+export function jumpToTop(totalRenderedLines: number, feedHeight: number): number {
   if (totalRenderedLines <= feedHeight) return 0;
   return totalRenderedLines - feedHeight;
 }
@@ -97,16 +91,16 @@ export function maintainScrollOnNewEvents(
     // Track to new bottom
     return 0;
   }
-  
+
   // Calculate how many new lines were added at the bottom
   const linesAdded = newRenderedLines - previousRenderedLines;
-  
+
   // Adjust offset to maintain visual position
   // If we were at offset X (from old bottom), we need to increase offset by linesAdded
   // to stay looking at the same content
   const newOffset = currentOffset + linesAdded;
   const maxOffset = Math.max(0, newRenderedLines - feedHeight);
-  
+
   return Math.min(newOffset, maxOffset);
 }
 
@@ -175,21 +169,21 @@ export function calculateVisibleRangeFromLines(
   // Clamp scroll offset to valid range
   const maxOffset = Math.max(0, allLines.length - feedHeight);
   const clampedOffset = Math.max(0, Math.min(lineScrollOffset, maxOffset));
-  
+
   // Calculate visible line range (from bottom up)
   // lineScrollOffset 0 = bottom of lines array
   const lineEnd = allLines.length - clampedOffset;
   const lineStart = Math.max(0, lineEnd - feedHeight);
-  
+
   // Get the slice of visible lines
   const visibleLines = allLines.slice(lineStart, lineEnd);
-  
+
   // Check if we need to load more events
   // Need older if we're showing the first few lines of what's loaded
   const needsOlderLoad = lineStart < 5 && windowStart > 0;
   // Need newer if we're past the end (shouldn't happen normally since we auto-follow)
   const needsNewerLoad = lineEnd > allLines.length && windowStart + allLines.length < totalLines;
-  
+
   return {
     visibleLines,
     lineScrollOffset: clampedOffset,

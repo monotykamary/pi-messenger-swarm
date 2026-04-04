@@ -284,9 +284,9 @@ describe('swarm/session-shutdown-cleanup', () => {
     const dirs = createTempMessengerDirs();
     const agentName = 'TestAgent';
 
-    // Verify feed file doesn't exist yet
-    const feedFile = path.join(dirs.cwd, '.pi', 'messenger', 'feed', 'test-channel.jsonl');
-    expect(fs.existsSync(feedFile)).toBe(false);
+    // Verify channel file doesn't exist yet
+    const channelFile = path.join(dirs.cwd, '.pi', 'messenger', 'channels', 'test-channel.jsonl');
+    expect(fs.existsSync(channelFile)).toBe(false);
 
     // Create and claim tasks
     const task1 = taskStore.createTask(dirs.cwd, TEST_SESSION, { title: 'Task 1' }, TEST_CHANNEL);
@@ -313,7 +313,7 @@ describe('swarm/session-shutdown-cleanup', () => {
     logFeedEvent(dirs.cwd, agentName, 'leave', undefined, undefined, TEST_CHANNEL);
 
     // Verify feed events were logged
-    expect(fs.existsSync(feedFile)).toBe(true);
+    expect(fs.existsSync(channelFile)).toBe(true);
     const events = readFeedEvents(dirs.cwd, 20, TEST_CHANNEL);
     expect(events).toHaveLength(3); // 2 task resets + 1 leave
 

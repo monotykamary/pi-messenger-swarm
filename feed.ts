@@ -1,12 +1,22 @@
 /**
  * Pi Messenger - Activity Feed
  *
- * Append-only JSONL feed stored at <cwd>/.pi/messenger/feed/<channel>.jsonl
+ * Now stored in unified channel JSONL files at channels/<channel>.jsonl
+ * Line 1: Metadata header (ChannelMetaHeader)
+ * Line 2+: Feed events (FeedEvent)
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { normalizeChannelId } from './channel.js';
+import {
+  normalizeChannelId,
+  channelPath,
+  appendChannelEventLine,
+  readChannelEventLines,
+  pruneChannelEvents,
+  isMetaHeader,
+} from './channel.js';
+import type { Dirs } from './lib.js';
 
 export type FeedEventType =
   | 'join'
@@ -58,16 +68,15 @@ interface FeedCacheEntry {
 const FEED_CACHE_TTL_MS = 100;
 const feedCache = new Map<string, FeedCacheEntry>();
 
-function feedDir(cwd: string): string {
-  return path.join(cwd, '.pi', 'messenger', 'feed');
-}
-
-function feedPath(cwd: string, channelId: string): string {
-  return path.join(feedDir(cwd), `${normalizeChannelId(channelId)}.jsonl`);
+function unifiedChannelPath(cwd: string, channelId: string): string {
+  // Construct a minimal Dirs-like structure for path resolution
+  const base = path.join(cwd, '.pi', 'messenger');
+  return channelPath({ base, registry: '' }, channelId);
 }
 
 function invalidateFeedCache(cwd: string, channelId: string): void {
-  feedCache.delete(feedPath(cwd, channelId));
+  const p = unifiedChannelPath(cwd, channelId);
+  feedCache.delete(p);
 }
 
 function sanitizeInlineText(value?: string): string | undefined {
@@ -103,8 +112,23 @@ export function sanitizeFeedEvent(event: FeedEvent): FeedEvent {
   };
 }
 
+function parseEventLine(line: string): FeedEvent | null {
+  try {
+    const parsed = JSON.parse(line) as unknown;
+    // Skip metadata headers
+    if (isMetaHeader(parsed)) return null;
+    const e = parsed as FeedEvent;
+    if (typeof e.ts === 'string' && typeof e.agent === 'string' && typeof e.type === 'string') {
+      return sanitizeFeedEvent(e);
+    }
+  } catch {
+    // Skip malformed lines
+  }
+  return null;
+}
+
 function loadFeedCache(cwd: string, channelId: string): FeedCacheEntry | null {
-  const p = feedPath(cwd, channelId);
+  const p = unifiedChannelPath(cwd, channelId);
   const now = Date.now();
   const cached = feedCache.get(p);
   if (cached && cached.expiresAt > now) {
@@ -139,12 +163,8 @@ function loadFeedCache(cwd: string, channelId: string): FeedCacheEntry | null {
     const lines = content.split('\n');
     const events: FeedEvent[] = [];
     for (const line of lines) {
-      try {
-        const parsed = JSON.parse(line) as FeedEvent;
-        events.push(sanitizeFeedEvent(parsed));
-      } catch {
-        // Skip malformed lines
-      }
+      const event = parseEventLine(line);
+      if (event) events.push(event);
     }
 
     const entry: FeedCacheEntry = {
@@ -163,14 +183,20 @@ function loadFeedCache(cwd: string, channelId: string): FeedCacheEntry | null {
 }
 
 export function appendFeedEvent(cwd: string, event: FeedEvent, channelId: string): void {
-  const p = feedPath(cwd, channelId);
+  const p = unifiedChannelPath(cwd, channelId);
   try {
     const dir = path.dirname(p);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
     const sanitized = sanitizeFeedEvent({ ...event, channel: normalizeChannelId(channelId) });
-    fs.appendFileSync(p, JSON.stringify(sanitized) + '\n');
+    const eventLine = JSON.stringify(sanitized);
+
+    // Use the channel module's append function for unified storage
+    const baseDir = path.join(cwd, '.pi', 'messenger');
+    const mockDirs: Dirs = { base: baseDir, registry: '' };
+    appendChannelEventLine(mockDirs, channelId, eventLine);
+
     invalidateFeedCache(cwd, channelId);
   } catch {
     // Best effort
@@ -196,8 +222,8 @@ export function readFeedEventsWithOffset(
   const entry = loadFeedCache(cwd, channelId);
   if (!entry) return [];
 
-  const totalLines = entry.lines.length;
-  const endIndex = totalLines - offsetFromEnd;
+  const totalEvents = entry.events.length;
+  const endIndex = totalEvents - offsetFromEnd;
   const startIndex = Math.max(0, endIndex - limit);
 
   if (startIndex >= endIndex || endIndex <= 0) return [];
@@ -214,9 +240,9 @@ export function readFeedEventsByRange(
   const entry = loadFeedCache(cwd, channelId);
   if (!entry) return [];
 
-  const totalLines = entry.lines.length;
-  const clampedStart = Math.max(0, Math.min(startIndex, totalLines));
-  const clampedEnd = Math.max(0, Math.min(endIndex, totalLines));
+  const totalEvents = entry.events.length;
+  const clampedStart = Math.max(0, Math.min(startIndex, totalEvents));
+  const clampedEnd = Math.max(0, Math.min(endIndex, totalEvents));
 
   if (clampedStart >= clampedEnd) return [];
 
@@ -225,22 +251,14 @@ export function readFeedEventsByRange(
 
 export function getFeedLineCount(cwd: string, channelId: string): number {
   const entry = loadFeedCache(cwd, channelId);
-  return entry?.lines.length ?? 0;
+  return entry?.events.length ?? 0;
 }
 
 export function pruneFeed(cwd: string, maxEvents: number, channelId: string): void {
-  const p = feedPath(cwd, channelId);
-  if (!fs.existsSync(p)) return;
-
-  try {
-    const entry = loadFeedCache(cwd, channelId);
-    if (!entry || entry.lines.length <= maxEvents) return;
-    const pruned = entry.lines.slice(-maxEvents);
-    fs.writeFileSync(p, pruned.join('\n') + '\n');
-    invalidateFeedCache(cwd, channelId);
-  } catch {
-    // Best effort
-  }
+  const baseDir = path.join(cwd, '.pi', 'messenger');
+  const mockDirs: Dirs = { base: baseDir, registry: '' };
+  pruneChannelEvents(mockDirs, channelId, maxEvents);
+  invalidateFeedCache(cwd, channelId);
 }
 
 const SWARM_EVENT_TYPES = new Set<FeedEventType>([

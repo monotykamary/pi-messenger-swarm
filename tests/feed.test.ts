@@ -22,11 +22,11 @@ describe('feed', () => {
     cwd = createTempMessengerDirs().cwd;
   });
 
-  it('writes events to the project-scoped feed path', () => {
+  it('writes events to the unified channel JSONL file', () => {
     logFeedEvent(cwd, 'AgentOne', 'join', undefined, undefined, TEST_CHANNEL);
 
-    const feedFile = path.join(cwd, '.pi', 'messenger', 'feed', `${TEST_CHANNEL}.jsonl`);
-    expect(fs.existsSync(feedFile)).toBe(true);
+    const channelFile = path.join(cwd, '.pi', 'messenger', 'channels', `${TEST_CHANNEL}.jsonl`);
+    expect(fs.existsSync(channelFile)).toBe(true);
     expect(readFeedEvents(cwd, 20, TEST_CHANNEL)).toHaveLength(1);
   });
 

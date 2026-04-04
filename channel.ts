@@ -13,6 +13,20 @@ export interface ChannelRecord {
   description?: string;
 }
 
+/** Channel metadata header stored as the first line of the JSONL file */
+export interface ChannelMetaHeader {
+  _meta: true;
+  v: number;
+  id: string;
+  type: ChannelType;
+  createdAt: string;
+  createdBy?: string;
+  sessionId?: string;
+  description?: string;
+}
+
+export const CHANNEL_META_VERSION = 1;
+
 export const MEMORY_CHANNEL_ID = 'memory';
 export const DEFAULT_NAMED_CHANNELS: ReadonlyArray<{ id: string; description: string }> = [
   { id: MEMORY_CHANNEL_ID, description: 'Cross-session knowledge and insights' },
@@ -46,8 +60,39 @@ export function displayChannelLabel(channelId: string): string {
   return `#${normalized}`;
 }
 
+/** Returns the path to the unified channel JSONL file (metadata + feed) */
 export function channelPath(dirs: Dirs, channelId: string): string {
-  return path.join(getChannelsDir(dirs), `${normalizeChannelId(channelId)}.json`);
+  return path.join(getChannelsDir(dirs), `${normalizeChannelId(channelId)}.jsonl`);
+}
+
+function createMetaHeader(record: ChannelRecord): ChannelMetaHeader {
+  return {
+    _meta: true,
+    v: CHANNEL_META_VERSION,
+    id: record.id,
+    type: record.type,
+    createdAt: record.createdAt,
+    createdBy: record.createdBy,
+    sessionId: record.sessionId,
+    description: record.description,
+  };
+}
+
+export function isMetaHeader(obj: unknown): obj is ChannelMetaHeader {
+  if (!obj || typeof obj !== 'object') return false;
+  const o = obj as Record<string, unknown>;
+  return o._meta === true && typeof o.v === 'number' && typeof o.id === 'string';
+}
+
+function metaHeaderToRecord(header: ChannelMetaHeader): ChannelRecord {
+  return {
+    id: header.id,
+    type: header.type,
+    createdAt: header.createdAt,
+    createdBy: header.createdBy,
+    sessionId: header.sessionId,
+    description: header.description,
+  };
 }
 
 function normalizeChannelRecord(
@@ -76,15 +121,109 @@ function normalizeChannelRecord(
   };
 }
 
-export function getChannel(dirs: Dirs, channelId: string): ChannelRecord | null {
+/**
+ * Read the metadata header from a channel JSONL file.
+ * Returns null if file doesn't exist or has invalid header.
+ */
+export function readChannelHeader(dirs: Dirs, channelId: string): ChannelMetaHeader | null {
   const filePath = channelPath(dirs, channelId);
   if (!fs.existsSync(filePath)) return null;
   try {
-    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Partial<ChannelRecord>;
-    return normalizeChannelRecord(parsed, path.basename(filePath, '.json'));
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const firstLine = content.split('\n')[0];
+    if (!firstLine) return null;
+    const parsed = JSON.parse(firstLine) as unknown;
+    if (isMetaHeader(parsed)) {
+      return parsed;
+    }
   } catch {
-    return null;
+    // Ignore parse errors
   }
+  return null;
+}
+
+/**
+ * Read all event lines from a channel JSONL file (skips the metadata header).
+ * Returns raw JSON strings, not parsed objects.
+ */
+export function readChannelEventLines(dirs: Dirs, channelId: string): string[] {
+  const filePath = channelPath(dirs, channelId);
+  if (!fs.existsSync(filePath)) return [];
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8').trim();
+    if (!content) return [];
+    const lines = content.split('\n');
+    // Skip first line (metadata header)
+    return lines.slice(1).filter((line) => line.trim());
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Append a single event line to a channel JSONL file.
+ * Creates the file with metadata header if it doesn't exist.
+ */
+export function appendChannelEventLine(
+  dirs: Dirs,
+  channelId: string,
+  eventLine: string,
+  meta?: Partial<ChannelRecord>
+): void {
+  const filePath = channelPath(dirs, channelId);
+  try {
+    ensureDir(getChannelsDir(dirs));
+
+    if (!fs.existsSync(filePath)) {
+      // Create new file with minimal metadata header
+      const header: ChannelMetaHeader = {
+        _meta: true,
+        v: CHANNEL_META_VERSION,
+        id: normalizeChannelId(channelId),
+        type: isSessionChannelId(channelId) ? 'session' : 'named',
+        createdAt: new Date().toISOString(),
+        createdBy: meta?.createdBy,
+        sessionId: meta?.sessionId,
+        description: meta?.description,
+      };
+      fs.writeFileSync(filePath, JSON.stringify(header) + '\n' + eventLine + '\n');
+    } else {
+      fs.appendFileSync(filePath, eventLine + '\n');
+    }
+  } catch {
+    // Best effort
+  }
+}
+
+/**
+ * Prune events in a channel JSONL file to keep only the last N events.
+ * Preserves the metadata header.
+ */
+export function pruneChannelEvents(dirs: Dirs, channelId: string, maxEvents: number): void {
+  const filePath = channelPath(dirs, channelId);
+  if (!fs.existsSync(filePath)) return;
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const lines = content.split('\n');
+    if (lines.length <= 1) return; // Only header or empty
+
+    const header = lines[0];
+    const events = lines.slice(1).filter((line) => line.trim());
+    if (events.length <= maxEvents) return;
+
+    const pruned = events.slice(-maxEvents);
+    fs.writeFileSync(filePath, header + '\n' + pruned.join('\n') + '\n');
+  } catch {
+    // Best effort
+  }
+}
+
+export function getChannel(dirs: Dirs, channelId: string): ChannelRecord | null {
+  const header = readChannelHeader(dirs, channelId);
+  if (header) {
+    return metaHeaderToRecord(header);
+  }
+  return null;
 }
 
 export function listChannels(dirs: Dirs): ChannelRecord[] {
@@ -92,13 +231,16 @@ export function listChannels(dirs: Dirs): ChannelRecord[] {
   if (!fs.existsSync(dir)) return [];
   const items: ChannelRecord[] = [];
   for (const file of fs.readdirSync(dir)) {
-    if (!file.endsWith('.json')) continue;
+    if (!file.endsWith('.jsonl')) continue;
+    const filePath = path.join(dir, file);
     try {
-      const parsed = JSON.parse(
-        fs.readFileSync(path.join(dir, file), 'utf-8')
-      ) as Partial<ChannelRecord>;
-      const normalized = normalizeChannelRecord(parsed, path.basename(file, '.json'));
-      if (normalized) items.push(normalized);
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const firstLine = content.split('\n')[0];
+      if (!firstLine) continue;
+      const parsed = JSON.parse(firstLine) as unknown;
+      if (isMetaHeader(parsed)) {
+        items.push(metaHeaderToRecord(parsed));
+      }
     } catch {
       // Ignore malformed channel files
     }
@@ -109,8 +251,19 @@ export function listChannels(dirs: Dirs): ChannelRecord[] {
 export function writeChannel(dirs: Dirs, record: ChannelRecord): ChannelRecord {
   ensureDir(getChannelsDir(dirs));
   const filePath = channelPath(dirs, record.id);
+  const metaHeader = createMetaHeader(record);
   const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}`;
-  fs.writeFileSync(tmp, JSON.stringify(record, null, 2));
+  // Write metadata header as first line, preserving any existing events
+  let existingEvents: string[] = [];
+  if (fs.existsSync(filePath)) {
+    try {
+      existingEvents = readChannelEventLines(dirs, record.id);
+    } catch {
+      // Ignore read errors, start fresh
+    }
+  }
+  const lines = [JSON.stringify(metaHeader), ...existingEvents];
+  fs.writeFileSync(tmp, lines.join('\n') + '\n');
   fs.renameSync(tmp, filePath);
   return record;
 }

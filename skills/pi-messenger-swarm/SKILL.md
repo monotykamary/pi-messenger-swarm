@@ -165,7 +165,8 @@ Swarm data is **project-scoped by default** (isolated per project):
 
 ```
 .pi/messenger/
-├── feed.jsonl
+├── channels/
+│   └── <channel>.jsonl       # Unified format: metadata header (line 1) + feed events
 ├── swarm/
 │   ├── tasks/
 │   │   ├── task-1.json
@@ -174,6 +175,11 @@ Swarm data is **project-scoped by default** (isolated per project):
 │   └── blocks/
 └── locks/              # Race-safe coordination locks
 ```
+
+Channels use a unified JSONL format where:
+
+- Line 1: Metadata header with `_meta: true`, channel id, type, createdAt, etc.
+- Line 2+: Append-only feed events
 
 This prevents cross-project agent contamination. Agents only see other agents in the same project.
 
