@@ -455,7 +455,34 @@ export function createTask(
   return tasks.find((t) => t.id === id)!;
 }
 
+// Throttled cleanup tracking per cwd+sessionId
+const lastCleanupTime = new Map<string, number>();
+const CLEANUP_THROTTLE_MS = 5_000; // Max once per 5 seconds per session
+
+/** Reset cleanup throttle for testing */
+export function _resetCleanupThrottle(cwd?: string, sessionId?: string): void {
+  if (cwd && sessionId) {
+    lastCleanupTime.delete(`${cwd}:${sessionId}`);
+  } else {
+    lastCleanupTime.clear();
+  }
+}
+
 export function getTasks(cwd: string, sessionId: string): SwarmTask[] {
+  const key = `${cwd}:${sessionId}`;
+  const now = Date.now();
+  const lastCleanup = lastCleanupTime.get(key) ?? 0;
+
+  // Throttled cleanup of stale claims from crashed/departed agents
+  if (now - lastCleanup > CLEANUP_THROTTLE_MS) {
+    lastCleanupTime.set(key, now);
+    try {
+      cleanupStaleTaskClaims(cwd, sessionId);
+    } catch {
+      // Ignore errors - cleanup is best-effort
+    }
+  }
+
   return replayTasks(cwd, sessionId);
 }
 
