@@ -76,14 +76,6 @@ function taskSpecPath(cwd: string, sessionId: string, taskId: string): string {
   return path.join(getTaskSpecsDir(cwd, sessionId), `${taskId}.md`);
 }
 
-function getLocksDir(cwd: string): string {
-  return path.join(cwd, '.pi', 'messenger', 'locks');
-}
-
-function taskLockPath(cwd: string, taskId: string): string {
-  return path.join(getLocksDir(cwd), `${taskId}.lock`);
-}
-
 /**
  * Append a task event to the session's JSONL log.
  */
@@ -515,26 +507,6 @@ export function claimTask(
   const unmetDeps = task.depends_on.filter((dep) => !doneIds.has(dep));
   if (unmetDeps.length > 0) return null;
 
-  // Write lock file for cross-process safety
-  const lockPath = taskLockPath(cwd, taskId);
-  if (fs.existsSync(lockPath)) {
-    // Check if lock is stale
-    try {
-      const lockContent = fs.readFileSync(lockPath, 'utf-8');
-      const lock = JSON.parse(lockContent);
-      const lockAge = Date.now() - new Date(lock.since).getTime();
-      if (lockAge < 5 * 60 * 1000) {
-        // 5 min timeout
-        return null; // Lock held by another agent
-      }
-    } catch {
-      // Malformed lock, proceed anyway
-    }
-  }
-
-  ensureDir(path.dirname(lockPath));
-  fs.writeFileSync(lockPath, JSON.stringify({ agent: agentName, since: new Date().toISOString() }));
-
   // Append claim event
   appendTaskEvent(cwd, sessionId, {
     taskId,
@@ -557,11 +529,6 @@ export function unclaimTask(
   if (!task) return null;
   if (task.status !== 'in_progress') return null;
   if (task.claimed_by !== agentName) return null;
-
-  // Remove lock file
-  try {
-    fs.unlinkSync(taskLockPath(cwd, taskId));
-  } catch {}
 
   // Append release event
   appendTaskEvent(cwd, sessionId, {
@@ -634,11 +601,6 @@ export function completeTask(
   const task = getTask(cwd, sessionId, taskId);
   if (!task) return null;
 
-  // Remove lock file
-  try {
-    fs.unlinkSync(taskLockPath(cwd, taskId));
-  } catch {}
-
   appendTaskEvent(cwd, sessionId, {
     taskId,
     type: 'completed',
@@ -660,11 +622,6 @@ export function resetTask(
   if (!task) return [];
 
   const resetTasks: SwarmTask[] = [];
-
-  // Remove lock file
-  try {
-    fs.unlinkSync(taskLockPath(cwd, taskId));
-  } catch {}
 
   appendTaskEvent(cwd, sessionId, {
     taskId,
@@ -690,10 +647,6 @@ export function resetTask(
     findDependents(taskId);
 
     for (const dependentId of toReset) {
-      try {
-        fs.unlinkSync(taskLockPath(cwd, dependentId));
-      } catch {}
-
       appendTaskEvent(cwd, sessionId, {
         taskId: dependentId,
         type: 'reset',
@@ -732,11 +685,6 @@ export function archiveDoneTasks(cwd: string, sessionId: string): number {
 export function deleteTask(cwd: string, sessionId: string, taskId: string): boolean {
   const task = getTask(cwd, sessionId, taskId);
   if (!task) return false;
-
-  // Remove lock file
-  try {
-    fs.unlinkSync(taskLockPath(cwd, taskId));
-  } catch {}
 
   // Remove spec file
   try {
@@ -801,36 +749,6 @@ export function getReadyTasksForTasks(tasks: SwarmTask[]): SwarmTask[] {
   const doneIds = new Set(tasks.filter((t) => t.status === 'done').map((t) => t.id));
 
   return tasks.filter((t) => t.status === 'todo' && t.depends_on.every((dep) => doneIds.has(dep)));
-}
-
-export function cleanupStaleLocks(cwd: string, maxAgeMs: number = 5 * 60 * 1000): number {
-  const locksDir = getLocksDir(cwd);
-  if (!fs.existsSync(locksDir)) return 0;
-
-  let cleaned = 0;
-  const now = Date.now();
-
-  for (const file of fs.readdirSync(locksDir)) {
-    if (!file.endsWith('.lock')) continue;
-    const lockPath = path.join(locksDir, file);
-    try {
-      const content = fs.readFileSync(lockPath, 'utf-8');
-      const lock = JSON.parse(content);
-      const age = now - new Date(lock.since).getTime();
-      if (age > maxAgeMs) {
-        fs.unlinkSync(lockPath);
-        cleaned++;
-      }
-    } catch {
-      // Malformed lock, remove it
-      try {
-        fs.unlinkSync(lockPath);
-        cleaned++;
-      } catch {}
-    }
-  }
-
-  return cleaned;
 }
 
 /**

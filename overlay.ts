@@ -6,7 +6,7 @@ import type { Component, Focusable, TUI } from '@mariozechner/pi-tui';
 import { truncateToWidth, visibleWidth } from '@mariozechner/pi-tui';
 import type { Theme } from '@mariozechner/pi-coding-agent';
 import type { MessengerState, Dirs } from './lib.js';
-import { displayChannelLabel } from './channel.js';
+import { displayChannelLabel, getChannel } from './channel.js';
 import * as taskStore from './swarm/task-store.js';
 import { readFeedEventsByRange, type FeedEvent } from './feed.js';
 import type { SwarmTask as Task } from './swarm/types.js';
@@ -139,6 +139,17 @@ export class MessengerOverlay implements Component, Focusable {
       clearInterval(this.progressTimer);
       this.progressTimer = null;
     }
+  }
+
+  private getSessionIdForChannel(): string {
+    const channelId = this.currentChannel();
+    const channel = getChannel(this.dirs, channelId);
+    // For session channels, use the channel's sessionId where data is stored
+    if (channel?.sessionId) {
+      return channel.sessionId;
+    }
+    // Fall back to context session ID for non-session channels
+    return this.state.contextSessionId ?? '';
   }
 
   private currentChannel(): string {
@@ -336,8 +347,9 @@ export class MessengerOverlay implements Component, Focusable {
       return initialCachedRender.lines;
     }
 
-    const tasks = taskStore.getTasks(this.cwd, this.state.contextSessionId ?? '');
-    const spawned = listSpawned(this.cwd, this.state.contextSessionId ?? '');
+    const sessionId = this.getSessionIdForChannel();
+    const tasks = taskStore.getTasks(this.cwd, sessionId);
+    const spawned = listSpawned(this.cwd, sessionId);
 
     if (tasks.length === 0) {
       this.viewState.selectedTaskIndex = 0;
@@ -509,7 +521,7 @@ export class MessengerOverlay implements Component, Focusable {
           contentHeight,
           this.viewState,
           channelId,
-          this.state.contextSessionId ?? '',
+          this.getSessionIdForChannel(),
           liveWorkers
         );
       } else {

@@ -240,10 +240,13 @@ By default, swarm state is **project-scoped** (isolated per project). All channe
 │   └── session-abc/           # Task specs directory
 │       ├── task-1.md
 │       └── task-1.progress.md
-├── registry/                    # Agent registrations
+├── agents/                      # Per-session spawned agent storage
+│   ├── session-abc.jsonl      # Agent event log (spawned, completed, failed, stopped)
+│   └── session-abc/           # Agent definition files
+│       └── AgentName-id.md
+├── registry/                    # Agent registrations (joined mesh agents)
 │   ├── AgentA.json
 │   └── AgentB.json
-└── swarm.lock                   # Coordination lock file
 ```
 
 ### Unified Channel Format (Event-Sourced)
