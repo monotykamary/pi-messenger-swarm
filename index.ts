@@ -580,8 +580,8 @@ Usage (swarm-first API):
     overlayTui = null;
     if (state.registered) {
       const sessionId = state.contextSessionId ?? '';
-      const { listSpawned } = await import('./swarm/spawn.js');
-      const spawnedAgents = listSpawned(cwd, sessionId);
+      const { listSpawnedHistory } = await import('./swarm/spawn.js');
+      const spawnedAgents = listSpawnedHistory(cwd, sessionId);
       const spawnedNames = new Set(spawnedAgents.map((s) => s.name));
 
       // Get all tasks for this session
