@@ -1,7 +1,7 @@
 import { matchesKey, type TUI } from '@mariozechner/pi-tui';
 import type { Dirs, MessengerState } from '../lib.js';
 import * as taskStore from '../swarm/task-store.js';
-import { listSpawned } from '../swarm/spawn.js';
+import { listSpawned, listSpawnedHistory } from '../swarm/spawn.js';
 import type { SwarmTask as Task } from '../swarm/types.js';
 import { getFeedLineCount, readFeedEventsByRange } from '../feed.js';
 import { getEffectiveSessionId } from '../store/shared.js';
@@ -246,7 +246,7 @@ export function handleOverlayInput({
   }
 
   const tasks = taskStore.getTasks(cwd, getEffectiveSessionId(cwd, state));
-  const spawned = listSpawned(cwd, getEffectiveSessionId(cwd, state));
+  const spawned = listSpawnedHistory(cwd, getEffectiveSessionId(cwd, state));
   const task = tasks[viewState.selectedTaskIndex];
   const swarmAgent = spawned[viewState.selectedSwarmIndex];
 
