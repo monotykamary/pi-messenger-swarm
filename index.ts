@@ -548,14 +548,9 @@ Usage (swarm-first API):
     // Swarm mode intentionally disables planning/autonomous auto-overlay behavior.
   }
 
-  pi.on('session_switch', async (_event, ctx) => {
-    latestCtx = ctx;
-    syncContextSession(ctx);
-    recoverWatcherIfNeeded();
-    updateStatus(ctx);
-    maybeAutoOpenSwarmOverlay(ctx);
-  });
-  pi.on('session_fork', async (_event, ctx) => {
+  pi.on('session_start', async (event, ctx) => {
+    // Handle new, resume, and fork reasons (existing sessions), not startup/reload
+    if (event.reason === 'startup' || event.reason === 'reload') return;
     latestCtx = ctx;
     syncContextSession(ctx);
     recoverWatcherIfNeeded();
