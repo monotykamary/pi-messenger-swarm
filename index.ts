@@ -257,6 +257,12 @@ Usage (swarm-first API):
       role: Type.Optional(Type.String({ description: 'Subagent role title for spawn' })),
       persona: Type.Optional(Type.String({ description: 'Optional subagent persona' })),
       prompt: Type.Optional(Type.String({ description: 'Alias objective text for spawn' })),
+      agentFile: Type.Optional(
+        Type.String({
+          description:
+            'Path to markdown file (with YAML frontmatter) to use as system prompt for spawn',
+        })
+      ),
 
       // Coordination and utility
       limit: Type.Optional(Type.Number({ description: 'Feed line limit' })),
