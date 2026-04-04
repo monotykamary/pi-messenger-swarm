@@ -802,13 +802,6 @@ function spawnCreate(
 
   // File-based spawn mode
   if (params.agentFile) {
-    if (!message) {
-      return result('Error: spawn requires mission text via message or prompt.', {
-        mode: 'spawn',
-        error: 'missing_message',
-      });
-    }
-
     const request: SpawnRequest = {
       agentFile: params.agentFile,
       message,

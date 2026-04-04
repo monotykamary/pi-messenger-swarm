@@ -147,19 +147,26 @@ describe('agent file smoke tests', () => {
     expect(result.content[0]?.text).toContain('Error');
   });
 
-  it('returns error when message missing with agentFile', () => {
+  it('spawns with agentFile using objective from file when message not provided', () => {
     const cwd = createTempCwd();
     const sessionId = 'test-session-smoke-3';
+    const proc = new FakeProcess();
+    spawnMock.mockReturnValue(proc as any);
+
     const state = createState('TestAgent');
 
     const agentFile = path.join(cwd, 'agent.md');
-    fs.writeFileSync(agentFile, 'Content', 'utf-8');
+    fs.writeFileSync(
+      agentFile,
+      '---\nrole: FileRole\nobjective: Objective from file\n---\n\nSystem prompt content',
+      'utf-8'
+    );
 
     const result = executeSpawn(
       null,
       {
         agentFile: './agent.md',
-        // No message
+        // No message - should use objective from file
       },
       state,
       cwd,
@@ -167,7 +174,8 @@ describe('agent file smoke tests', () => {
     );
 
     expect(result.details?.mode).toBe('spawn');
-    expect(result.details?.error).toBe('missing_message');
+    expect(result.details?.error).toBeUndefined();
+    expect(result.content[0]?.text).toContain('Spawned');
   });
 
   it('traditional autoregressive spawn still works', () => {
