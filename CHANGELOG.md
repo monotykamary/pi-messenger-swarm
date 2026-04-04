@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.22.2](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.22.1...v0.22.2) (2026-04-04)
+
+
+### Bug Fixes
+
+* **overlay:** use listSpawnedHistory for swarm navigation ([4fe14dc](https://github.com/monotykamary/pi-messenger-swarm/commit/4fe14dc03f55b4eaec8593e22d61bcd41ee2da63))
+* **swarm:** use listSpawnedHistory for status counts ([03007ab](https://github.com/monotykamary/pi-messenger-swarm/commit/03007abd9040a624cee38ba5878cb1dace07549c))
+
 ### [0.22.1](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.22.0...v0.22.1) (2026-04-04)
 
 
