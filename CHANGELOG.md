@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.22.3](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.22.2...v0.22.3) (2026-04-04)
+
+
+### Features
+
+* **spawn:** add agentFile parameter to spawn tool registration ([e67df89](https://github.com/monotykamary/pi-messenger-swarm/commit/e67df89cf6c9879e53e0f5c101daa7341e481d2c))
+
+
+### Bug Fixes
+
+* **swarm:** allow spawn with agentFile only, no message required ([8ed3ad5](https://github.com/monotykamary/pi-messenger-swarm/commit/8ed3ad5e43b68341b1e625b3278f838e10529983))
+
 ### [0.22.2](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.22.1...v0.22.2) (2026-04-04)
 
 
