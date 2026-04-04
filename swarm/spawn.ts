@@ -494,7 +494,7 @@ export function spawnSubagent(
 export function listSpawned(
   cwd: string,
   sessionId: string,
-  includeAll: boolean = false
+  includeAll: boolean = true
 ): SpawnedAgent[] {
   // First, get persisted agents for this session from event log
   const persisted = loadSpawnedAgents(cwd, sessionId);

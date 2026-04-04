@@ -24,8 +24,8 @@ export function executeSwarmStatus(cwd: string, channelId: string, sessionId: st
   cleanupExitedSpawned(cwd, sessionId);
   const tasks = taskStore.getTasks(cwd, sessionId);
   const summary = taskStore.getSummary(cwd, sessionId);
-  const runningAgents = listSpawned(cwd, sessionId, false); // Only running
-  const allAgents = listSpawned(cwd, sessionId, true); // All including completed
+  const allAgents = listSpawned(cwd, sessionId); // All agents by default
+  const runningAgents = allAgents.filter((a) => a.status === 'running');
   const completedCount = allAgents.filter((a) => a.status === 'completed').length;
   const failedCount = allAgents.filter((a) => a.status === 'failed').length;
   const channelLabel = displayChannelLabel(channelId);
@@ -663,9 +663,9 @@ export function executeSpawn(
   }
 
   if (op === 'list') {
-    const items = listSpawned(cwd, sessionId, false); // Only running agents
+    const items = listSpawned(cwd, sessionId); // All agents by default
     if (items.length === 0) {
-      return result('No running spawned agents for this project.', {
+      return result('No spawned agents for this project.', {
         mode: 'spawn.list',
         agents: [],
       });
