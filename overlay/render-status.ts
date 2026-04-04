@@ -47,7 +47,7 @@ export function renderStatusBar(
 
   let line: string;
   if (summary.total === 0) {
-    line = truncateToWidth(`No swarm tasks │ ⚙ ${liveCount} live`, width);
+    line = truncateToWidth(`${_theme.fg('dim', 'No swarm tasks')} │ ⚙ ${liveCount} live`, width);
   } else {
     line = `☑ ${summary.done}/${summary.total} tasks`;
     line += ` │ ready ${ready.length}`;

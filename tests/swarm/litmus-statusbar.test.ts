@@ -33,7 +33,8 @@ describe('swarm status bar litmus', () => {
   it('shows empty-state status when no tasks exist', () => {
     const cwd = createTempCwd();
     const tasks = taskStore.getTasks(cwd, TEST_SESSION);
-    const line = renderStatusBar({} as any, cwd, 120, TEST_CHANNEL, new Map(), tasks, TEST_SESSION);
+    const mockTheme = { fg: (_color: string, text: string) => text } as any;
+    const line = renderStatusBar(mockTheme, cwd, 120, TEST_CHANNEL, new Map(), tasks, TEST_SESSION);
     expect(line).toContain('No swarm tasks');
   });
 
