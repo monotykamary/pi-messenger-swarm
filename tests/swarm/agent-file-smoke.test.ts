@@ -72,6 +72,9 @@ function createState(agentName: string): MessengerState {
     customStatus: false,
     registryFlushTimer: null,
     sessionStartedAt: new Date().toISOString(),
+    currentChannel: 'test-channel',
+    sessionChannel: 'test-channel',
+    joinedChannels: ['test-channel'],
   } as MessengerState;
 }
 

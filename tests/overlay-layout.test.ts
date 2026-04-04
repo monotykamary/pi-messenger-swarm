@@ -116,13 +116,18 @@ describe('overlay layout', () => {
       const { logFeedEvent } = await import('../feed.js');
       const { MessengerOverlay } = await import('../overlay.js');
 
-      taskStore.createTask(cwd, state.contextSessionId!, {
-        title: 'Single visible task',
-        createdBy: 'BenchAgent',
-      });
+      taskStore.createTask(
+        cwd,
+        state.contextSessionId!,
+        {
+          title: 'Single visible task',
+          createdBy: 'BenchAgent',
+        },
+        state.currentChannel
+      );
 
       for (let i = 0; i < 10; i++) {
-        logFeedEvent(cwd, 'BenchAgent', 'message', undefined, `Msg ${i}`);
+        logFeedEvent(cwd, 'BenchAgent', 'message', undefined, `Msg ${i}`, state.currentChannel);
       }
 
       const overlay = new MessengerOverlay(
@@ -159,7 +164,7 @@ describe('overlay layout', () => {
       const { MessengerOverlay } = await import('../overlay.js');
 
       for (let i = 0; i < 12; i++) {
-        logFeedEvent(cwd, 'BenchAgent', 'message', undefined, `Msg ${i}`);
+        logFeedEvent(cwd, 'BenchAgent', 'message', undefined, `Msg ${i}`, state.currentChannel);
       }
 
       const overlay = new MessengerOverlay(
@@ -181,7 +186,7 @@ describe('overlay layout', () => {
       expect(beforeMessages.length).toBeGreaterThan(0);
       expect(beforeMessages).not.toContain('Msg 11');
 
-      logFeedEvent(cwd, 'BenchAgent', 'message', undefined, 'Msg 12');
+      logFeedEvent(cwd, 'BenchAgent', 'message', undefined, 'Msg 12', state.currentChannel);
       (overlay as any).feedLineCountCache = null;
       (overlay as any).renderCache = null;
 
@@ -211,7 +216,7 @@ describe('overlay layout', () => {
       const { MessengerOverlay } = await import('../overlay.js');
 
       for (let i = 0; i < 12; i++) {
-        logFeedEvent(cwd, 'BenchAgent', 'message', undefined, `Msg ${i}`);
+        logFeedEvent(cwd, 'BenchAgent', 'message', undefined, `Msg ${i}`, state.currentChannel);
       }
 
       const overlay = new MessengerOverlay(
@@ -251,7 +256,7 @@ describe('overlay layout', () => {
       const { MessengerOverlay } = await import('../overlay.js');
 
       for (let i = 0; i < 12; i++) {
-        logFeedEvent(cwd, 'BenchAgent', 'message', undefined, `Msg ${i}`);
+        logFeedEvent(cwd, 'BenchAgent', 'message', undefined, `Msg ${i}`, state.currentChannel);
       }
 
       const overlay = new MessengerOverlay(
@@ -296,7 +301,7 @@ describe('overlay layout', () => {
       const { MessengerOverlay } = await import('../overlay.js');
 
       for (let i = 0; i < 3; i++) {
-        logFeedEvent(cwd, 'BenchAgent', 'message', undefined, `Msg ${i}`);
+        logFeedEvent(cwd, 'BenchAgent', 'message', undefined, `Msg ${i}`, state.currentChannel);
       }
 
       const overlay = new MessengerOverlay(
@@ -310,7 +315,7 @@ describe('overlay layout', () => {
 
       expect(extractVisibleMessages(overlay.render(100))).toContain('Msg 2');
 
-      logFeedEvent(cwd, 'BenchAgent', 'message', undefined, 'Msg 3');
+      logFeedEvent(cwd, 'BenchAgent', 'message', undefined, 'Msg 3', state.currentChannel);
       await sleep(120);
 
       const frame = overlay.render(100);
