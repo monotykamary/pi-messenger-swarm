@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.19.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.18.2...v0.19.0) (2026-04-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* **swarm:** Tasks now stored in tasks/<sessionId>.jsonl instead of
+tasks/<channel>/<id>.json. Task IDs are now per-session sequential.
+* **spawn:** spawnSubagent() now requires sessionId parameter
+
+- Remove 60-second auto-cleanup of spawned agents
+- Add event-sourced JSONL persistence (.pi/messenger/spawned/<session>.jsonl)
+- Auto-generate reusable agent files (.pi/messenger/agents/<session>/<name>-<id>.md)
+- Add session-scoping for spawned agents
+- Add getAgentEventHistory() for audit trail
+- Update all callers to pass sessionId
+- Update tests for new persistence model
+* session_switch and session_fork events removed in pi 0.65.0
+
+### Features
+
+* generate agent file immediately on spawn ([eab9630](https://github.com/monotykamary/pi-messenger-swarm/commit/eab96303fbd7691b44854ce6d0742c42c0fe5fec))
+* **spawn:** persist spawned agents to disk with event-sourced JSONL ([c8695cf](https://github.com/monotykamary/pi-messenger-swarm/commit/c8695cf6fa94060cb418528e337e61be050171d5))
+
+
+### Bug Fixes
+
+* **overlay:** update task detail view for event-sourced tasks ([c9e13bf](https://github.com/monotykamary/pi-messenger-swarm/commit/c9e13bf69435a400e0f04c6c2782386383e9293d))
+* remove call to deleted processAllPendingMessages function ([e853bba](https://github.com/monotykamary/pi-messenger-swarm/commit/e853bbae7b5e72dd3c3ddcd1bea4b8bf7c8e99fe))
+* resolve type errors and restore deleted handler functions ([f627fc5](https://github.com/monotykamary/pi-messenger-swarm/commit/f627fc51b271075bdda1b0abc5085d7f34bfa95d))
+* update remaining overlays and tests for event-sourced tasks ([cbe646f](https://github.com/monotykamary/pi-messenger-swarm/commit/cbe646f509638286d6439253fd135ad635e831f3))
+
+
+* migrate session events to new API ([2e478c9](https://github.com/monotykamary/pi-messenger-swarm/commit/2e478c9d7be47b1f0b88de4743dde4e80e44770e))
+* **swarm:** event-source tasks and consolidate agent storage ([c8b947e](https://github.com/monotykamary/pi-messenger-swarm/commit/c8b947e0d1977a5d33752797ec9897563144b0d9))
+
 ### [0.18.2](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.18.1...v0.18.2) (2026-04-03)
 
 ### [0.18.1](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.18.0...v0.18.1) (2026-04-02)
