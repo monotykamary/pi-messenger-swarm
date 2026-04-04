@@ -46,7 +46,7 @@ import {
   type CompletionStateCache,
 } from './overlay/notifications.js';
 import { getLiveWorkers, hasLiveWorkers, onLiveWorkersChanged } from './swarm/live-progress.js';
-import { listSpawned } from './swarm/spawn.js';
+import { listSpawned, listSpawnedHistory } from './swarm/spawn.js';
 import { loadConfig } from './config.js';
 import { calculateVisibleRange, calculateWindowForOlderLoad } from './feed-scroll.js';
 
@@ -343,7 +343,7 @@ export class MessengerOverlay implements Component, Focusable {
 
     const sessionId = this.getSessionIdForChannel();
     const tasks = taskStore.getTasks(this.cwd, sessionId);
-    const spawned = listSpawned(this.cwd, sessionId);
+    const spawned = listSpawnedHistory(this.cwd, sessionId);
 
     if (tasks.length === 0) {
       this.viewState.selectedTaskIndex = 0;
