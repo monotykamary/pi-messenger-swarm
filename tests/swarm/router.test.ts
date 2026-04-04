@@ -311,7 +311,7 @@ describe('swarm router', () => {
       () => {},
       () => {}
     );
-    expect(res.content[0]?.text).toContain('No spawned agents');
+    expect(res.content[0]?.text).toContain('No running spawned agents');
   });
 
   it('requires explicit send targets and rejects broadcast', async () => {

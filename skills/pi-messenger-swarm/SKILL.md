@@ -112,7 +112,8 @@ The body after `---` becomes the system prompt.
 Manage spawned agents:
 
 ```typescript
-pi_messenger({ action: 'spawn.list' });
+pi_messenger({ action: 'spawn.list' }); // Only shows running agents
+pi_messenger({ action: 'spawn.history' }); // Shows all agents including completed/failed/stopped
 pi_messenger({ action: 'spawn.stop', id: '<spawn-id>' });
 ```
 
@@ -126,6 +127,8 @@ pi_messenger({
   message: 'Claimed task-4, touching src/auth/session.ts',
 });
 ```
+
+⚠️ **Warning when messaging completed agents**: If you try to send a message to a spawned subagent that has already completed, failed, or stopped, you'll receive a warning. The message is still logged to the feed, but the agent process is no longer active. Use `pi_messenger({ action: "spawn.history" })` to see which agents are still running.
 
 ## Swarm Philosophy
 

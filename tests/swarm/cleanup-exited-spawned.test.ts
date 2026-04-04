@@ -29,6 +29,7 @@ vi.mock('../../swarm/live-progress.js', () => ({
 import {
   spawnSubagent,
   listSpawned,
+  listSpawnedHistory,
   cleanupExitedSpawned,
   clearSpawnStateForTests,
   getAgentEventHistory,
@@ -110,11 +111,14 @@ describe('cleanupExitedSpawned with event-sourced persistence', () => {
     proc.exitCode = 0;
     proc.emit('close', 0);
 
-    // Agent persisted as completed
-    const agents = listSpawned(cwd, sessionId);
+    // Agent persisted as completed - use listSpawned with includeAll=true
+    const agents = listSpawned(cwd, sessionId, true);
     expect(agents).toHaveLength(1);
     expect(agents[0]?.status).toBe('completed');
     expect(agents[0]?.endedAt).toBeDefined();
+
+    // By default, listSpawned only returns running agents (should be 0 now)
+    expect(listSpawned(cwd, sessionId)).toHaveLength(0);
 
     // Check event log now has both events
     const updatedEvents = fs.readFileSync(jsonlPath, 'utf-8').trim().split('\n').filter(Boolean);
@@ -148,9 +152,12 @@ describe('cleanupExitedSpawned with event-sourced persistence', () => {
     proc.signalCode = 'SIGTERM';
     proc.emit('close', null, 'SIGTERM');
 
-    const agents = listSpawned(cwd, sessionId);
+    const agents = listSpawned(cwd, sessionId, true);
     expect(agents).toHaveLength(1);
     expect(agents[0]?.status).toBe('stopped');
+
+    // By default, listSpawned only returns running agents
+    expect(listSpawned(cwd, sessionId)).toHaveLength(0);
 
     cleanupTempDir(cwd);
   });
@@ -176,10 +183,13 @@ describe('cleanupExitedSpawned with event-sourced persistence', () => {
     proc.signalCode = null;
     proc.emit('close', 1);
 
-    const agents = listSpawned(cwd, sessionId);
+    const agents = listSpawned(cwd, sessionId, true);
     expect(agents).toHaveLength(1);
     expect(agents[0]?.status).toBe('failed');
     expect(agents[0]?.exitCode).toBe(1);
+
+    // By default, listSpawned only returns running agents
+    expect(listSpawned(cwd, sessionId)).toHaveLength(0);
 
     cleanupTempDir(cwd);
   });
@@ -225,8 +235,10 @@ describe('cleanupExitedSpawned with event-sourced persistence', () => {
     const finalized = cleanupExitedSpawned(cwd, sessionId);
 
     expect(finalized).toBe(0); // Already persisted by close handler
-    // Both still persisted
-    expect(listSpawned(cwd, sessionId)).toHaveLength(2);
+    // Both still persisted - use includeAll=true to see completed agents
+    expect(listSpawned(cwd, sessionId, true)).toHaveLength(2);
+    // By default, no running agents shown
+    expect(listSpawned(cwd, sessionId)).toHaveLength(0);
 
     cleanupTempDir(cwd);
   });
@@ -260,7 +272,7 @@ describe('cleanupExitedSpawned with event-sourced persistence', () => {
       session2
     );
 
-    // Each session should only see its own agents
+    // Each session should only see its own agents (running)
     expect(listSpawned(cwd, session1)).toHaveLength(1);
     expect(listSpawned(cwd, session2)).toHaveLength(1);
     expect(listSpawned(cwd, session1)[0]?.name).toBe('SessionBot1');
@@ -276,8 +288,9 @@ describe('cleanupExitedSpawned with event-sourced persistence', () => {
     vi.advanceTimersByTime(100);
     cleanupExitedSpawned(cwd, session1);
 
-    // Session 1 sees completed agent, session 2 still has running agent
-    expect(listSpawned(cwd, session1)[0]?.status).toBe('completed');
+    // Session 1 sees completed agent with includeAll=true, session 2 still has running agent
+    expect(listSpawned(cwd, session1, true)[0]?.status).toBe('completed');
+    expect(listSpawned(cwd, session1)).toHaveLength(0); // No running agents in session1
     expect(listSpawned(cwd, session2)[0]?.status).toBe('running');
 
     cleanupTempDir(cwd);
@@ -346,11 +359,14 @@ describe('cleanupExitedSpawned with event-sourced persistence', () => {
     // Clear in-memory state
     clearSpawnStateForTests();
 
-    // Should still be able to load from JSONL
-    const agents = listSpawned(cwd, sessionId);
+    // Should still be able to load from JSONL - use includeAll=true for completed agents
+    const agents = listSpawned(cwd, sessionId, true);
     expect(agents).toHaveLength(1);
     expect(agents[0]?.name).toBe('ReloadBot');
     expect(agents[0]?.status).toBe('completed');
+
+    // By default, no running agents shown
+    expect(listSpawned(cwd, sessionId)).toHaveLength(0);
 
     cleanupTempDir(cwd);
   });

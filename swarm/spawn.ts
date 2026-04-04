@@ -491,7 +491,11 @@ export function spawnSubagent(
   return record;
 }
 
-export function listSpawned(cwd: string, sessionId: string): SpawnedAgent[] {
+export function listSpawned(
+  cwd: string,
+  sessionId: string,
+  includeAll: boolean = false
+): SpawnedAgent[] {
   // First, get persisted agents for this session from event log
   const persisted = loadSpawnedAgents(cwd, sessionId);
   const persistedById = new Map(persisted.map((a) => [a.id, a]));
@@ -503,9 +507,33 @@ export function listSpawned(cwd: string, sessionId: string): SpawnedAgent[] {
     persistedById.set(id, runtime.record);
   }
 
-  return Array.from(persistedById.values()).sort(
-    (a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt)
-  );
+  let agents = Array.from(persistedById.values());
+
+  // Filter to only running agents by default
+  if (!includeAll) {
+    agents = agents.filter((a) => a.status === 'running');
+  }
+
+  return agents.sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
+}
+
+/**
+ * Get all spawned agents including completed/failed/stopped (history view).
+ */
+export function listSpawnedHistory(cwd: string, sessionId: string): SpawnedAgent[] {
+  return listSpawned(cwd, sessionId, true);
+}
+
+/**
+ * Find a spawned agent by name (including non-running agents).
+ */
+export function findSpawnedAgentByName(
+  cwd: string,
+  sessionId: string,
+  name: string
+): SpawnedAgent | null {
+  const allAgents = listSpawnedHistory(cwd, sessionId);
+  return allAgents.find((a) => a.name === name) ?? null;
 }
 
 export function stopSpawn(cwd: string, id: string): boolean {

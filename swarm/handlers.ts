@@ -4,7 +4,13 @@ import { displayChannelLabel, normalizeChannelId } from '../channel.js';
 import { result } from './result.js';
 import { logFeedEvent } from '../feed.js';
 import * as taskStore from './task-store.js';
-import { cleanupExitedSpawned, listSpawned, spawnSubagent, stopSpawn } from './spawn.js';
+import {
+  cleanupExitedSpawned,
+  listSpawned,
+  listSpawnedHistory,
+  spawnSubagent,
+  stopSpawn,
+} from './spawn.js';
 import type { SpawnRequest, SwarmTaskEvidence } from './types.js';
 import { formatRoleLabel } from './labels.js';
 import { executeTaskAction } from './task-actions.js';
@@ -18,20 +24,28 @@ export function executeSwarmStatus(cwd: string, channelId: string, sessionId: st
   cleanupExitedSpawned(cwd, sessionId);
   const tasks = taskStore.getTasks(cwd, sessionId);
   const summary = taskStore.getSummary(cwd, sessionId);
-  const spawned = listSpawned(cwd, sessionId);
+  const runningAgents = listSpawned(cwd, sessionId, false); // Only running
+  const allAgents = listSpawned(cwd, sessionId, true); // All including completed
+  const completedCount = allAgents.filter((a) => a.status === 'completed').length;
+  const failedCount = allAgents.filter((a) => a.status === 'failed').length;
   const channelLabel = displayChannelLabel(channelId);
 
-  if (tasks.length === 0) {
-    return result(
-      `# Agent Swarm ${channelLabel}\n\nNo tasks yet.\n\nCreate one:\n  pi_messenger({ action: "task.create", title: "...", content: "..." })\n\nSpawn a subagent:\n  pi_messenger({ action: "spawn", role: "Researcher", message: "Investigate ..." })`,
-      {
-        mode: 'swarm',
-        channel: normalizeChannelId(channelId),
-        summary,
-        tasks: [],
-        spawned,
-      }
-    );
+  if (tasks.length === 0 && runningAgents.length === 0) {
+    let text = `# Agent Swarm ${channelLabel}\n\nNo tasks yet.`;
+    if (completedCount > 0 || failedCount > 0) {
+      text += `\n\n${completedCount} completed, ${failedCount} failed agents in history.`;
+    }
+    text += `\n\nCreate one:\n  pi_messenger({ action: "task.create", title: "...", content: "..." })\n\nSpawn a subagent:\n  pi_messenger({ action: "spawn", role: "Researcher", message: "Investigate ..." })`;
+    if (completedCount > 0 || failedCount > 0) {
+      text += `\n\nView history:\n  pi_messenger({ action: "spawn.history" })`;
+    }
+    return result(text, {
+      mode: 'swarm',
+      channel: normalizeChannelId(channelId),
+      summary,
+      tasks: [],
+      spawned: runningAgents,
+    });
   }
 
   const lines: string[] = [
@@ -41,14 +55,21 @@ export function executeSwarmStatus(cwd: string, channelId: string, sessionId: st
     '',
   ];
 
-  if (spawned.length > 0) {
-    lines.push('## Spawned Agents');
-    for (const agent of spawned.slice(0, 8)) {
+  if (runningAgents.length > 0) {
+    lines.push('## Running Agents');
+    for (const agent of runningAgents.slice(0, 8)) {
       const suffix = agent.taskId ? ` → ${agent.taskId}` : '';
       lines.push(
         `- ${agent.id} · ${agent.name} (${formatRoleLabel(agent.role)}) · ${agent.status}${suffix}`
       );
     }
+    lines.push('');
+  }
+
+  if (completedCount > 0 || failedCount > 0) {
+    lines.push(`## Agent History`);
+    lines.push(`- ${completedCount} completed · ${failedCount} failed`);
+    lines.push(`- View: pi_messenger({ action: "spawn.history" })`);
     lines.push('');
   }
 
@@ -72,7 +93,7 @@ export function executeSwarmStatus(cwd: string, channelId: string, sessionId: st
     channel: normalizeChannelId(channelId),
     summary,
     tasks,
-    spawned,
+    spawned: runningAgents,
   });
 }
 
@@ -642,23 +663,101 @@ export function executeSpawn(
   }
 
   if (op === 'list') {
-    const items = listSpawned(cwd, sessionId);
+    const items = listSpawned(cwd, sessionId, false); // Only running agents
     if (items.length === 0) {
-      return result('No spawned agents for this project.', { mode: 'spawn.list', agents: [] });
+      return result('No running spawned agents for this project.', {
+        mode: 'spawn.list',
+        agents: [],
+      });
     }
 
     const lines = [
-      '# Spawned Agents',
+      '# Running Spawned Agents',
       '',
       ...items.map((agent) => {
         const tail = agent.taskId ? ` → ${agent.taskId}` : '';
         return `- ${agent.id}: ${agent.name} (${formatRoleLabel(agent.role)}) · ${agent.status}${tail}`;
       }),
+      '',
+      `Use pi_messenger({ action: "spawn.history" }) to see all agents including completed.`,
     ];
 
     return result(lines.join('\n'), {
       mode: 'spawn.list',
       agents: items,
+    });
+  }
+
+  if (op === 'history') {
+    const items = listSpawnedHistory(cwd, sessionId); // All agents including completed
+    const running = items.filter((a) => a.status === 'running');
+    const completed = items.filter((a) => a.status === 'completed');
+    const failed = items.filter((a) => a.status === 'failed');
+    const stopped = items.filter((a) => a.status === 'stopped');
+
+    if (items.length === 0) {
+      return result('No spawned agents for this project.', { mode: 'spawn.history', agents: [] });
+    }
+
+    const lines: string[] = ['# Spawned Agent History', ''];
+
+    if (running.length > 0) {
+      lines.push('## Running');
+      for (const agent of running.slice(0, 8)) {
+        const tail = agent.taskId ? ` → ${agent.taskId}` : '';
+        lines.push(`- ${agent.id}: ${agent.name} (${formatRoleLabel(agent.role)})${tail}`);
+      }
+      lines.push('');
+    }
+
+    if (completed.length > 0) {
+      lines.push(`## Completed (${completed.length})`);
+      for (const agent of completed.slice(0, 10)) {
+        const ended = agent.endedAt
+          ? ` · ended ${new Date(agent.endedAt).toLocaleTimeString()}`
+          : '';
+        const tail = agent.taskId ? ` → ${agent.taskId}` : '';
+        lines.push(`- ${agent.id}: ${agent.name} (${formatRoleLabel(agent.role)})${tail}${ended}`);
+      }
+      if (completed.length > 10) {
+        lines.push(`... and ${completed.length - 10} more`);
+      }
+      lines.push('');
+    }
+
+    if (failed.length > 0) {
+      lines.push(`## Failed (${failed.length})`);
+      for (const agent of failed.slice(0, 5)) {
+        const ended = agent.endedAt
+          ? ` · ended ${new Date(agent.endedAt).toLocaleTimeString()}`
+          : '';
+        const tail = agent.taskId ? ` → ${agent.taskId}` : '';
+        lines.push(`- ${agent.id}: ${agent.name} (${formatRoleLabel(agent.role)})${tail}${ended}`);
+      }
+      lines.push('');
+    }
+
+    if (stopped.length > 0) {
+      lines.push(`## Stopped (${stopped.length})`);
+      for (const agent of stopped.slice(0, 5)) {
+        const ended = agent.endedAt
+          ? ` · ended ${new Date(agent.endedAt).toLocaleTimeString()}`
+          : '';
+        const tail = agent.taskId ? ` → ${agent.taskId}` : '';
+        lines.push(`- ${agent.id}: ${agent.name} (${formatRoleLabel(agent.role)})${tail}${ended}`);
+      }
+      lines.push('');
+    }
+
+    return result(lines.join('\n'), {
+      mode: 'spawn.history',
+      agents: items,
+      counts: {
+        running: running.length,
+        completed: completed.length,
+        failed: failed.length,
+        stopped: stopped.length,
+      },
     });
   }
 

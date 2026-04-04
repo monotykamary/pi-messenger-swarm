@@ -21,6 +21,8 @@ import {
 import { displayChannelLabel, normalizeChannelId } from '../channel.js';
 import * as store from '../store.js';
 import * as taskStore from '../swarm/task-store.js';
+import { findSpawnedAgentByName } from '../swarm/spawn.js';
+import { getContextSessionId } from '../store/shared.js';
 import {
   formatFeedLine,
   isSwarmEvent,
@@ -620,6 +622,23 @@ export function executeSend(
   const isChannelTarget = typeof to === 'string' && to.startsWith('#');
   const targetChannel = isChannelTarget ? normalizeChannelId(to) : channel || state.currentChannel;
 
+  // Check if targeting a completed/failed/stopped spawned agent
+  let spawnWarning = '';
+  if (typeof to === 'string' && !isChannelTarget) {
+    const sessionId = getContextSessionId({ cwd } as ExtensionContext);
+    const spawnedAgent = findSpawnedAgentByName(cwd, sessionId, to);
+    if (spawnedAgent && spawnedAgent.status !== 'running') {
+      const statusEmoji =
+        spawnedAgent.status === 'completed' ? '✅' : spawnedAgent.status === 'failed' ? '❌' : '🛑';
+      spawnWarning = `\n\n⚠️ Warning: ${to} is a spawned agent that has already ${spawnedAgent.status} ${statusEmoji}. The message will be logged to the feed, but the agent process is no longer active.`;
+      if (spawnedAgent.status === 'completed') {
+        spawnWarning += `\n   If you need to continue the work, consider spawning a new agent.`;
+      } else if (spawnedAgent.status === 'failed') {
+        spawnWarning += `\n   The agent failed with errors. Review the task and consider respawning.`;
+      }
+    }
+  }
+
   // All messaging is now feed-based
   logFeedEvent(
     cwd,
@@ -633,12 +652,17 @@ export function executeSend(
   const targetLabel = typeof to === 'string' ? to : 'multiple recipients';
   const channelLabel = displayChannelLabel(targetChannel);
   // If the target is already a channel reference, just say "posted to #channel"
-  const text = isChannelTarget
+  let text = isChannelTarget
     ? `Message posted to ${targetLabel}.`
     : `Message posted to ${targetLabel} on ${channelLabel}.`;
+
+  // Append warning if targeting a completed/failed/stopped agent
+  text += spawnWarning;
+
   return result(text, {
     mode: 'send',
     channel: targetChannel,
     to: typeof to === 'string' ? to : undefined,
+    warning: spawnWarning ? 'target_agent_completed' : undefined,
   });
 }
