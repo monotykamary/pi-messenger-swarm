@@ -565,7 +565,6 @@ Usage (swarm-first API):
   pi.on('turn_end', async (event, ctx) => {
     latestCtx = ctx;
     syncContextSession(ctx);
-    store.processAllPendingMessages(state, dirs, deliverMessage);
     recoverWatcherIfNeeded();
     updateStatus(ctx);
 
