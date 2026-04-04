@@ -255,6 +255,10 @@ describe('swarm/task-cleanup-throttle', () => {
 
     // Create registry path that will cause errors (file instead of directory)
     const registryDir = path.join(dirs.cwd, '.pi', 'messenger', 'registry');
+    // Remove if exists as dir, then create as file to cause errors
+    try {
+      fs.rmSync(registryDir, { recursive: true, force: true });
+    } catch {}
     fs.mkdirSync(path.dirname(registryDir), { recursive: true });
     fs.writeFileSync(registryDir, 'not a directory'); // Make it a file to cause errors
 

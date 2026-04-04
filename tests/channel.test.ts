@@ -17,10 +17,8 @@ function createTempCwd(): string {
 function createDirs(cwd: string): Dirs {
   const base = path.join(cwd, '.pi', 'messenger');
   const registry = path.join(base, 'registry');
-  const inbox = path.join(base, 'inbox');
   fs.mkdirSync(registry, { recursive: true });
-  fs.mkdirSync(inbox, { recursive: true });
-  return { base, registry, inbox };
+  return { base, registry };
 }
 
 function createState(agentName: string): MessengerState {

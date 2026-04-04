@@ -55,7 +55,7 @@ function makeState(): MessengerState {
 }
 
 function makeDirs(): Dirs {
-  return { base: '/tmp', registry: '/tmp/reg', inbox: '/tmp/inbox' } as Dirs;
+  return { base: '/tmp', registry: '/tmp/reg' };
 }
 
 function makeTui(): TUI {

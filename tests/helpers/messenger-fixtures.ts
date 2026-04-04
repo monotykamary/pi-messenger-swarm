@@ -20,11 +20,9 @@ export function createMessengerFixture(prefix = 'pi-messenger-fixture-'): Messen
   const dirs: Dirs = {
     base,
     registry: path.join(base, 'registry'),
-    inbox: path.join(base, 'inbox'),
   };
 
   fs.mkdirSync(dirs.registry, { recursive: true });
-  fs.mkdirSync(dirs.inbox, { recursive: true });
 
   return { cwd, dirs };
 }

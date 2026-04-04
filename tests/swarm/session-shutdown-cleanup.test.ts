@@ -378,9 +378,7 @@ describe('swarm/session-shutdown-cleanup', () => {
 
     // Create messenger directories structure
     const registryDir = path.join(dirs.cwd, '.pi', 'messenger', 'registry');
-    const inboxDir = path.join(dirs.cwd, '.pi', 'messenger', 'inbox');
     fs.mkdirSync(registryDir, { recursive: true });
-    fs.mkdirSync(path.join(inboxDir, agentName), { recursive: true });
 
     // Create registration file for the leaving agent with reservations
     const leavingRegPath = path.join(registryDir, `${agentName}.json`);
@@ -430,7 +428,6 @@ describe('swarm/session-shutdown-cleanup', () => {
     const mockDirs: Dirs = {
       base: path.join(dirs.cwd, '.pi', 'messenger'),
       registry: registryDir,
-      inbox: inboxDir,
     };
 
     // Call unregister (simulating session_shutdown)

@@ -64,7 +64,6 @@ function createMockDirs(baseDir: string): Dirs {
   return {
     base: baseDir,
     registry: path.join(baseDir, 'registry'),
-    inbox: path.join(baseDir, 'inbox'),
   };
 }
 
@@ -134,48 +133,39 @@ describe('Project Isolation', () => {
       }
     });
 
-    it('should isolate messages between projects', async () => {
+    it('should isolate feed events between projects', async () => {
       const projectA = createTempDir('projectA');
       const projectB = createTempDir('projectB');
 
       try {
-        const dirsA = createMockDirs(path.join(projectA, '.pi', 'messenger'));
-        const dirsB = createMockDirs(path.join(projectB, '.pi', 'messenger'));
+        const channelA = path.join(projectA, '.pi', 'messenger', 'channels', 'general.jsonl');
+        const channelB = path.join(projectB, '.pi', 'messenger', 'channels', 'general.jsonl');
 
-        fs.mkdirSync(dirsA.inbox, { recursive: true });
-        fs.mkdirSync(dirsB.inbox, { recursive: true });
+        // Ensure directories exist
+        fs.mkdirSync(path.dirname(channelA), { recursive: true });
+        fs.mkdirSync(path.dirname(channelB), { recursive: true });
 
-        // Create inbox for AgentA in project A
-        const inboxA = path.join(dirsA.inbox, 'AgentA');
-        fs.mkdirSync(inboxA, { recursive: true });
+        // Write unified channel file in project A with metadata header + event
+        const metaHeader = JSON.stringify({
+          _meta: true,
+          v: 1,
+          id: 'general',
+          type: 'named',
+          createdAt: new Date().toISOString(),
+        });
+        const event = JSON.stringify({
+          type: 'task.create',
+          agent: 'AgentA',
+          ts: new Date().toISOString(),
+        });
+        fs.writeFileSync(channelA, metaHeader + '\n' + event + '\n');
 
-        // Create inbox for AgentB in project B
-        const inboxB = path.join(dirsB.inbox, 'AgentB');
-        fs.mkdirSync(inboxB, { recursive: true });
+        // Verify event in project A
+        const contentA = fs.readFileSync(channelA, 'utf-8');
+        expect(contentA).toContain('task.create');
 
-        // Write a message to AgentA's inbox in project A
-        const message = {
-          id: 'msg-1',
-          from: 'OtherAgent',
-          to: 'AgentA',
-          text: 'Hello from project A',
-          timestamp: new Date().toISOString(),
-          replyTo: null,
-        };
-
-        fs.writeFileSync(path.join(inboxA, 'msg-1.json'), JSON.stringify(message));
-
-        // Verify AgentA's inbox has the message
-        const messagesInA = fs.readdirSync(inboxA);
-        expect(messagesInA).toContain('msg-1.json');
-
-        // Verify AgentB's inbox in project B is empty
-        const messagesInB = fs.readdirSync(inboxB);
-        expect(messagesInB).toHaveLength(0);
-
-        // The key test: message in project A never reached project B
-        const inboxBHasMessage = fs.existsSync(path.join(inboxB, 'msg-1.json'));
-        expect(inboxBHasMessage).toBe(false);
+        // Verify project B channel is empty (or doesn't exist)
+        expect(fs.existsSync(channelB)).toBe(false);
       } finally {
         cleanupTempDir(projectA);
         cleanupTempDir(projectB);
@@ -187,36 +177,33 @@ describe('Project Isolation', () => {
       const projectB = createTempDir('projectB');
 
       try {
-        // Create separate task stores
-        const tasksDirA = path.join(projectA, '.pi', 'messenger', 'swarm', 'tasks');
-        const tasksDirB = path.join(projectB, '.pi', 'messenger', 'swarm', 'tasks');
+        // Create tasks directories for each project
+        const tasksDirA = path.join(projectA, '.pi', 'messenger', 'tasks');
+        const tasksDirB = path.join(projectB, '.pi', 'messenger', 'tasks');
 
         fs.mkdirSync(tasksDirA, { recursive: true });
         fs.mkdirSync(tasksDirB, { recursive: true });
 
-        // Create a task in project A
-        const taskA = {
-          id: 'task-1',
-          title: 'Task in Project A',
-          status: 'todo',
-          depends_on: [],
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          created_by: 'AgentA',
+        // Create a task event log in project A using the unified format
+        const sessionId = 'test-session-a';
+        const tasksFileA = path.join(tasksDirA, `${sessionId}.jsonl`);
+        const taskEvent = {
+          type: 'created',
+          taskId: 'task-1',
+          timestamp: new Date().toISOString(),
+          payload: {
+            title: 'Task in Project A',
+            description: '',
+          },
         };
-
-        fs.writeFileSync(path.join(tasksDirA, 'task-1.json'), JSON.stringify(taskA, null, 2));
+        fs.writeFileSync(tasksFileA, JSON.stringify(taskEvent) + '\n');
 
         // Verify task exists in project A
-        const tasksInA = fs.readdirSync(tasksDirA);
-        expect(tasksInA).toContain('task-1.json');
+        expect(fs.existsSync(tasksFileA)).toBe(true);
 
-        // Verify task does NOT exist in project B
-        const tasksInB = fs.readdirSync(tasksDirB);
-        expect(tasksInB).not.toContain('task-1.json');
-
-        // An agent in project B cannot see or claim this task
-        // because the task store is project-scoped
+        // Verify no task file in project B
+        const tasksFileB = path.join(tasksDirB, `${sessionId}.jsonl`);
+        expect(fs.existsSync(tasksFileB)).toBe(false);
       } finally {
         cleanupTempDir(projectA);
         cleanupTempDir(projectB);

@@ -45,7 +45,6 @@ function makeDirs(cwd: string): Dirs {
   return {
     base: path.join(cwd, '.pi', 'messenger'),
     registry: path.join(cwd, '.pi', 'messenger', 'registry'),
-    inbox: path.join(cwd, '.pi', 'messenger', 'inbox'),
   };
 }
 
