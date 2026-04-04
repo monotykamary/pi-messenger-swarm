@@ -446,6 +446,9 @@ export function spawnSubagent(
     agent: { ...record },
   });
 
+  // Generate initial agent file (will be updated on exit)
+  generateAgentFile(cwd, sessionId, record);
+
   const env = {
     ...process.env,
     PI_AGENT_NAME: name,

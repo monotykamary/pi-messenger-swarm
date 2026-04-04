@@ -161,4 +161,52 @@ describe('swarm spawn with agentFile', () => {
 
     proc.emit('close', 0);
   });
+
+  it('generates agent file immediately on spawn', () => {
+    const cwd = createTempCwd();
+    const sessionId = 'test-session-generate-on-spawn';
+    const proc = new FakeProcess();
+    spawnMock.mockReturnValue(proc as any);
+
+    const agent = spawnSubagent(
+      cwd,
+      {
+        role: 'Researcher',
+        persona: 'Curious and thorough',
+        objective: 'Investigate the codebase',
+        message: 'Find all TODO comments',
+      },
+      sessionId
+    );
+
+    // Agent file should exist immediately (before process exits)
+    const agentFilePath = path.join(
+      cwd,
+      '.pi',
+      'messenger',
+      'agents',
+      sessionId,
+      `${agent.name}-${agent.id}.md`
+    );
+    expect(fs.existsSync(agentFilePath)).toBe(true);
+
+    // File should contain initial state with status: running
+    const content = fs.readFileSync(agentFilePath, 'utf-8');
+    expect(content).toContain('status: running');
+    expect(content).toContain('role: Researcher');
+    expect(content).toContain('persona: Curious and thorough');
+    expect(content).toContain('Investigate the codebase');
+
+    // File should NOT contain ended or exitCode yet (agent still running)
+    expect(content).not.toContain('ended:');
+    expect(content).not.toContain('exitCode:');
+
+    // Now close the process and verify file is updated
+    proc.emit('close', 0);
+
+    const finalContent = fs.readFileSync(agentFilePath, 'utf-8');
+    expect(finalContent).toContain('status: completed');
+    expect(finalContent).toContain('ended:');
+    expect(finalContent).toContain('exitCode: 0');
+  });
 });
