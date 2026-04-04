@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.20.3](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.20.2...v0.20.3) (2026-04-04)
+
+
+### Features
+
+* **swarm:** filter running agents by default, add spawn.history and messaging warnings ([0fb1a9e](https://github.com/monotykamary/pi-messenger-swarm/commit/0fb1a9e90a0472456677dbc349c5ebabe70a191c))
+
+
+### Bug Fixes
+
+* **swarm:** use listSpawnedHistory in session shutdown to unclaim all spawned agent tasks ([212cd05](https://github.com/monotykamary/pi-messenger-swarm/commit/212cd052e2f558f9f1f0b39c9d04b35c204e2c3c))
+
 ### [0.20.2](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.20.1...v0.20.2) (2026-04-04)
 
 ### [0.20.1](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.20.0...v0.20.1) (2026-04-04)
