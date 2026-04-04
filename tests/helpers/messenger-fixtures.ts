@@ -56,7 +56,7 @@ export function createState(
     customStatus: false,
     registryFlushTimer: null,
     sessionStartedAt: new Date().toISOString(),
-    contextSessionId: undefined,
+    contextSessionId: overrides.contextSessionId ?? 'test-session-default',
     currentChannel: 'general',
     sessionChannel: 'general',
     joinedChannels: ['general', 'memory'],
