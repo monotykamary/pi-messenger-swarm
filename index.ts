@@ -621,7 +621,7 @@ Usage (swarm-first API):
         }
       }
       const { listSpawned } = await import('./swarm/spawn.js');
-      const spawnedAgents = listSpawned(cwd);
+      const spawnedAgents = listSpawned(cwd, state.contextSessionId ?? '');
       const spawnedNames = new Set(spawnedAgents.map((s) => s.name));
       for (const channel of channels) {
         const spawnedClaimedTasks = swarmStore

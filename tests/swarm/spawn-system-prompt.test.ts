@@ -1,32 +1,32 @@
-import * as fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
-import { EventEmitter } from "node:events";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { EventEmitter } from 'node:events';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const spawnMock = vi.hoisted(() => vi.fn());
 
-vi.mock("node:child_process", () => ({
+vi.mock('node:child_process', () => ({
   spawn: spawnMock,
 }));
 
-vi.mock("../../swarm/progress.js", () => ({
+vi.mock('../../swarm/progress.js', () => ({
   createProgress: () => ({
     tokens: 0,
     toolCallCount: 0,
     recentTools: [],
-    status: "running",
+    status: 'running',
   }),
   parseJsonlLine: () => null,
   updateProgress: () => {},
 }));
 
-vi.mock("../../swarm/live-progress.js", () => ({
+vi.mock('../../swarm/live-progress.js', () => ({
   removeLiveWorker: () => {},
   updateLiveWorker: () => {},
 }));
 
-import { spawnSubagent, clearSpawnStateForTests } from "../../swarm/spawn.js";
+import { spawnSubagent, clearSpawnStateForTests } from '../../swarm/spawn.js';
 
 class FakeProcess extends EventEmitter {
   stdout = new EventEmitter();
@@ -38,54 +38,63 @@ class FakeProcess extends EventEmitter {
 const roots = new Set<string>();
 
 function createTempCwd(): string {
-  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "pi-messenger-swarm-spawn-"));
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-messenger-swarm-spawn-'));
   roots.add(cwd);
   return cwd;
 }
 
 afterEach(() => {
   for (const root of roots) {
-    try { fs.rmSync(root, { recursive: true, force: true }); } catch {}
+    try {
+      fs.rmSync(root, { recursive: true, force: true });
+    } catch {}
   }
   roots.clear();
   clearSpawnStateForTests();
 });
 
-describe("swarm spawn system prompt", () => {
+describe('swarm spawn system prompt', () => {
   beforeEach(() => {
     spawnMock.mockReset();
   });
 
-  it("adds role/persona/objective to appended system prompt", () => {
+  it('adds role/persona/objective to appended system prompt', () => {
     const cwd = createTempCwd();
+    const sessionId = 'test-session-system-prompt';
     const proc = new FakeProcess();
     spawnMock.mockReturnValue(proc as any);
 
-    const spawned = spawnSubagent(cwd, {
-      role: "Packaging Gap Analyst",
-      persona: "Skeptical market researcher",
-      objective: "Analyze ideabrowser.com and identify product packaging opportunities",
-      context: "Focus on monetization friction and onboarding",
-      name: "RoleBot",
-    });
+    const spawned = spawnSubagent(
+      cwd,
+      {
+        role: 'Packaging Gap Analyst',
+        persona: 'Skeptical market researcher',
+        objective: 'Analyze ideabrowser.com and identify product packaging opportunities',
+        context: 'Focus on monetization friction and onboarding',
+        name: 'RoleBot',
+      },
+      sessionId
+    );
 
     expect(spawnMock).toHaveBeenCalledTimes(1);
     const args = spawnMock.mock.calls[0][1] as string[];
 
-    const idx = args.indexOf("--append-system-prompt");
+    const idx = args.indexOf('--append-system-prompt');
     expect(idx).toBeGreaterThan(-1);
 
     const promptPath = args[idx + 1];
-    const content = fs.readFileSync(promptPath, "utf-8");
+    const content = fs.readFileSync(promptPath, 'utf-8');
 
-    expect(content).toContain("## Role Description");
-    expect(content).toContain("Packaging Gap Analyst");
-    expect(content).toContain("Skeptical market researcher");
-    expect(content).toContain("Analyze ideabrowser.com and identify product packaging opportunities");
-    expect(spawned.systemPrompt).toContain("## Role Description");
-    expect(spawned.systemPrompt).toContain("Skeptical market researcher");
+    expect(content).toContain('## Role Description');
+    expect(content).toContain('Packaging Gap Analyst');
+    expect(content).toContain('Skeptical market researcher');
+    expect(content).toContain(
+      'Analyze ideabrowser.com and identify product packaging opportunities'
+    );
+    expect(spawned.systemPrompt).toContain('## Role Description');
+    expect(spawned.systemPrompt).toContain('Skeptical market researcher');
 
-    proc.emit("close", 0);
+    proc.emit('close', 0);
     expect(fs.existsSync(path.dirname(promptPath))).toBe(false);
   });
 });

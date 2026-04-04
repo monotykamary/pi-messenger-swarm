@@ -13,11 +13,11 @@ function summaryLine(cwd: string, channelId: string): string {
   return `${s.done}/${s.total} done · ${s.in_progress} in progress · ${s.todo} todo · ${s.blocked} blocked`;
 }
 
-export function executeSwarmStatus(cwd: string, channelId: string) {
-  cleanupExitedSpawned(cwd);
+export function executeSwarmStatus(cwd: string, channelId: string, sessionId: string) {
+  cleanupExitedSpawned(cwd, sessionId);
   const tasks = store.getTasks(cwd, channelId);
   const summary = store.getSummary(cwd, channelId);
-  const spawned = listSpawned(cwd);
+  const spawned = listSpawned(cwd, sessionId);
   const channelLabel = displayChannelLabel(channelId);
 
   if (tasks.length === 0) {
@@ -624,16 +624,17 @@ export function executeSpawn(
   op: string | null,
   params: MessengerActionParams,
   state: MessengerState,
-  cwd: string
+  cwd: string,
+  sessionId: string
 ) {
-  cleanupExitedSpawned(cwd);
+  cleanupExitedSpawned(cwd, sessionId);
 
   if (!op) {
-    return spawnCreate(params, state, cwd);
+    return spawnCreate(params, state, cwd, sessionId);
   }
 
   if (op === 'list') {
-    const items = listSpawned(cwd);
+    const items = listSpawned(cwd, sessionId);
     if (items.length === 0) {
       return result('No spawned agents for this project.', { mode: 'spawn.list', agents: [] });
     }
@@ -684,7 +685,12 @@ export function executeSpawn(
   });
 }
 
-function spawnCreate(params: MessengerActionParams, state: MessengerState, cwd: string) {
+function spawnCreate(
+  params: MessengerActionParams,
+  state: MessengerState,
+  cwd: string,
+  sessionId: string
+) {
   const message = params.message?.trim() || params.prompt?.trim();
 
   // File-based spawn mode
@@ -705,7 +711,7 @@ function spawnCreate(params: MessengerActionParams, state: MessengerState, cwd: 
     };
 
     try {
-      const record = spawnSubagent(cwd, request, state.currentChannel);
+      const record = spawnSubagent(cwd, request, sessionId, state.currentChannel);
       const roleLabel = formatRoleLabel(record.role);
       logFeedEvent(
         cwd,
@@ -747,7 +753,7 @@ function spawnCreate(params: MessengerActionParams, state: MessengerState, cwd: 
     name: params.name,
   };
 
-  const record = spawnSubagent(cwd, request, state.currentChannel);
+  const record = spawnSubagent(cwd, request, sessionId, state.currentChannel);
   const roleLabel = formatRoleLabel(record.role);
   logFeedEvent(
     cwd,

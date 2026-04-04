@@ -31,6 +31,7 @@ import {
   listSpawned,
   cleanupExitedSpawned,
   clearSpawnStateForTests,
+  getAgentEventHistory,
 } from '../../swarm/spawn.js';
 
 class FakeProcess extends EventEmitter {
@@ -51,200 +52,335 @@ class FakeProcess extends EventEmitter {
   });
 }
 
-const roots = new Set<string>();
-
 function createTempCwd(): string {
-  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-messenger-swarm-cleanup-'));
-  roots.add(cwd);
-  return cwd;
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'pi-messenger-spawn-test-'));
 }
 
-afterEach(() => {
-  for (const root of roots) {
-    try {
-      fs.rmSync(root, { recursive: true, force: true });
-    } catch {}
+function cleanupTempDir(dir: string): void {
+  try {
+    fs.rmSync(dir, { recursive: true, force: true });
+  } catch {
+    // Ignore cleanup errors
   }
-  roots.clear();
-  clearSpawnStateForTests();
-});
+}
 
-describe('cleanupExitedSpawned', () => {
+function getSpawnedJsonlPath(cwd: string, sessionId: string): string {
+  return path.join(cwd, '.pi', 'messenger', 'spawned', `${sessionId}.jsonl`);
+}
+
+describe('cleanupExitedSpawned with event-sourced persistence', () => {
   beforeEach(() => {
-    spawnMock.mockReset();
+    clearSpawnStateForTests();
     vi.useFakeTimers({ shouldAdvanceTime: true });
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    clearSpawnStateForTests();
   });
 
-  it('cleans up agents that exited with a code after 60 seconds', () => {
+  it('persists completed agents via JSONL events', () => {
     const cwd = createTempCwd();
+    const sessionId = 'test-session-1';
     const proc = new FakeProcess();
     spawnMock.mockReturnValue(proc as any);
 
-    spawnSubagent(cwd, {
-      role: 'Test Agent',
-      objective: 'Test cleanup',
-      name: 'CodeExitBot',
-    });
+    const agent = spawnSubagent(
+      cwd,
+      {
+        role: 'Test Agent',
+        objective: 'Test persistence',
+        name: 'PersistBot',
+      },
+      sessionId
+    );
 
-    expect(listSpawned(cwd)).toHaveLength(1);
+    expect(listSpawned(cwd, sessionId)).toHaveLength(1);
+
+    // Check event log has spawn event
+    const jsonlPath = getSpawnedJsonlPath(cwd, sessionId);
+    expect(fs.existsSync(jsonlPath)).toBe(true);
+    const events = fs.readFileSync(jsonlPath, 'utf-8').trim().split('\n');
+    expect(events).toHaveLength(1);
+    const spawnEvent = JSON.parse(events[0]!);
+    expect(spawnEvent.type).toBe('spawned');
+    expect(spawnEvent.id).toBe(agent.id);
 
     // Simulate clean exit with code 0
     proc.exitCode = 0;
-    proc.signalCode = null;
     proc.emit('close', 0);
 
-    // Should still be there immediately
-    expect(listSpawned(cwd)).toHaveLength(1);
+    // Agent persisted as completed
+    const agents = listSpawned(cwd, sessionId);
+    expect(agents).toHaveLength(1);
+    expect(agents[0]?.status).toBe('completed');
+    expect(agents[0]?.endedAt).toBeDefined();
 
-    // Should still be there before 60 seconds
-    vi.advanceTimersByTime(59_000);
-    cleanupExitedSpawned(cwd);
-    expect(listSpawned(cwd)).toHaveLength(1);
+    // Check event log now has both events
+    const updatedEvents = fs.readFileSync(jsonlPath, 'utf-8').trim().split('\n').filter(Boolean);
+    expect(updatedEvents).toHaveLength(2);
+    const completeEvent = JSON.parse(updatedEvents[1]!);
+    expect(completeEvent.type).toBe('completed');
 
-    // Should be cleaned up after 60 seconds
-    vi.advanceTimersByTime(2_000);
-    cleanupExitedSpawned(cwd);
-    expect(listSpawned(cwd)).toHaveLength(0);
+    cleanupTempDir(cwd);
   });
 
-  it('cleans up agents killed by SIGTERM after 60 seconds', () => {
+  it('persists agents killed by SIGTERM as stopped', () => {
     const cwd = createTempCwd();
+    const sessionId = 'test-session-2';
     const proc = new FakeProcess();
     spawnMock.mockReturnValue(proc as any);
 
-    const agent = spawnSubagent(cwd, {
-      role: 'Test Agent',
-      objective: 'Test signal cleanup',
-      name: 'SigtermBot',
-    });
+    const agent = spawnSubagent(
+      cwd,
+      {
+        role: 'Test Agent',
+        objective: 'Test signal persistence',
+        name: 'SigtermBot',
+      },
+      sessionId
+    );
 
-    expect(listSpawned(cwd)).toHaveLength(1);
+    expect(listSpawned(cwd, sessionId)).toHaveLength(1);
 
     // Simulate SIGTERM termination
     proc.exitCode = null;
     proc.signalCode = 'SIGTERM';
     proc.emit('close', null, 'SIGTERM');
 
-    // Should still be there immediately
-    expect(listSpawned(cwd)).toHaveLength(1);
+    const agents = listSpawned(cwd, sessionId);
+    expect(agents).toHaveLength(1);
+    expect(agents[0]?.status).toBe('stopped');
 
-    // Should still be there before 60 seconds
-    vi.advanceTimersByTime(59_000);
-    cleanupExitedSpawned(cwd);
-    expect(listSpawned(cwd)).toHaveLength(1);
-
-    // Should be cleaned up after 60 seconds
-    vi.advanceTimersByTime(2_000);
-    cleanupExitedSpawned(cwd);
-    expect(listSpawned(cwd)).toHaveLength(0);
+    cleanupTempDir(cwd);
   });
 
-  it('cleans up agents killed by SIGKILL after 60 seconds', () => {
+  it('persists failed agents', () => {
     const cwd = createTempCwd();
+    const sessionId = 'test-session-3';
     const proc = new FakeProcess();
     spawnMock.mockReturnValue(proc as any);
 
-    spawnSubagent(cwd, {
-      role: 'Test Agent',
-      objective: 'Test SIGKILL cleanup',
-      name: 'SigkillBot',
-    });
+    const agent = spawnSubagent(
+      cwd,
+      {
+        role: 'Test Agent',
+        objective: 'Test failure persistence',
+        name: 'FailBot',
+      },
+      sessionId
+    );
 
-    expect(listSpawned(cwd)).toHaveLength(1);
+    // Simulate failure with non-zero exit
+    proc.exitCode = 1;
+    proc.signalCode = null;
+    proc.emit('close', 1);
 
-    // Simulate SIGKILL termination
-    proc.exitCode = null;
-    proc.signalCode = 'SIGKILL';
-    proc.emit('close', null, 'SIGKILL');
+    const agents = listSpawned(cwd, sessionId);
+    expect(agents).toHaveLength(1);
+    expect(agents[0]?.status).toBe('failed');
+    expect(agents[0]?.exitCode).toBe(1);
 
-    // Should still be there immediately
-    expect(listSpawned(cwd)).toHaveLength(1);
-
-    // Should be cleaned up after 60 seconds
-    vi.advanceTimersByTime(61_000);
-    cleanupExitedSpawned(cwd);
-    expect(listSpawned(cwd)).toHaveLength(0);
+    cleanupTempDir(cwd);
   });
 
-  it('does not clean up agents that are still running', () => {
+  it('returns 0 for cleanup when agents already persisted by close handler', () => {
     const cwd = createTempCwd();
-    const proc = new FakeProcess();
-    spawnMock.mockReturnValue(proc as any);
+    const sessionId = 'test-session-4';
 
-    spawnSubagent(cwd, {
-      role: 'Test Agent',
-      objective: 'Test running preservation',
-      name: 'RunningBot',
-    });
-
-    // Process is still running (exitCode is null, signalCode is null)
-    expect(listSpawned(cwd)).toHaveLength(1);
-
-    // Even after 60+ seconds, should not be cleaned up
-    vi.advanceTimersByTime(61_000);
-    cleanupExitedSpawned(cwd);
-    expect(listSpawned(cwd)).toHaveLength(1);
-  });
-
-  it('returns count of removed agents', () => {
-    const cwd = createTempCwd();
     const proc1 = new FakeProcess();
     const proc2 = new FakeProcess();
+    spawnMock.mockReturnValueOnce(proc1 as any).mockReturnValueOnce(proc2 as any);
 
-    spawnMock.mockReturnValueOnce(proc1 as any);
-    spawnMock.mockReturnValueOnce(proc2 as any);
+    spawnSubagent(
+      cwd,
+      {
+        role: 'Test Agent',
+        objective: 'Test count 1',
+        name: 'CountBot1',
+      },
+      sessionId
+    );
 
-    spawnSubagent(cwd, { role: 'Test', objective: 'Test 1', name: 'Bot1' });
-    spawnSubagent(cwd, { role: 'Test', objective: 'Test 2', name: 'Bot2' });
+    spawnSubagent(
+      cwd,
+      {
+        role: 'Test Agent',
+        objective: 'Test count 2',
+        name: 'CountBot2',
+      },
+      sessionId
+    );
 
-    // Both exit with code 0
+    expect(listSpawned(cwd, sessionId)).toHaveLength(2);
+
+    // Finalize both (close handler will persist them immediately)
     proc1.exitCode = 0;
-    proc1.signalCode = null;
     proc1.emit('close', 0);
-
     proc2.exitCode = 0;
-    proc2.signalCode = null;
     proc2.emit('close', 0);
 
+    // close handler already persisted them, so cleanup returns 0
     vi.advanceTimersByTime(61_000);
-    const removed = cleanupExitedSpawned(cwd);
+    const finalized = cleanupExitedSpawned(cwd, sessionId);
 
-    expect(removed).toBe(2);
-    expect(listSpawned(cwd)).toHaveLength(0);
+    expect(finalized).toBe(0); // Already persisted by close handler
+    // Both still persisted
+    expect(listSpawned(cwd, sessionId)).toHaveLength(2);
+
+    cleanupTempDir(cwd);
   });
 
-  it('respects cwd filter when cleaning up', () => {
-    const cwd1 = createTempCwd();
-    const cwd2 = createTempCwd();
+  it('scopes agents by session ID in separate JSONL files', () => {
+    const cwd = createTempCwd();
+    const session1 = 'session-alpha';
+    const session2 = 'session-beta';
 
     const proc1 = new FakeProcess();
     const proc2 = new FakeProcess();
+    spawnMock.mockReturnValueOnce(proc1 as any).mockReturnValueOnce(proc2 as any);
 
-    spawnMock.mockReturnValueOnce(proc1 as any);
-    spawnMock.mockReturnValueOnce(proc2 as any);
+    spawnSubagent(
+      cwd,
+      {
+        role: 'Session Agent',
+        objective: 'Test session 1',
+        name: 'SessionBot1',
+      },
+      session1
+    );
 
-    spawnSubagent(cwd1, { role: 'Test', objective: 'Test cwd1', name: 'Cwd1Bot' });
-    spawnSubagent(cwd2, { role: 'Test', objective: 'Test cwd2', name: 'Cwd2Bot' });
+    spawnSubagent(
+      cwd,
+      {
+        role: 'Session Agent',
+        objective: 'Test session 2',
+        name: 'SessionBot2',
+      },
+      session2
+    );
 
-    // Both exit
+    // Each session should only see its own agents
+    expect(listSpawned(cwd, session1)).toHaveLength(1);
+    expect(listSpawned(cwd, session2)).toHaveLength(1);
+    expect(listSpawned(cwd, session1)[0]?.name).toBe('SessionBot1');
+    expect(listSpawned(cwd, session2)[0]?.name).toBe('SessionBot2');
+
+    // Verify separate JSONL files exist
+    expect(fs.existsSync(getSpawnedJsonlPath(cwd, session1))).toBe(true);
+    expect(fs.existsSync(getSpawnedJsonlPath(cwd, session2))).toBe(true);
+
+    // Complete first agent
     proc1.exitCode = 0;
-    proc1.signalCode = null;
     proc1.emit('close', 0);
+    vi.advanceTimersByTime(100);
+    cleanupExitedSpawned(cwd, session1);
 
-    proc2.exitCode = null;
-    proc2.signalCode = 'SIGTERM';
-    proc2.emit('close', null, 'SIGTERM');
+    // Session 1 sees completed agent, session 2 still has running agent
+    expect(listSpawned(cwd, session1)[0]?.status).toBe('completed');
+    expect(listSpawned(cwd, session2)[0]?.status).toBe('running');
 
-    vi.advanceTimersByTime(61_000);
+    cleanupTempDir(cwd);
+  });
 
-    // Only clean up cwd1
-    cleanupExitedSpawned(cwd1);
+  it('generates agent files for completed agents', () => {
+    const cwd = createTempCwd();
+    const sessionId = 'test-session-files';
+    const proc = new FakeProcess();
+    spawnMock.mockReturnValue(proc as any);
 
-    expect(listSpawned(cwd1)).toHaveLength(0);
-    expect(listSpawned(cwd2)).toHaveLength(1);
+    spawnSubagent(
+      cwd,
+      {
+        role: 'Documentation Writer',
+        objective: 'Write docs',
+        name: 'DocBot',
+      },
+      sessionId
+    );
+
+    // Complete the agent
+    proc.exitCode = 0;
+    proc.emit('close', 0);
+    vi.advanceTimersByTime(100);
+    cleanupExitedSpawned(cwd, sessionId);
+
+    // Check that agent file was created
+    const agentsDir = path.join(cwd, '.pi', 'messenger', 'agents', sessionId);
+    expect(fs.existsSync(agentsDir)).toBe(true);
+
+    const files = fs.readdirSync(agentsDir);
+    expect(files.length).toBeGreaterThan(0);
+    expect(files[0]).toMatch(/DocBot-.*\.md$/);
+
+    // Verify file content
+    const content = fs.readFileSync(path.join(agentsDir, files[0]!), 'utf-8');
+    expect(content).toContain('role: Documentation Writer');
+    expect(content).toContain('---');
+
+    cleanupTempDir(cwd);
+  });
+
+  it('reloads persisted agents from JSONL after clear', () => {
+    const cwd = createTempCwd();
+    const sessionId = 'test-session-reload';
+    const proc = new FakeProcess();
+    spawnMock.mockReturnValue(proc as any);
+
+    spawnSubagent(
+      cwd,
+      {
+        role: 'Test Agent',
+        objective: 'Test reload',
+        name: 'ReloadBot',
+      },
+      sessionId
+    );
+
+    // Complete and persist
+    proc.exitCode = 0;
+    proc.emit('close', 0);
+    vi.advanceTimersByTime(100);
+    cleanupExitedSpawned(cwd, sessionId);
+
+    // Clear in-memory state
+    clearSpawnStateForTests();
+
+    // Should still be able to load from JSONL
+    const agents = listSpawned(cwd, sessionId);
+    expect(agents).toHaveLength(1);
+    expect(agents[0]?.name).toBe('ReloadBot');
+    expect(agents[0]?.status).toBe('completed');
+
+    cleanupTempDir(cwd);
+  });
+
+  it('provides event history for audit trail', () => {
+    const cwd = createTempCwd();
+    const sessionId = 'test-session-audit';
+    const proc = new FakeProcess();
+    spawnMock.mockReturnValue(proc as any);
+
+    const agent = spawnSubagent(
+      cwd,
+      {
+        role: 'Audit Agent',
+        objective: 'Test audit',
+        name: 'AuditBot',
+      },
+      sessionId
+    );
+
+    // Complete the agent
+    proc.exitCode = 0;
+    proc.emit('close', 0);
+
+    // Get full event history
+    const history = getAgentEventHistory(cwd, sessionId, agent.id);
+    expect(history).toHaveLength(2);
+    expect(history[0]?.type).toBe('spawned');
+    expect(history[1]?.type).toBe('completed');
+
+    cleanupTempDir(cwd);
   });
 });

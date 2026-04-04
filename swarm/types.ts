@@ -67,4 +67,5 @@ export interface SpawnedAgent {
   endedAt?: string;
   exitCode?: number;
   error?: string;
+  sessionId?: string;
 }

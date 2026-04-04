@@ -236,7 +236,7 @@ export function handleOverlayInput({
   }
 
   const tasks = swarmStore.getTasks(cwd, currentChannel());
-  const spawned = listSpawned(cwd);
+  const spawned = listSpawned(cwd, state.contextSessionId ?? '');
   const task = tasks[viewState.selectedTaskIndex];
   const swarmAgent = spawned[viewState.selectedSwarmIndex];
 

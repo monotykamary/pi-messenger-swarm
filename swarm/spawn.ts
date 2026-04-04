@@ -16,6 +16,7 @@ interface SpawnRuntime {
   record: SpawnedAgent;
   startMs: number;
   stopping: boolean;
+  persisted?: boolean;
 }
 
 const runtimes = new Map<string, SpawnRuntime>();
@@ -27,6 +28,140 @@ const EXTENSION_DIR = path.resolve(__dirname, '..');
 function spawnLiveKey(id: string): string {
   return `spawn-${id}`;
 }
+
+// ============================================================================
+// Event-Sourced Persistence (JSONL)
+// ============================================================================
+
+interface SpawnEvent {
+  id: string;
+  type: 'spawned' | 'completed' | 'failed' | 'stopped' | 'progress';
+  timestamp: string;
+  agent: Partial<SpawnedAgent>;
+}
+
+function getSpawnedJsonlPath(cwd: string, sessionId: string): string {
+  const safeSessionId = sessionId.replace(/[^\w.-]/g, '_');
+  return path.join(cwd, '.pi', 'messenger', 'spawned', `${safeSessionId}.jsonl`);
+}
+
+function getSpawnedAgentsDir(cwd: string, sessionId: string): string {
+  const safeSessionId = sessionId.replace(/[^\w.-]/g, '_');
+  return path.join(cwd, '.pi', 'messenger', 'agents', safeSessionId);
+}
+
+function agentFilePath(cwd: string, sessionId: string, name: string, id: string): string {
+  const safeName = name.replace(/[^\w.-]/g, '_');
+  return path.join(getSpawnedAgentsDir(cwd, sessionId), `${safeName}-${id}.md`);
+}
+
+function ensureDir(dir: string): void {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
+
+function appendEvent(cwd: string, sessionId: string, event: SpawnEvent): void {
+  const filePath = getSpawnedJsonlPath(cwd, sessionId);
+  ensureDir(path.dirname(filePath));
+  fs.appendFileSync(filePath, JSON.stringify(event) + '\n', 'utf-8');
+}
+
+/**
+ * Replay events to build current state of all agents.
+ * Events are applied in order, with later events overriding earlier state for the same agent.
+ */
+export function loadSpawnedAgents(cwd: string, sessionId: string): SpawnedAgent[] {
+  const filePath = getSpawnedJsonlPath(cwd, sessionId);
+  if (!fs.existsSync(filePath)) return [];
+
+  const agentsById = new Map<string, SpawnedAgent>();
+
+  const content = fs.readFileSync(filePath, 'utf-8');
+  for (const line of content.split('\n')) {
+    if (!line.trim()) continue;
+    try {
+      const event = JSON.parse(line) as SpawnEvent;
+      const existing = agentsById.get(event.id);
+
+      // Merge event data with existing agent state
+      const merged: SpawnedAgent = existing
+        ? { ...existing, ...event.agent, id: event.id }
+        : { ...(event.agent as SpawnedAgent), id: event.id };
+
+      agentsById.set(event.id, merged);
+    } catch {
+      // Skip malformed lines
+    }
+  }
+
+  return Array.from(agentsById.values()).sort(
+    (a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt)
+  );
+}
+
+/**
+ * Get the full event history for an agent (for auditing).
+ */
+export function getAgentEventHistory(
+  cwd: string,
+  sessionId: string,
+  agentId: string
+): SpawnEvent[] {
+  const filePath = getSpawnedJsonlPath(cwd, sessionId);
+  if (!fs.existsSync(filePath)) return [];
+
+  const events: SpawnEvent[] = [];
+  const content = fs.readFileSync(filePath, 'utf-8');
+
+  for (const line of content.split('\n')) {
+    if (!line.trim()) continue;
+    try {
+      const event = JSON.parse(line) as SpawnEvent;
+      if (event.id === agentId) {
+        events.push(event);
+      }
+    } catch {
+      // Skip malformed lines
+    }
+  }
+
+  return events;
+}
+
+function generateAgentFile(cwd: string, sessionId: string, agent: SpawnedAgent): string | null {
+  if (!agent.systemPrompt) return null;
+
+  const lines: string[] = [
+    '---',
+    `role: ${agent.role}`,
+    ...(agent.persona ? [`persona: ${agent.persona}`] : []),
+    ...(agent.objective ? [`objective: ${agent.objective}`] : []),
+    `created: ${agent.startedAt}`,
+    `status: ${agent.status}`,
+    ...(agent.endedAt ? [`ended: ${agent.endedAt}`] : []),
+    ...(agent.exitCode !== undefined ? [`exitCode: ${agent.exitCode}`] : []),
+    ...(agent.taskId ? [`taskId: ${agent.taskId}`] : []),
+    '---',
+    '',
+    agent.systemPrompt,
+  ];
+
+  if (agent.context) {
+    lines.push('', '## Context', agent.context);
+  }
+
+  if (agent.error) {
+    lines.push('', '## Error', agent.error);
+  }
+
+  const filePath = agentFilePath(cwd, sessionId, agent.name, agent.id);
+  ensureDir(path.dirname(filePath));
+  fs.writeFileSync(filePath, lines.join('\n'), 'utf-8');
+  return filePath;
+}
+
+// ============================================================================
+// Prompt Building
+// ============================================================================
 
 function buildSystemPrompt(request: SpawnRequest): string {
   const role = formatRoleLabel(request.role ?? 'Subagent');
@@ -162,7 +297,12 @@ function cleanupTmpDir(tmpDir: string | null) {
   }
 }
 
-function attachHandlers(proc: ChildProcess, state: SpawnState, promptTmpDir: string | null) {
+function attachHandlers(
+  proc: ChildProcess,
+  state: SpawnState,
+  promptTmpDir: string | null,
+  sessionId: string
+) {
   proc.stdout?.on('data', (data: Buffer | string) => {
     state.buffer += data.toString();
     const lines = state.buffer.split('\n');
@@ -193,7 +333,7 @@ function attachHandlers(proc: ChildProcess, state: SpawnState, promptTmpDir: str
     cleanupTmpDir(promptTmpDir);
   });
 
-  proc.on('close', (code) => {
+  proc.on('close', (code, signal) => {
     cleanupTmpDir(promptTmpDir);
     removeLiveWorker(state.cwd, state.request.taskId || spawnLiveKey(state.id));
 
@@ -202,29 +342,51 @@ function attachHandlers(proc: ChildProcess, state: SpawnState, promptTmpDir: str
 
     const endedAt = new Date().toISOString();
     let status: SpawnedAgent['status'] = 'completed';
+    let eventType: SpawnEvent['type'] = 'completed';
 
-    if (runtime.stopping) {
+    if (runtime.stopping || signal) {
+      // Mark as stopped if explicitly stopped or terminated by signal
       status = 'stopped';
+      eventType = 'stopped';
     } else if ((code ?? 1) !== 0) {
       status = 'failed';
+      eventType = 'failed';
     }
 
     runtime.record = {
       ...runtime.record,
       status,
       endedAt,
-      exitCode: code ?? 1,
+      exitCode: code ?? (signal ? 1 : undefined),
       error:
         status === 'failed'
-          ? state.stderr.trim() || state.progress.error || 'subagent failed'
+          ? state.stderr.trim() || runtime.record.error || 'subagent failed'
           : undefined,
     };
+
+    // Append completion event (event-sourced persistence)
+    runtime.persisted = true;
+    appendEvent(state.cwd, sessionId, {
+      id: state.id,
+      type: eventType,
+      timestamp: endedAt,
+      agent: {
+        status,
+        endedAt,
+        exitCode: runtime.record.exitCode,
+        error: runtime.record.error,
+      },
+    });
+
+    // Generate reusable agent file
+    generateAgentFile(state.cwd, sessionId, runtime.record);
   });
 }
 
 export function spawnSubagent(
   cwd: string,
   request: SpawnRequest,
+  sessionId: string,
   inheritedChannel?: string
 ): SpawnedAgent {
   const id = randomUUID().slice(0, 8);
@@ -272,8 +434,17 @@ export function spawnSubagent(
     taskId: request.taskId,
     status: 'running',
     startedAt,
+    sessionId,
   };
   record.systemPrompt = systemPrompt;
+
+  // Append spawn event (event-sourced persistence)
+  appendEvent(cwd, sessionId, {
+    id,
+    type: 'spawned',
+    timestamp: startedAt,
+    agent: { ...record },
+  });
 
   const env = {
     ...process.env,
@@ -305,7 +476,7 @@ export function spawnSubagent(
     env,
   });
 
-  attachHandlers(proc, state, promptTmpDir);
+  attachHandlers(proc, state, promptTmpDir, sessionId);
 
   runtimes.set(id, {
     process: proc,
@@ -317,10 +488,21 @@ export function spawnSubagent(
   return record;
 }
 
-export function listSpawned(cwd?: string): SpawnedAgent[] {
-  const records = Array.from(runtimes.values()).map((runtime) => runtime.record);
-  const filtered = cwd ? records.filter((record) => record.cwd === cwd) : records;
-  return filtered.sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
+export function listSpawned(cwd: string, sessionId: string): SpawnedAgent[] {
+  // First, get persisted agents for this session from event log
+  const persisted = loadSpawnedAgents(cwd, sessionId);
+  const persistedById = new Map(persisted.map((a) => [a.id, a]));
+
+  // Override with any in-memory runtimes (for running agents with live process handles)
+  for (const [id, runtime] of runtimes.entries()) {
+    if (runtime.record.cwd !== cwd) continue;
+    if (runtime.record.sessionId !== sessionId) continue;
+    persistedById.set(id, runtime.record);
+  }
+
+  return Array.from(persistedById.values()).sort(
+    (a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt)
+  );
 }
 
 export function stopSpawn(cwd: string, id: string): boolean {
@@ -356,20 +538,58 @@ export function stopAllSpawned(cwd?: string): void {
   }
 }
 
-export function cleanupExitedSpawned(cwd?: string): number {
-  let removed = 0;
+export function cleanupExitedSpawned(cwd: string, sessionId: string): number {
+  // Ensures exited agents are persisted and returns count of newly-finalized agents.
+  // With event sourcing, this mainly handles edge cases where the close handler didn't fire.
+  let finalized = 0;
   for (const [id, runtime] of runtimes.entries()) {
-    if (cwd && runtime.record.cwd !== cwd) continue;
+    if (runtime.record.cwd !== cwd) continue;
+    if (runtime.record.sessionId !== sessionId) continue;
+    // Only process if process has exited
     if (runtime.process.exitCode === null && runtime.process.signalCode === null) continue;
-    if (runtime.record.status === 'running') continue;
+    // Skip if already persisted (avoid duplicate work)
+    if (runtime.persisted) continue;
 
-    const ageMs = runtime.record.endedAt ? Date.now() - Date.parse(runtime.record.endedAt) : 0;
-    if (ageMs < 60_000) continue;
+    // Agent has finished but not yet persisted - finalize it now
+    runtime.persisted = true;
 
-    runtimes.delete(id);
-    removed++;
+    const endedAt = new Date().toISOString();
+    let status: SpawnedAgent['status'] = 'completed';
+    let eventType: SpawnEvent['type'] = 'completed';
+
+    if (runtime.stopping) {
+      status = 'stopped';
+      eventType = 'stopped';
+    } else if ((runtime.process.exitCode ?? 1) !== 0) {
+      status = 'failed';
+      eventType = 'failed';
+    }
+
+    // Determine final state
+    runtime.record = {
+      ...runtime.record,
+      status,
+      endedAt,
+      exitCode: runtime.process.exitCode ?? 1,
+    };
+
+    // Append completion event
+    appendEvent(cwd, sessionId, {
+      id,
+      type: eventType,
+      timestamp: endedAt,
+      agent: {
+        status,
+        endedAt,
+        exitCode: runtime.record.exitCode,
+      },
+    });
+
+    // Generate agent file
+    generateAgentFile(cwd, sessionId, runtime.record);
+    finalized++;
   }
-  return removed;
+  return finalized;
 }
 
 export function getRunningSpawnCount(cwd?: string): number {
@@ -381,11 +601,15 @@ export function getRunningSpawnCount(cwd?: string): number {
   return count;
 }
 
-function getSpawnByTask(cwd: string, taskId: string): SpawnedAgent | null {
+function getSpawnByTask(cwd: string, sessionId: string, taskId: string): SpawnedAgent | null {
   for (const runtime of runtimes.values()) {
     if (runtime.record.cwd !== cwd) continue;
     if (runtime.record.taskId !== taskId) continue;
     return runtime.record;
+  }
+  // Also check persisted agents
+  for (const agent of loadSpawnedAgents(cwd, sessionId)) {
+    if (agent.taskId === taskId) return agent;
   }
   return null;
 }
@@ -393,3 +617,5 @@ function getSpawnByTask(cwd: string, taskId: string): SpawnedAgent | null {
 export function clearSpawnStateForTests(): void {
   runtimes.clear();
 }
+
+// No automatic loading on module init - agents are loaded per-session via listSpawned

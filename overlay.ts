@@ -337,7 +337,7 @@ export class MessengerOverlay implements Component, Focusable {
     }
 
     const tasks = swarmStore.getTasks(this.cwd, channelId);
-    const spawned = listSpawned(this.cwd);
+    const spawned = listSpawned(this.cwd, this.state.contextSessionId ?? '');
 
     if (tasks.length === 0) {
       this.viewState.selectedTaskIndex = 0;
