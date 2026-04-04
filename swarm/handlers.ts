@@ -24,7 +24,7 @@ export function executeSwarmStatus(cwd: string, channelId: string, sessionId: st
   cleanupExitedSpawned(cwd, sessionId);
   const tasks = taskStore.getTasks(cwd, sessionId);
   const summary = taskStore.getSummary(cwd, sessionId);
-  const allAgents = listSpawned(cwd, sessionId); // All agents by default
+  const allAgents = listSpawnedHistory(cwd, sessionId); // All agents including completed/failed
   const runningAgents = allAgents.filter((a) => a.status === 'running');
   const completedCount = allAgents.filter((a) => a.status === 'completed').length;
   const failedCount = allAgents.filter((a) => a.status === 'failed').length;
