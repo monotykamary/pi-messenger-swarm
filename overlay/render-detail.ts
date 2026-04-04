@@ -135,11 +135,19 @@ export function renderEmptyState(
   const config = loadConfig(cwd);
 
   lines.push(theme.fg('dim', 'No swarm tasks yet — create one or spawn a specialist.'));
-  lines.push('task.create: pi_messenger({ action: "task.create", title: "Investigate bug" })');
   lines.push(
-    'spawn: pi_messenger({ action: "spawn", role: "Researcher", message: "Analyze issue" })'
+    theme.fg(
+      'dim',
+      'task.create: pi_messenger({ action: "task.create", title: "Investigate bug" })'
+    )
   );
-  lines.push(`stuck ${config.stuckThreshold}s · feed ${config.feedRetention}`);
+  lines.push(
+    theme.fg(
+      'dim',
+      'spawn: pi_messenger({ action: "spawn", role: "Researcher", message: "Analyze issue" })'
+    )
+  );
+  lines.push(theme.fg('dim', `stuck ${config.stuckThreshold}s · feed ${config.feedRetention}`));
 
   if (lines.length > height) {
     return lines.slice(0, height).map((line) => truncateToWidth(line, width));
