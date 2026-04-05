@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.23.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.22.3...v0.23.0) (2026-04-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* None - all exports maintained through index re-exports
+
+* modularize large handler and store modules ([1e6c1d5](https://github.com/monotykamary/pi-messenger-swarm/commit/1e6c1d53932543af7f2518e3ccf51605549db4d5))
+
 ### [0.22.3](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.22.2...v0.22.3) (2026-04-04)
 
 
