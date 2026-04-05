@@ -1,7 +1,7 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "entry": ["index.ts", "handlers.ts", "store.ts", "overlay.ts", "overlay-render.ts"],
-  "ignore": ["swarm/lock-example.ts", "vitest.config.ts", "tests/**"],
+  "ignore": ["vitest.config.ts", "tests/**"],
   "ignoreExportsUsedInFile": true,
   "ignoreDependencies": ["@vitest/coverage-v8"]
 }

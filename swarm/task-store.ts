@@ -86,16 +86,15 @@ export function appendTaskEvent(cwd: string, sessionId: string, event: TaskEvent
 }
 
 /**
- * Replay all events to build current task states.
- * Events are applied in order per taskId, with later events overriding earlier state.
+ * Internal: replay events and build task map. Shared logic for replayTasks/replayAllTasks.
  */
-export function replayTasks(cwd: string, sessionId: string): SwarmTask[] {
+function replayEventsToMap(cwd: string, sessionId: string): Map<string, SwarmTask> {
   const filePath = getTasksJsonlPath(cwd, sessionId);
-  if (!fs.existsSync(filePath)) return [];
+  if (!fs.existsSync(filePath)) return new Map();
 
   const tasksById = new Map<string, SwarmTask>();
-
   const content = fs.readFileSync(filePath, 'utf-8');
+
   for (const line of content.split('\n')) {
     if (!line.trim()) continue;
     try {
@@ -179,7 +178,6 @@ export function replayTasks(cwd: string, sessionId: string): SwarmTask[] {
 
         case 'unblocked': {
           if (!existing) continue;
-          // Return to previous status (todo if not claimed, in_progress if claimed)
           if (existing.claimed_by) {
             existing.status = 'in_progress';
           } else {
@@ -193,7 +191,6 @@ export function replayTasks(cwd: string, sessionId: string): SwarmTask[] {
 
         case 'reset': {
           if (!existing) continue;
-          // Reset to initial state but preserve history
           existing.status = 'todo';
           delete existing.claimed_by;
           delete existing.claimed_at;
@@ -221,8 +218,17 @@ export function replayTasks(cwd: string, sessionId: string): SwarmTask[] {
     }
   }
 
+  return tasksById;
+}
+
+/**
+ * Replay all events to build current task states.
+ * Events are applied in order per taskId, with later events overriding earlier state.
+ */
+export function replayTasks(cwd: string, sessionId: string): SwarmTask[] {
+  const tasksById = replayEventsToMap(cwd, sessionId);
   return Array.from(tasksById.values())
-    .filter((t) => t.status !== 'archived') // Filter archived by default
+    .filter((t) => t.status !== 'archived')
     .sort((a, b) => taskNumericId(a.id) - taskNumericId(b.id));
 }
 
@@ -230,161 +236,8 @@ export function replayTasks(cwd: string, sessionId: string): SwarmTask[] {
  * Get all tasks including archived ones.
  */
 export function replayAllTasks(cwd: string, sessionId: string): SwarmTask[] {
-  const filePath = getTasksJsonlPath(cwd, sessionId);
-  if (!fs.existsSync(filePath)) return [];
-
-  const tasksById = new Map<string, SwarmTask>();
-
-  const content = fs.readFileSync(filePath, 'utf-8');
-  for (const line of content.split('\n')) {
-    if (!line.trim()) continue;
-    try {
-      const event = JSON.parse(line) as TaskEvent;
-      const existing = tasksById.get(event.taskId);
-
-      switch (event.type) {
-        case 'created': {
-          const payload = event.payload as CreatedPayload;
-          const task: SwarmTask = {
-            id: event.taskId,
-            title: payload.title,
-            status: 'todo',
-            depends_on: payload.dependsOn ?? [],
-            created_at: event.timestamp,
-            updated_at: event.timestamp,
-            created_by: payload.createdBy,
-            attempt_count: 0,
-            channel: event.channel,
-          };
-          tasksById.set(event.taskId, task);
-          break;
-        }
-
-        case 'claimed': {
-          if (!existing) continue;
-          const payload = event.payload as ClaimedPayload;
-          existing.status = 'in_progress';
-          existing.claimed_by = event.agent;
-          existing.claimed_at = event.timestamp;
-          existing.claim_reason = payload.reason;
-          existing.attempt_count = (existing.attempt_count ?? 0) + 1;
-          existing.updated_at = event.timestamp;
-          break;
-        }
-
-        case 'released': {
-          if (!existing) continue;
-          existing.status = 'todo';
-          delete existing.claimed_by;
-          delete existing.claimed_at;
-          delete existing.claim_reason;
-          existing.updated_at = event.timestamp;
-          break;
-        }
-
-        case 'progress': {
-          if (!existing) continue;
-          const payload = event.payload as ProgressPayload;
-          if (!existing.progress_log) existing.progress_log = [];
-          existing.progress_log.push({
-            timestamp: event.timestamp,
-            agent: event.agent ?? 'unknown',
-            message: payload.message,
-          });
-          existing.updated_at = event.timestamp;
-          break;
-        }
-
-        case 'completed': {
-          if (!existing) continue;
-          const payload = event.payload as CompletedPayload;
-          existing.status = 'done';
-          existing.completed_at = event.timestamp;
-          existing.completed_by = event.agent;
-          existing.summary = payload.summary;
-          existing.evidence = payload.evidence;
-          existing.updated_at = event.timestamp;
-          break;
-        }
-
-        case 'blocked': {
-          if (!existing) continue;
-          const payload = event.payload as BlockedPayload;
-          existing.status = 'blocked';
-          existing.blocked_reason = payload.reason;
-          existing.blocked_by = payload.blockedBy;
-          existing.updated_at = event.timestamp;
-          break;
-        }
-
-        case 'unblocked': {
-          if (!existing) continue;
-          if (existing.claimed_by) {
-            existing.status = 'in_progress';
-          } else {
-            existing.status = 'todo';
-          }
-          delete existing.blocked_reason;
-          delete existing.blocked_by;
-          existing.updated_at = event.timestamp;
-          break;
-        }
-
-        case 'reset': {
-          if (!existing) continue;
-          existing.status = 'todo';
-          delete existing.claimed_by;
-          delete existing.claimed_at;
-          delete existing.claim_reason;
-          delete existing.completed_at;
-          delete existing.completed_by;
-          delete existing.summary;
-          delete existing.evidence;
-          delete existing.blocked_reason;
-          delete existing.blocked_by;
-          existing.updated_at = event.timestamp;
-          break;
-        }
-
-        case 'archived': {
-          if (!existing) continue;
-          existing.status = 'archived';
-          existing.archived_at = event.timestamp;
-          existing.updated_at = event.timestamp;
-          break;
-        }
-      }
-    } catch {
-      // Skip malformed lines
-    }
-  }
-
+  const tasksById = replayEventsToMap(cwd, sessionId);
   return Array.from(tasksById.values()).sort((a, b) => taskNumericId(a.id) - taskNumericId(b.id));
-}
-
-/**
- * Get event history for a specific task (for auditing).
- */
-export function getTaskEventHistory(cwd: string, sessionId: string, taskId: string): TaskEvent[] {
-  const filePath = getTasksJsonlPath(cwd, sessionId);
-  if (!fs.existsSync(filePath)) return [];
-
-  const events: TaskEvent[] = [];
-  const content = fs.readFileSync(filePath, 'utf-8');
-
-  for (const line of content.split('\n')) {
-    if (!line.trim()) continue;
-    try {
-      const event = JSON.parse(line) as TaskEvent;
-      if (event.taskId === taskId) {
-        events.push(event);
-      }
-    } catch {
-      // Skip malformed lines
-    }
-  }
-
-  return events;
 }
 
 function taskNumericId(taskId: string): number {
@@ -498,7 +351,7 @@ export function getTask(cwd: string, sessionId: string, taskId: string): SwarmTa
   return replayTasks(cwd, sessionId).find((t) => t.id === taskId);
 }
 
-export function taskExists(cwd: string, sessionId: string, taskId: string): boolean {
+function taskExists(cwd: string, sessionId: string, taskId: string): boolean {
   return getTask(cwd, sessionId, taskId) !== undefined;
 }
 
@@ -551,21 +404,6 @@ export function unclaimTask(
   });
 
   return getTask(cwd, sessionId, taskId);
-}
-
-export function releaseTaskIfHeld(
-  cwd: string,
-  sessionId: string,
-  taskId: string,
-  agentName: string
-): boolean {
-  const task = getTask(cwd, sessionId, taskId);
-  if (!task) return false;
-  if (task.claimed_by === agentName) {
-    unclaimTask(cwd, sessionId, taskId, agentName);
-    return true;
-  }
-  return false;
 }
 
 export function blockTask(
@@ -718,21 +556,6 @@ export function getTaskSpec(cwd: string, sessionId: string, taskId: string): str
   } catch {
     return null;
   }
-}
-
-export function updateTaskSpec(
-  cwd: string,
-  sessionId: string,
-  taskId: string,
-  content: string
-): boolean {
-  const task = getTask(cwd, sessionId, taskId);
-  if (!task) return false;
-
-  const specPath = taskSpecPath(cwd, sessionId, taskId);
-  ensureDir(path.dirname(specPath));
-  fs.writeFileSync(specPath, content, 'utf-8');
-  return true;
 }
 
 // =============================================================================

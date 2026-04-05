@@ -206,7 +206,7 @@ export function generateAutoStatus(ctx: AutoStatusContext): string | undefined {
 // Constants
 // =============================================================================
 
-export const MAX_WATCHER_RETRIES = 5;
+const MAX_WATCHER_RETRIES = 5;
 export const MAX_CHAT_HISTORY = 50;
 
 const AGENT_COLORS = [
