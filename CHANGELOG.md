@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.23.1](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.23.0...v0.23.1) (2026-04-06)
+
+
+### Bug Fixes
+
+* **overlay:** trigger re-render when live workers change ([f8d25ea](https://github.com/monotykamary/pi-messenger-swarm/commit/f8d25eac28a8ae131d3201919e6734608e01e534))
+
 ## [0.23.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.22.3...v0.23.0) (2026-04-05)
 
 
