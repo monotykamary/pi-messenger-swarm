@@ -9,6 +9,8 @@ import { getLiveWorkers } from '../swarm/live-progress.js';
 const FEED_LINE_COUNT_CACHE_TTL_MS = 100;
 const FEED_WINDOW_SIZE = 200;
 const INPUT_CHROME_LINES = 8;
+const MAX_TASK_LIST_HEIGHT = 7;
+const MAX_SWARM_LIST_HEIGHT = 7;
 
 export interface FeedLineCountCache {
   channelId: string;
@@ -58,10 +60,10 @@ export function calculateBasePanelHeights(
     }
   } else if (hasWorkers) {
     feedHeight = Math.max(6, Math.floor(available * 0.65));
-    mainHeight = available - feedHeight - 1;
+    mainHeight = Math.min(MAX_TASK_LIST_HEIGHT, available - feedHeight - 1);
   } else {
     feedHeight = Math.max(4, Math.floor(available * 0.55));
-    mainHeight = available - feedHeight - 1;
+    mainHeight = Math.min(MAX_TASK_LIST_HEIGHT, available - feedHeight - 1);
   }
 
   return {
