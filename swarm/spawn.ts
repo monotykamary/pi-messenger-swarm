@@ -127,6 +127,22 @@ export function getAgentEventHistory(
   return events;
 }
 
+/**
+ * Format a value for YAML frontmatter. Uses literal block scalar (|) for multiline strings.
+ */
+function formatYamlMultiline(key: string, value: string): string {
+  if (value.includes('\n')) {
+    // Use literal block scalar for multiline strings
+    const indented = value
+      .split('\n')
+      .map((line) => `  ${line}`)
+      .join('\n');
+    return `${key}: |\n${indented}`;
+  }
+  // Simple inline value for single-line strings
+  return `${key}: ${value}`;
+}
+
 function generateAgentFile(cwd: string, sessionId: string, agent: SpawnedAgent): string | null {
   if (!agent.systemPrompt) return null;
 
@@ -134,8 +150,8 @@ function generateAgentFile(cwd: string, sessionId: string, agent: SpawnedAgent):
     '---',
     `role: ${agent.role}`,
     ...(agent.model ? [`model: ${agent.model}`] : []),
-    ...(agent.persona ? [`persona: ${agent.persona}`] : []),
-    ...(agent.objective ? [`objective: ${agent.objective}`] : []),
+    ...(agent.persona ? [formatYamlMultiline('persona', agent.persona)] : []),
+    ...(agent.objective ? [formatYamlMultiline('objective', agent.objective)] : []),
     `created: ${agent.startedAt}`,
     `status: ${agent.status}`,
     ...(agent.endedAt ? [`ended: ${agent.endedAt}`] : []),
