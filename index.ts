@@ -164,6 +164,7 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
 
   onLiveWorkersChanged(() => {
     if (latestCtx) updateStatus(latestCtx);
+    overlayTui?.requestRender();
   });
 
   // ===========================================================================
