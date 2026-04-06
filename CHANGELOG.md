@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.23.2](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.23.1...v0.23.2) (2026-04-06)
+
+
+### Bug Fixes
+
+* **swarm:** escape multiline YAML values in agent file frontmatter ([7c1b99d](https://github.com/monotykamary/pi-messenger-swarm/commit/7c1b99dcac262af4a524ea57dad6971979033b3d))
+
 ### [0.23.1](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.23.0...v0.23.1) (2026-04-06)
 
 
