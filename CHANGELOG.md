@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.23.3](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.23.2...v0.23.3) (2026-04-06)
+
+
+### Features
+
+* **overlay:** cap task list height to 7 lines ([6372fc6](https://github.com/monotykamary/pi-messenger-swarm/commit/6372fc6f21c6aae1c17926450c85d6f4a57eac3f))
+
 ### [0.23.2](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.23.1...v0.23.2) (2026-04-06)
 
 
