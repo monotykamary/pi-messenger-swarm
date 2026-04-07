@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.24.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.23.4...v0.24.0) (2026-04-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* **spawn:** spawn action no longer accepts `content` parameter.
+Use `context` instead for supplementary information.
+
+- `message`/`prompt`: required mission/objective
+- `context`: optional supplementary background info
+
+This clarifies the semantics:
+- task.create: `content` = task specification
+- spawn: `message` = mission, `context` = background
+
+### Features
+
+* **spawn:** rename content to context for spawn action ([18c8fb7](https://github.com/monotykamary/pi-messenger-swarm/commit/18c8fb7f7c6dabbb4af2bc2353e1e98f956c7be7))
+
 ### [0.23.4](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.23.3...v0.23.4) (2026-04-07)
 
 ### [0.23.3](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.23.2...v0.23.3) (2026-04-06)
