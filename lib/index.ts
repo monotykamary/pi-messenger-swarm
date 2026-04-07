@@ -8,17 +8,10 @@ export type {
   ReservationConflict,
   MessengerState,
   Dirs,
-  ClaimEntry,
-  CompletionEntry,
-  SpecClaims,
-  SpecCompletions,
-  AllClaims,
-  AllCompletions,
   AgentStatus,
   ComputedStatus,
   NameThemeConfig,
   AutoStatusContext,
-  DisplayMode,
 } from './types.js';
 
 export {

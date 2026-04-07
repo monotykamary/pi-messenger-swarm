@@ -89,25 +89,6 @@ export interface Dirs {
   registry: string;
 }
 
-export interface ClaimEntry {
-  agent: string;
-  sessionId: string;
-  pid: number;
-  claimedAt: string;
-  reason?: string;
-}
-
-export interface CompletionEntry {
-  completedBy: string;
-  completedAt: string;
-  notes?: string;
-}
-
-export type SpecClaims = Record<string, ClaimEntry>;
-export type SpecCompletions = Record<string, CompletionEntry>;
-export type AllClaims = Record<string, SpecClaims>;
-export type AllCompletions = Record<string, SpecCompletions>;
-
 export type AgentStatus = 'active' | 'idle' | 'away' | 'stuck';
 
 export interface ComputedStatus {
@@ -127,5 +108,3 @@ export interface AutoStatusContext {
   recentEdits: number;
   sessionStartedAt: string;
 }
-
-export type DisplayMode = 'same-folder-branch' | 'same-folder' | 'different';
