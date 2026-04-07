@@ -75,10 +75,17 @@ pi_messenger({
   role: 'Packaging Gap Analyst',
   persona: 'Skeptical market researcher',
   message: 'Analyze idea aggregation products and find productization gaps',
-  content: 'Focus on monetization and onboarding friction',
+  context: 'Focus on monetization and onboarding friction',
   taskId: 'task-6',
 });
 ```
+
+- `message` (or `prompt`) = **The mission/objective** — required main task for the subagent
+- `context` = **Additional context** — supplementary information, constraints, or background
+- `role` = Agent role label (defaults to 'Subagent')
+- `persona` = Tone/behavior modifier
+- `taskId` = Optional task to associate with this spawn
+- `agentFile` = Path to markdown file with YAML frontmatter (alternative to role/persona)
 
 The `agentFile` parameter can be used to specify a markdown file with YAML frontmatter:
 

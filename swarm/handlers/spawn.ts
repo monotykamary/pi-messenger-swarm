@@ -176,7 +176,7 @@ function spawnCreate(
     const request: SpawnRequest = {
       agentFile: params.agentFile,
       message,
-      context: params.content,
+      context: params.context,
       taskId: params.taskId,
       name: params.name,
     };
@@ -219,7 +219,7 @@ function spawnCreate(
     role,
     persona: params.persona,
     objective,
-    context: params.content,
+    context: params.context,
     taskId: params.taskId,
     name: params.name,
   };
