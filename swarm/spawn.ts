@@ -217,7 +217,7 @@ function buildSystemPrompt(request: SpawnRequest): string {
     '5. Task completion is required: Mark the task done upon mission completion: pi_messenger({ action: "task.done", id: "<taskId>", summary: "Concrete accomplishment with evidence" }).',
     '6. Be concise, evidence-based, and stay in role.',
     '7. Clarify ambiguity early: if mission scope, expected output format, or framing is unclear or seems incomplete, send a brief targeted question via pi_messenger({ action: "send", to: "AgentName", message: "..." }) before proceeding. A 30-second alignment check prevents off-target work.',
-    '8. Exit when mission is complete: use bash({ command: "exit 0" }) to self-terminate. Do not stay alive indefinitely.'
+    '8. Exit when mission is complete: use bash({ command: "exit 0" }) to self-terminate. Remain active only if explicitly instructed (e.g., council discussions, monitoring, or awaiting further input). Do not stay alive indefinitely unless serving an ongoing purpose.'
   );
 
   return lines.join('\n');
