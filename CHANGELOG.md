@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.24.1](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.24.0...v0.24.1) (2026-04-11)
+
+
+### Features
+
+* **spawn:** allow agents to persist for council and interactive workflows ([b5d5a6b](https://github.com/monotykamary/pi-messenger-swarm/commit/b5d5a6b6c18115bc7208bff5d3450b7b4ee8ff43))
+
 ## [0.24.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.23.4...v0.24.0) (2026-04-07)
 
 
