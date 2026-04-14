@@ -8,7 +8,7 @@ Pi Messenger is a file-based multi-agent coordination extension for Pi.
 
 - Agents in different terminals can join the same mesh
 - Each Pi session gets its own default session channel
-- Named channels like `#memory` and `#heartbeat` remain durable shared spaces
+- Named channels like `#memory` remain durable shared spaces
 - Feed events, tasks, archives, and message routing are channel-scoped
 - Main agents can spawn dynamic subagents with custom roles/personas/objectives
 - No daemon required (all state is file-backed)
@@ -90,10 +90,11 @@ The same Pi `sessionId` restores the same session channel when reopened.
 
 ### Named channels
 
-Two durable named channels are created by default:
+By default, a durable named channel is created:
 
 - `#memory` — cross-session knowledge, notes, decisions, and async handoff
-- `#heartbeat` — long-running status, reports, and heartbeat-style updates
+
+You can create additional named channels as needed.
 
 You can also create additional named channels explicitly with `join`.
 
@@ -115,7 +116,7 @@ If Pi switches or resumes sessions inside the same live messenger instance, mess
 - restores the correct session channel
 - drops stale old session-channel membership
 - restarts watchers on the correct inbox
-- keeps named channels like `#memory` and `#heartbeat`
+- keeps named channels like `#memory`
 
 ## Core Actions
 
@@ -182,7 +183,7 @@ pi_messenger({
   to: '#memory',
   message: 'Claimed task-4, touching src/auth/session.ts',
 });
-pi_messenger({ action: 'send', to: '#heartbeat', message: 'Nightly sync complete' });
+pi_messenger({ action: 'send', to: '#memory', message: 'Nightly sync complete' });
 ```
 
 ### Switch channels explicitly
@@ -233,7 +234,6 @@ By default, swarm state is **project-scoped** (isolated per project). All channe
 .pi/messenger/
 ├── channels/                    # Unified event-sourced channel files
 │   ├── memory.jsonl           # Line 1: metadata header, Line 2+: feed events
-│   ├── heartbeat.jsonl
 │   └── quiet-river.jsonl
 ├── tasks/                       # Per-session task storage
 │   ├── session-abc.jsonl      # Task event log (created, claimed, done, etc.)
