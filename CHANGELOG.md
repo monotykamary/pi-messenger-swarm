@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.24.2](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.24.1...v0.24.2) (2026-04-19)
+
+
+### Bug Fixes
+
+* make simple-git-hooks postinstall resilient to --omit=dev ([f091737](https://github.com/monotykamary/pi-messenger-swarm/commit/f091737f1c25032f1704d5bc8939a51b053962c0))
+
 ### [0.24.1](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.24.0...v0.24.1) (2026-04-11)
 
 
