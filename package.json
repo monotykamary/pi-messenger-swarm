@@ -50,7 +50,7 @@
     "lint:dead": "knip --no-gitignore",
     "release": "standard-version",
     "release:dry-run": "standard-version --dry-run",
-    "postinstall": "simple-git-hooks"
+    "postinstall": "simple-git-hooks 2>/dev/null || true"
   },
   "simple-git-hooks": {
     "pre-commit": "npx lint-staged",
