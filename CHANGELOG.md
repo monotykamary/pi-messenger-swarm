@@ -2,6 +2,62 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.25.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.24.2...v0.25.0) (2026-04-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* The pi_messenger tool has been removed. All actions
+are now dispatched through the pi-messenger-swarm CLI, which
+auto-spawns a long-lived HTTP harness server on first use. Models
+call pi-messenger-swarm join, pi-messenger-swarm task claim task-1,
+etc. instead of a tool invocation.
+
+Migration:
+- pi_messenger({ action: 'join' }) → pi-messenger-swarm join
+- pi_messenger({ action: 'task.claim', id: 'task-1' })
+  → pi-messenger-swarm task claim task-1
+- pi_messenger({ action: 'send', to: '#memory', message: '...' })
+  → pi-messenger-swarm send #memory '...'
+- JSON passthrough still works:
+  pi-messenger-swarm '{ "action": "join" }'
+
+New architecture:
+- harness/server.ts: long-lived Node.js HTTP server with
+  /action, /health, /quit endpoints
+- harness/cli.ts: natural subcommand CLI with auto-spawn,
+  process-tree identity resolution
+- index.ts: tool registration removed, extension manages
+  lifecycle/overlay only
+- Agent identity resolved via process tree (x-caller-pid
+  header) + disk-based registration lookup
+- Session ID bridged via .pi/messenger/session-id file
+  (extension writes at session_start, CLI forwards as
+  x-session-id header)
+- Shell wrapper at ~/.pi/agent/bin/pi-messenger-swarm
+  instead of symlink
+
+Fixes:
+- Tasks invisible in overlay: harness used empty sessionId
+  while extension used pi's real UUIDv7 session ID
+- Registration/channel sessionId patched on subsequent
+  requests when session-id file becomes available (race
+  condition guard)
+- renameAgent() used process.pid instead of callerPid in
+  harness context
+- Swarm operating protocol in subagent prompts updated from
+  JSON to CLI syntax
+- All hint strings across handlers, overlay, deliver-message
+  updated to CLI syntax
+- README.md and SKILL.md updated from pi_messenger() to CLI
+  examples
+- coverage/ added to .gitignore
+- knip.json updated with harness entry points
+
+### Features
+
+* replace tool-hoisting with CLI + harness server architecture ([8bf9259](https://github.com/monotykamary/pi-messenger-swarm/commit/8bf9259f1d6c60f30128ab7ece96f772b9b8fa98))
+
 ### [0.24.2](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.24.1...v0.24.2) (2026-04-19)
 
 
