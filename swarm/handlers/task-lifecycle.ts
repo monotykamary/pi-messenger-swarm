@@ -2,7 +2,7 @@ import type { MessengerActionParams } from '../../action-types.js';
 import type { MessengerState } from '../../lib.js';
 import { normalizeChannelId } from '../../channel.js';
 import { result } from '../result.js';
-import { logFeedEvent } from '../../feed.js';
+import { logFeedEvent } from '../../feed/index.js';
 import * as taskStore from '../task-store.js';
 import type { SwarmTaskEvidence } from '../types.js';
 import { summaryLine } from './_utils.js';

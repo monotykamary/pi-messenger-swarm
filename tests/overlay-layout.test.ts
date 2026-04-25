@@ -112,8 +112,8 @@ describe('overlay layout', () => {
 
     try {
       const taskStore = await import('../swarm/task-store.js');
-      const { logFeedEvent } = await import('../feed.js');
-      const { MessengerOverlay } = await import('../overlay.js');
+      const { logFeedEvent } = await import('../feed/index.js');
+      const { MessengerOverlay } = await import('../overlay/component.js');
 
       taskStore.createTask(
         cwd,
@@ -159,8 +159,8 @@ describe('overlay layout', () => {
     process.chdir(cwd);
 
     try {
-      const { logFeedEvent } = await import('../feed.js');
-      const { MessengerOverlay } = await import('../overlay.js');
+      const { logFeedEvent } = await import('../feed/index.js');
+      const { MessengerOverlay } = await import('../overlay/component.js');
 
       for (let i = 0; i < 12; i++) {
         logFeedEvent(cwd, 'BenchAgent', 'message', undefined, `Msg ${i}`, state.currentChannel);
@@ -211,8 +211,8 @@ describe('overlay layout', () => {
     process.chdir(cwd);
 
     try {
-      const { logFeedEvent } = await import('../feed.js');
-      const { MessengerOverlay } = await import('../overlay.js');
+      const { logFeedEvent } = await import('../feed/index.js');
+      const { MessengerOverlay } = await import('../overlay/component.js');
 
       for (let i = 0; i < 12; i++) {
         logFeedEvent(cwd, 'BenchAgent', 'message', undefined, `Msg ${i}`, state.currentChannel);
@@ -251,8 +251,8 @@ describe('overlay layout', () => {
     process.chdir(cwd);
 
     try {
-      const { logFeedEvent } = await import('../feed.js');
-      const { MessengerOverlay } = await import('../overlay.js');
+      const { logFeedEvent } = await import('../feed/index.js');
+      const { MessengerOverlay } = await import('../overlay/component.js');
 
       for (let i = 0; i < 12; i++) {
         logFeedEvent(cwd, 'BenchAgent', 'message', undefined, `Msg ${i}`, state.currentChannel);
@@ -296,8 +296,8 @@ describe('overlay layout', () => {
     process.chdir(cwd);
 
     try {
-      const { logFeedEvent } = await import('../feed.js');
-      const { MessengerOverlay } = await import('../overlay.js');
+      const { logFeedEvent } = await import('../feed/index.js');
+      const { MessengerOverlay } = await import('../overlay/component.js');
 
       for (let i = 0; i < 3; i++) {
         logFeedEvent(cwd, 'BenchAgent', 'message', undefined, `Msg ${i}`, state.currentChannel);

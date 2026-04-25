@@ -8,7 +8,7 @@ import {
   logFeedEvent,
   readFeedEvents,
   type FeedEvent,
-} from '../../feed.js';
+} from '../../feed/index.js';
 import { notRegisteredError, result } from '../result.js';
 
 export function executeSend(

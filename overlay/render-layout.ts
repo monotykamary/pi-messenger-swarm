@@ -10,16 +10,16 @@ import type { Dirs, MessengerState } from '../lib.js';
 import type { SwarmTask as Task, SpawnedAgent } from '../swarm/types.js';
 import type { LiveWorkerInfo } from '../swarm/live-progress.js';
 import type { MessengerViewState } from './actions.js';
-import type { FeedEvent } from '../feed.js';
+import type { FeedEvent } from '../feed/index.js';
 import {
   renderWorkersSection,
   renderTaskList,
   renderSwarmList,
   renderAgentsRow,
   renderEmptyState,
-} from '../overlay-render.js';
+} from './render-exports.js';
 import { calculateVisibleRange, calculateWindowForOlderLoad } from '../feed/scroll.js';
-import { readFeedEventsByRange } from '../feed.js';
+import { readFeedEventsByRange } from '../feed/index.js';
 
 const FEED_LOAD_CHUNK = 100;
 const FEED_WINDOW_SIZE = 200;

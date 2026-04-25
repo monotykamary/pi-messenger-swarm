@@ -1,4 +1,4 @@
-import { logFeedEvent } from '../feed.js';
+import { logFeedEvent } from '../feed/index.js';
 import * as taskStore from './task-store.js';
 import type { SwarmTask } from './types.js';
 

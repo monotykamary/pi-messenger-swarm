@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { isProcessAlive } from '../../lib.js';
-import { logFeedEvent } from '../../feed.js';
+import { logFeedEvent } from '../../feed/index.js';
 import { appendTaskEvent } from './events.js';
 import { replayTasks } from './events.js';
 

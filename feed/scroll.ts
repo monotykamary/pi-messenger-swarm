@@ -9,7 +9,7 @@
 
 import type { FeedEvent } from './index.js';
 import type { Theme } from '@mariozechner/pi-coding-agent';
-import { renderFeedSection } from '../overlay-render.js';
+import { renderFeedSection } from '../overlay/render-exports.js';
 import {
   type FeedScrollState,
   isAtBottom as isAtBottomCore,

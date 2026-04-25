@@ -3,7 +3,7 @@ import type { Dirs, MessengerState } from '../lib.js';
 import * as taskStore from '../swarm/task-store.js';
 import { listSpawned, listSpawnedHistory } from '../swarm/spawn.js';
 import type { SwarmTask as Task } from '../swarm/types.js';
-import { getFeedLineCount, readFeedEventsByRange } from '../feed.js';
+import { getFeedLineCount, readFeedEventsByRange } from '../feed/index.js';
 import { getEffectiveSessionId } from '../store/shared.js';
 import {
   calculateVisibleRange,
@@ -20,7 +20,7 @@ import {
   handleTaskKeyBinding,
   type MessengerViewState,
 } from './actions.js';
-import { navigateSwarm, navigateTask } from '../overlay-render.js';
+import { navigateSwarm, navigateTask } from './render-exports.js';
 
 const FEED_GG_LOAD_SIZE = 100;
 

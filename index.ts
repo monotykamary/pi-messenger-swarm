@@ -31,7 +31,7 @@ import { getContextSessionId, getEffectiveSessionId } from './store/shared.js';
 import { MessengerOverlay, type OverlayCallbacks } from './overlay/component.js';
 import { MessengerConfigOverlay } from './overlay/config-overlay.js';
 import { loadConfig, matchesAutoRegisterPath, type MessengerConfig } from './config.js';
-import { logFeedEvent, pruneFeed } from './feed.js';
+import { logFeedEvent, pruneFeed } from './feed/index.js';
 import { onLiveWorkersChanged } from './swarm/live-progress.js';
 import { stopAllSpawned } from './swarm/spawn.js';
 import { createDeliverMessage } from './extension/deliver-message.js';

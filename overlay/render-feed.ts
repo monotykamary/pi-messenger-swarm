@@ -5,7 +5,7 @@ import {
   formatFeedLine as sharedFormatFeedLine,
   sanitizeFeedEvent,
   type FeedEvent,
-} from '../feed.js';
+} from '../feed/index.js';
 
 const DIM_EVENTS = new Set(['join', 'leave', 'reserve', 'release']);
 

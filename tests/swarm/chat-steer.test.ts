@@ -30,7 +30,7 @@ vi.mock('../../swarm/live-progress.js', () => ({
   onLiveWorkersChanged: () => () => {},
 }));
 
-vi.mock('../../feed.js', () => ({
+vi.mock('../../feed/index.js', () => ({
   logFeedEvent: mocks.logFeedEvent,
 }));
 
@@ -38,7 +38,7 @@ vi.mock('../../swarm/task-actions.js', () => ({
   executeTaskAction: () => ({ success: true, message: 'ok' }),
 }));
 
-import { createMessengerViewState, handleMessageInput } from '../../overlay-actions.js';
+import { createMessengerViewState, handleMessageInput } from '../../overlay/actions.js';
 import type { MessengerState, Dirs } from '../../lib.js';
 import type { TUI } from '@mariozechner/pi-tui';
 

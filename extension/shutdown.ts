@@ -6,7 +6,7 @@ import type { MessengerState, Dirs } from '../lib.js';
 import * as store from '../store.js';
 import { getEffectiveSessionId } from '../store/shared.js';
 import * as taskStore from '../swarm/task-store.js';
-import { logFeedEvent } from '../feed.js';
+import { logFeedEvent } from '../feed/index.js';
 
 export interface ShutdownResult {
   unclaimedCount: number;

@@ -10,7 +10,7 @@ import { displayChannelLabel } from '../../channel.js';
 import * as store from '../../store.js';
 import * as taskStore from '../../swarm/task-store.js';
 import { getEffectiveSessionId } from '../../store/shared.js';
-import { formatFeedLine, readFeedEvents } from '../../feed.js';
+import { formatFeedLine, readFeedEvents } from '../../feed/index.js';
 import { notRegisteredError, result } from '../result.js';
 
 export function executeWhois(

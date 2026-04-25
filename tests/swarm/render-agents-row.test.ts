@@ -25,7 +25,7 @@ vi.mock('../../swarm/live-progress.js', () => ({
   getLiveWorkers: mocks.getLiveWorkers,
 }));
 
-import { renderAgentsRow } from '../../overlay-render.js';
+import { renderAgentsRow } from '../../overlay/render-exports.js';
 import type { MessengerState } from '../../lib.js';
 import type { Dirs } from '../../lib.js';
 import type { LiveWorkerInfo } from '../../swarm/live-progress.js';

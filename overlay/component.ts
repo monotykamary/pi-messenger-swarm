@@ -9,7 +9,7 @@ import type { MessengerState, Dirs } from '../lib.js';
 import { displayChannelLabel } from '../channel.js';
 import { getEffectiveSessionId } from '../store/shared.js';
 import * as taskStore from '../swarm/task-store.js';
-import { type FeedEvent } from '../feed.js';
+import { type FeedEvent } from '../feed/index.js';
 import type { SwarmTask as Task } from '../swarm/types.js';
 import {
   renderStatusBar,
@@ -17,7 +17,7 @@ import {
   renderLegend,
   renderDetailView,
   renderSwarmDetail,
-} from '../overlay-render.js';
+} from './render-exports.js';
 import { createMessengerViewState, setNotification, type MessengerViewState } from './actions.js';
 import { handleOverlayInput } from './input.js';
 import { generateSwarmSnapshot } from './snapshot.js';

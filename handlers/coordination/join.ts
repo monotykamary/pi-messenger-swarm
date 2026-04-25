@@ -4,7 +4,7 @@ import type { AgentMailMessage, Dirs, MessengerState, NameThemeConfig } from '..
 import { displaySpecPath, extractFolder, resolveSpecPath } from '../../lib.js';
 import { displayChannelLabel } from '../../channel.js';
 import * as store from '../../store.js';
-import { logFeedEvent, pruneFeed } from '../../feed.js';
+import { logFeedEvent, pruneFeed } from '../../feed/index.js';
 import { result } from '../result.js';
 
 export function executeJoin(

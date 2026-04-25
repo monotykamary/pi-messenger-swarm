@@ -33,7 +33,7 @@ vi.mock('../swarm/live-progress.js', () => ({
   onLiveWorkersChanged: () => () => {},
 }));
 
-vi.mock('../feed.js', () => ({
+vi.mock('../feed/index.js', () => ({
   logFeedEvent: vi.fn(),
   readFeedEvents: () => [],
 }));

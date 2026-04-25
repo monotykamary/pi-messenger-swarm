@@ -1,101 +1,95 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from 'vitest';
 
-vi.mock("@mariozechner/pi-tui", () => ({
+vi.mock('@mariozechner/pi-tui', () => ({
   truncateToWidth: (s: string) => s,
 }));
 
-import { createMessengerViewState } from "../../overlay-actions.js";
-import { renderLegend, renderSwarmDetail, renderSwarmList } from "../../overlay-render.js";
-import type { SpawnedAgent } from "../../swarm/types.js";
+import { createMessengerViewState } from '../../overlay/actions.js';
+import { renderLegend, renderSwarmDetail, renderSwarmList } from '../../overlay/render-exports.js';
+import type { SpawnedAgent } from '../../swarm/types.js';
 
 const theme = {
   fg: (_name: string, text: string) => text,
 };
 
-describe("overlay swarm list view", () => {
-  it("renders spawned agent name + role lines", () => {
+describe('overlay swarm list view', () => {
+  it('renders spawned agent name + role lines', () => {
     const viewState = createMessengerViewState();
-    viewState.mainView = "swarm";
+    viewState.mainView = 'swarm';
 
     const agents: SpawnedAgent[] = [
       {
-        id: "a1",
-        cwd: "/tmp",
-        name: "QuickHawk",
-        role: "Researcher",
-        objective: "Investigate API limits",
-        status: "running",
+        id: 'a1',
+        cwd: '/tmp',
+        name: 'QuickHawk',
+        role: 'Researcher',
+        objective: 'Investigate API limits',
+        status: 'running',
         startedAt: new Date().toISOString(),
       },
       {
-        id: "a2",
-        cwd: "/tmp",
-        name: "SwiftOtter",
-        role: "Implementer",
-        objective: "Ship patch",
-        status: "completed",
+        id: 'a2',
+        cwd: '/tmp',
+        name: 'SwiftOtter',
+        role: 'Implementer',
+        objective: 'Ship patch',
+        status: 'completed',
         startedAt: new Date().toISOString(),
       },
     ];
 
     const lines = renderSwarmList(theme as any, agents, 120, 4, viewState);
 
-    expect(lines[0]).toContain("QuickHawk");
-    expect(lines[0]).toContain("Researcher");
-    expect(lines[1]).toContain("SwiftOtter");
-    expect(lines[1]).toContain("Implementer");
+    expect(lines[0]).toContain('QuickHawk');
+    expect(lines[0]).toContain('Researcher');
+    expect(lines[1]).toContain('SwiftOtter');
+    expect(lines[1]).toContain('Implementer');
   });
 
-  it("shows f:Tasks legend in swarm list mode", () => {
+  it('shows f:Tasks legend in swarm list mode', () => {
     const viewState = createMessengerViewState();
-    viewState.mainView = "swarm";
+    viewState.mainView = 'swarm';
 
-    const legend = renderLegend(
-      theme as any,
-      "/tmp",
-      120,
-      viewState,
-      null,
-      {
-        id: "a1",
-        cwd: "/tmp",
-        name: "QuickHawk",
-        role: "Researcher",
-        objective: "Investigate",
-        status: "running",
-        startedAt: new Date().toISOString(),
-      },
-    );
+    const legend = renderLegend(theme as any, '/tmp', 120, viewState, null, {
+      id: 'a1',
+      cwd: '/tmp',
+      name: 'QuickHawk',
+      role: 'Researcher',
+      objective: 'Investigate',
+      status: 'running',
+      startedAt: new Date().toISOString(),
+    });
 
-    const legendText = legend.join(" ");
-    expect(legendText).toContain("f:Tasks");
-    expect(legendText).toContain("Enter:Detail");
+    const legendText = legend.join(' ');
+    expect(legendText).toContain('f:Tasks');
+    expect(legendText).toContain('Enter:Detail');
   });
 
-  it("renders full system prompt in swarm detail", () => {
+  it('renders full system prompt in swarm detail', () => {
     const viewState = createMessengerViewState();
-    viewState.mainView = "swarm";
+    viewState.mainView = 'swarm';
 
     const lines = renderSwarmDetail(
       {
-        id: "a1",
-        cwd: "/tmp",
-        name: "QuickHawk",
-        role: "Researcher",
-        objective: "Investigate",
-        status: "running",
+        id: 'a1',
+        cwd: '/tmp',
+        name: 'QuickHawk',
+        role: 'Researcher',
+        objective: 'Investigate',
+        status: 'running',
         startedAt: new Date().toISOString(),
-        systemPrompt: "# Swarm Subagent Role\n\n## Role Description\nYou are a specialized researcher.",
+        systemPrompt:
+          '# Swarm Subagent Role\n\n## Role Description\nYou are a specialized researcher.',
       },
       120,
       40,
-      viewState,
+      viewState
     );
 
-    const joined = lines.join("\n");
-    expect(joined).toContain("System Prompt:");
-    expect(joined).toContain("# Swarm Subagent Role");
-    expect(joined).toContain("## Role Description");
-    expect(joined).toContain("You are a specialized researcher.");
+    const joined = lines.join('\n');
+    expect(joined).toContain('System Prompt:');
+    expect(joined).toContain('# Swarm Subagent Role');
+    expect(joined).toContain('## Role Description');
+    expect(joined).toContain('You are a specialized researcher.');
   });
 });

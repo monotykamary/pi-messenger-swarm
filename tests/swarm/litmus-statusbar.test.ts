@@ -23,10 +23,10 @@ afterAll(() => {
 });
 
 describe('swarm status bar litmus', () => {
-  let renderStatusBar: typeof import('../../overlay-render.js').renderStatusBar;
+  let renderStatusBar: typeof import('../../overlay/render-exports.js').renderStatusBar;
 
   beforeAll(async () => {
-    const mod = await import('../../overlay-render.js');
+    const mod = await import('../../overlay/render-exports.js');
     renderStatusBar = mod.renderStatusBar;
   });
 
