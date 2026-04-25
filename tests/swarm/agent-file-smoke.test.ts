@@ -118,7 +118,7 @@ describe('agent file smoke tests', () => {
     const args = spawnMock.mock.calls[0][1] as string[];
     const idx = args.indexOf('--append-system-prompt');
     const promptPath = args[idx + 1];
-    expect(fs.readFileSync(promptPath, 'utf-8')).toBe('System prompt from file');
+    expect(fs.readFileSync(promptPath, 'utf-8')).toContain('System prompt from file');
 
     // Verify message was user prompt
     expect(args[args.length - 1]).toBe('Do the mission');

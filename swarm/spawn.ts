@@ -180,6 +180,25 @@ function generateAgentFile(cwd: string, sessionId: string, agent: SpawnedAgent):
 // Prompt Building
 // ============================================================================
 
+/**
+ * The swarm operating protocol — always appended to every subagent's system prompt.
+ * This tells the agent HOW to coordinate (join, claim, progress, done, send).
+ * It's orthogonal to WHAT the agent does (its role, objective, file content).
+ */
+function buildSwarmProtocol(): string {
+  return [
+    '## Swarm Operating Protocol',
+    '1. Join the mesh first: `pi-messenger-swarm join`.',
+    '2. Coordinate via messaging/reservations/task actions before risky edits.',
+    '3. Task claiming is required: If assigned a taskId, claim it before beginning work: `pi-messenger-swarm task claim <taskId>`. Failure to claim indicates another agent owns it; report the conflict and await further instruction.',
+    '4. Progress updates are required: Update task progress every 3-5 tool calls or at significant milestones: `pi-messenger-swarm task progress <taskId> "Specific achievement and rationale"`.',
+    '5. Task completion is required: Mark the task done upon mission completion: `pi-messenger-swarm task done <taskId> "Concrete accomplishment with evidence"`.',
+    '6. Be concise, evidence-based, and stay in role.',
+    '7. Clarify ambiguity early: if mission scope, expected output format, or framing is unclear or seems incomplete, send a brief targeted question via `pi-messenger-swarm send AgentName "..."` before proceeding. A 30-second alignment check prevents off-target work.',
+    '8. Exit when mission is complete: use bash({ command: "exit 0" }) to self-terminate. Remain active only if explicitly instructed (e.g., council discussions, monitoring, or awaiting further input). Do not stay alive indefinitely unless serving an ongoing purpose.',
+  ].join('\n');
+}
+
 function buildSystemPrompt(request: SpawnRequest): string {
   const role = formatRoleLabel(request.role ?? 'Subagent');
   const persona = request.persona?.trim();
@@ -207,18 +226,7 @@ function buildSystemPrompt(request: SpawnRequest): string {
     lines.push('', '## Assigned Task', `Primary task: ${request.taskId}`);
   }
 
-  lines.push(
-    '',
-    '## Swarm Operating Protocol',
-    '1. Join the mesh first: `pi-messenger-swarm join`.',
-    '2. Coordinate via messaging/reservations/task actions before risky edits.',
-    '3. Task claiming is required: If assigned a taskId, claim it before beginning work: `pi-messenger-swarm task claim <taskId>`. Failure to claim indicates another agent owns it; report the conflict and await further instruction.',
-    '4. Progress updates are required: Update task progress every 3-5 tool calls or at significant milestones: `pi-messenger-swarm task progress <taskId> "Specific achievement and rationale"`.',
-    '5. Task completion is required: Mark the task done upon mission completion: `pi-messenger-swarm task done <taskId> "Concrete accomplishment with evidence"`.',
-    '6. Be concise, evidence-based, and stay in role.',
-    '7. Clarify ambiguity early: if mission scope, expected output format, or framing is unclear or seems incomplete, send a brief targeted question via `pi-messenger-swarm send AgentName "..."` before proceeding. A 30-second alignment check prevents off-target work.',
-    '8. Exit when mission is complete: use bash({ command: "exit 0" }) to self-terminate. Remain active only if explicitly instructed (e.g., council discussions, monitoring, or awaiting further input). Do not stay alive indefinitely unless serving an ongoing purpose.'
-  );
+  lines.push('', buildSwarmProtocol());
 
   return lines.join('\n');
 }
@@ -435,7 +443,7 @@ export function spawnSubagent(
     // File-based mode: parse frontmatter, use body as system prompt
     const filePath = path.resolve(cwd, request.agentFile);
     const def = loadAgentDefinition(filePath);
-    systemPrompt = def.systemPrompt;
+    systemPrompt = def.systemPrompt + '\n\n' + buildSwarmProtocol();
     // Use message > objective from call > objective from file
     objective = request.message || request.objective || def.objective || '';
     prompt = objective;
