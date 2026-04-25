@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.25.1](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.0...v0.25.1) (2026-04-25)
+
+
+### Features
+
+* **spawn:** add --agent-file, --objective, --context CLI flags ([6c577d7](https://github.com/monotykamary/pi-messenger-swarm/commit/6c577d77a387398f8ff794c6edffccb220dcec46))
+
 ## [0.25.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.24.2...v0.25.0) (2026-04-25)
 
 
