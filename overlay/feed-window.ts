@@ -1,8 +1,8 @@
 import type { Theme } from '@mariozechner/pi-coding-agent';
 import type { FeedEvent } from '../feed.js';
 import { getFeedLineCount, readFeedEventsByRange } from '../feed.js';
-import { calculateRenderedLines, jumpToBottom, maintainScrollOnNewEvents } from '../feed-scroll.js';
-import type { MessengerViewState } from '../overlay-actions.js';
+import { calculateRenderedLines, jumpToBottom, maintainScrollOnNewEvents } from '../feed/scroll.js';
+import type { MessengerViewState } from './actions.js';
 import { renderWorkersSection } from '../overlay-render.js';
 import { getLiveWorkers } from '../swarm/live-progress.js';
 

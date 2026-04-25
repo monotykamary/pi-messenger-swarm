@@ -18,7 +18,7 @@ import { formatRoleLabel } from '../swarm/labels.js';
 import { getLiveWorkers, type LiveWorkerInfo } from '../swarm/live-progress.js';
 import type { ToolEntry } from '../swarm/progress.js';
 import { loadConfig } from '../config.js';
-import type { MessengerViewState } from '../overlay-actions.js';
+import type { MessengerViewState } from './actions.js';
 import { getEffectiveSessionId } from '../store/shared.js';
 
 let listLegendCache: {

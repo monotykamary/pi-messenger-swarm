@@ -17,7 +17,7 @@ import {
   createMessengerViewState,
   handleMessageInput,
   type MessengerViewState,
-} from '../overlay-actions.js';
+} from '../overlay/actions.js';
 import type { MessengerState, Dirs } from '../lib.js';
 import type { TUI } from '@mariozechner/pi-tui';
 

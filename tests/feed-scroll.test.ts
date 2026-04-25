@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createTempMessengerDirs } from './helpers/temp-dirs.js';
-import { logFeedEvent, getFeedLineCount } from '../feed.js';
+import { logFeedEvent, getFeedLineCount } from '../feed/index.js';
 
 const TEST_CHANNEL = 'test-channel';
 import {
@@ -12,7 +12,7 @@ import {
   calculateWindowForOlderLoad,
   maintainScrollOnNewEvents,
   type FeedScrollState,
-} from '../feed-scroll-core.js';
+} from '../feed/scroll-core.js';
 
 // Test the line-based scroll functions without rendering dependency
 describe('feed-scroll line-based', () => {

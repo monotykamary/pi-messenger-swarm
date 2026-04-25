@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as taskStore from '../../swarm/task-store.js';
 import * as store from '../../store.js';
-import { logFeedEvent, readFeedEvents } from '../../feed.js';
+import { logFeedEvent, readFeedEvents } from '../../feed/index.js';
 import { createTempMessengerDirs } from '../helpers/temp-dirs.js';
 import type { MessengerState, Dirs } from '../../lib.js';
 

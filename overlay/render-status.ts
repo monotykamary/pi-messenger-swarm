@@ -5,7 +5,7 @@ import * as taskStore from '../swarm/task-store.js';
 import type { SwarmTask as Task, SpawnedAgent } from '../swarm/types.js';
 import { formatRoleLabel } from '../swarm/labels.js';
 import { getLiveWorkers, type LiveWorkerInfo } from '../swarm/live-progress.js';
-import type { MessengerViewState } from '../overlay-actions.js';
+import type { MessengerViewState } from './actions.js';
 
 const STATUS_ICONS: Record<string, string> = {
   done: '✓',

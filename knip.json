@@ -6,6 +6,11 @@
     "store.ts",
     "overlay.ts",
     "overlay-render.ts",
+    "feed.ts",
+    "feed-scroll.ts",
+    "feed-scroll-core.ts",
+    "config-overlay.ts",
+    "overlay-actions.ts",
     "harness/server.ts",
     "harness/cli.ts"
   ],

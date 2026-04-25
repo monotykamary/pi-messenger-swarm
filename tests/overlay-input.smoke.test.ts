@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { handleOverlayInput } from '../overlay/input.js';
-import { createMessengerViewState } from '../overlay-actions.js';
+import { createMessengerViewState } from '../overlay/actions.js';
 import { createMessengerFixture, createState } from './helpers/messenger-fixtures.js';
 
 describe('overlay input smoke', () => {

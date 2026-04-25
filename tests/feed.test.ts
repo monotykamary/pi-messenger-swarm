@@ -10,7 +10,7 @@ import {
   readFeedEventsWithOffset,
   readFeedEventsByRange,
   getFeedLineCount,
-} from '../feed.js';
+} from '../feed/index.js';
 import { createTempMessengerDirs } from './helpers/temp-dirs.js';
 
 const TEST_CHANNEL = 'test-channel';

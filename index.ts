@@ -14,8 +14,6 @@
 import { homedir } from 'node:os';
 import * as fs from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { spawn as spawnChild, type ChildProcess } from 'node:child_process';
 import type { ExtensionAPI, ExtensionContext } from '@mariozechner/pi-coding-agent';
 import type { OverlayHandle, TUI } from '@mariozechner/pi-tui';
 import { truncateToWidth } from '@mariozechner/pi-tui';
@@ -30,16 +28,18 @@ import {
 import { displayChannelLabel } from './channel.js';
 import * as store from './store.js';
 import { getContextSessionId, getEffectiveSessionId } from './store/shared.js';
-import { MessengerOverlay, type OverlayCallbacks } from './overlay.js';
-import { MessengerConfigOverlay } from './config-overlay.js';
+import { MessengerOverlay, type OverlayCallbacks } from './overlay/component.js';
+import { MessengerConfigOverlay } from './overlay/config-overlay.js';
 import { loadConfig, matchesAutoRegisterPath, type MessengerConfig } from './config.js';
 import { logFeedEvent, pruneFeed } from './feed.js';
-import * as taskStore from './swarm/task-store.js';
 import { onLiveWorkersChanged } from './swarm/live-progress.js';
 import { stopAllSpawned } from './swarm/spawn.js';
 import { createDeliverMessage } from './extension/deliver-message.js';
 import { createStatusController } from './extension/status.js';
 import { createActivityTracker } from './extension/activity.js';
+import { installShellAlias, createHarnessServer } from './extension/harness.js';
+import { handleReservationEnforcement } from './extension/reservation.js';
+import { handleSessionShutdown } from './extension/shutdown.js';
 
 let overlayTui: TUI | null = null;
 let overlayHandle: OverlayHandle | null = null;
@@ -158,63 +158,8 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
   });
 
   // ===========================================================================
-  // Registration Context & Shell Setup
+  // Registration Context
   // ===========================================================================
-
-  /**
-   * Resolve the path to the CLI entry point.
-   * Works regardless of how the extension is loaded (source via tsx, or compiled dist/).
-   */
-  function getCliPath(): string {
-    const __dirname = fileURLToPath(new URL('.', import.meta.url));
-    // When running from dist/: __dirname = .../dist, so dist/harness/cli.js exists
-    const compiledPath = join(__dirname, 'harness', 'cli.js');
-    if (fs.existsSync(compiledPath)) return compiledPath;
-    // When running from source via tsx: __dirname = project root
-    // Need to use dist/harness/cli.js (built output)
-    const fromSource = join(__dirname, 'dist', 'harness', 'cli.js');
-    if (fs.existsSync(fromSource)) return fromSource;
-    // Last resort: return the expected compiled path even if it doesn't exist yet
-    return compiledPath;
-  }
-
-  /**
-   * Write a small shell wrapper script at ~/.pi/agent/bin/pi-messenger-swarm
-   * that invokes the CLI via node. Pi adds ~/.pi/agent/bin/ to PATH for
-   * every bash invocation (`getShellEnv()` prepends it), so the CLI becomes
-   * available as a normal command regardless of install method.
-   *
-   * Uses a wrapper script instead of a symlink because the CLI's location
-   * depends on whether the extension runs from source (tsx) or compiled (dist/).
-   */
-  function installShellAlias(): void {
-    try {
-      const agentBinDir = join(homedir(), '.pi', 'agent', 'bin');
-      if (!fs.existsSync(agentBinDir)) {
-        fs.mkdirSync(agentBinDir, { recursive: true });
-      }
-      const cliPath = getCliPath();
-      const linkPath = join(agentBinDir, 'pi-messenger-swarm');
-
-      // Write a shell wrapper that resolves the correct node + cli path
-      const wrapperContent = `#!/bin/sh
-exec node "${cliPath}" "$@"
-`;
-
-      // Only write if content differs (avoids unnecessary writes on every session_start)
-      let currentContent: string | null = null;
-      try {
-        currentContent = fs.readFileSync(linkPath, 'utf-8');
-      } catch {
-        // doesn't exist
-      }
-      if (currentContent !== wrapperContent) {
-        fs.writeFileSync(linkPath, wrapperContent, { mode: 0o755 });
-      }
-    } catch {
-      // Best effort — CLI path is still available via getCliPath()
-    }
-  }
 
   function sendRegistrationContext(ctx: ExtensionContext): void {
     const folder = extractFolder(process.cwd());
@@ -231,52 +176,10 @@ exec node "${cliPath}" "$@"
   }
 
   // ===========================================================================
-  // Harness Server Lifecycle
+  // Harness Server
   // ===========================================================================
 
-  let harnessProcess: ChildProcess | null = null;
-
-  function startHarnessServer(): void {
-    if (harnessProcess) return;
-    // Spawned subagents reuse their parent's harness server —
-    // the CLI forwards agent identity headers on every request.
-    if (process.env.PI_SWARM_SPAWNED === '1') return;
-
-    const env: Record<string, string> = {
-      ...(process.env as Record<string, string>),
-    };
-
-    if (process.env.PI_MESSENGER_DIR) {
-      env.PI_MESSENGER_DIR = process.env.PI_MESSENGER_DIR;
-    }
-    if (process.env.PI_MESSENGER_GLOBAL) {
-      env.PI_MESSENGER_GLOBAL = process.env.PI_MESSENGER_GLOBAL;
-    }
-
-    const cliPath = getCliPath();
-
-    try {
-      harnessProcess = spawnChild('node', [cliPath, '--start'], {
-        cwd: process.cwd(),
-        stdio: ['ignore', 'ignore', 'ignore'],
-        detached: true,
-        env,
-      });
-      harnessProcess.unref();
-    } catch {
-      // Harness server is optional — the extension still works for lifecycle hooks
-    }
-  }
-
-  function stopHarnessServer(): void {
-    if (!harnessProcess) return;
-    try {
-      harnessProcess.kill('SIGTERM');
-    } catch {
-      // Best effort
-    }
-    harnessProcess = null;
-  }
+  const harnessServer = createHarnessServer();
 
   // ===========================================================================
   // Commands
@@ -453,8 +356,7 @@ exec node "${cliPath}" "$@"
     // Start the harness server even without auto-register —
     // the model needs it for CLI actions regardless.
     if (!process.env.PI_SWARM_SPAWNED) {
-      const sessionId = getEffectiveSessionId(ctx.cwd ?? process.cwd(), state);
-      startHarnessServer();
+      harnessServer.start();
     }
 
     if (!shouldAutoRegister) {
@@ -530,82 +432,19 @@ exec node "${cliPath}" "$@"
     const cwd = process.cwd();
     stopAllSpawned(cwd);
     stopStatusHeartbeat();
-    stopHarnessServer();
+    harnessServer.stop();
     overlayOpening = false;
     overlayHandle = null;
     overlayTui = null;
-    if (state.registered) {
-      const sessionId = getEffectiveSessionId(cwd, state);
-      const { listSpawnedHistory } = await import('./swarm/spawn.js');
-      const spawnedAgents = listSpawnedHistory(cwd, sessionId);
-      const spawnedNames = new Set(spawnedAgents.map((s) => s.name));
-
-      // Get all tasks for this session
-      const allTasks = taskStore.getTasks(cwd, sessionId);
-
-      // Unclaim tasks held by this agent
-      const claimedTasks = allTasks.filter(
-        (t) => t.status === 'in_progress' && t.claimed_by === state.agentName
-      );
-      for (const task of claimedTasks) {
-        taskStore.unclaimTask(cwd, sessionId, task.id, state.agentName);
-        logFeedEvent(
-          cwd,
-          state.agentName,
-          'task.reset',
-          task.id,
-          'agent left - task unclaimed',
-          state.currentChannel
-        );
-      }
-
-      // Unclaim tasks held by spawned agents
-      const spawnedClaimedTasks = allTasks.filter(
-        (t) => t.status === 'in_progress' && t.claimed_by && spawnedNames.has(t.claimed_by)
-      );
-      for (const task of spawnedClaimedTasks) {
-        taskStore.unclaimTask(cwd, sessionId, task.id, task.claimed_by!);
-        logFeedEvent(
-          cwd,
-          task.claimed_by!,
-          'task.reset',
-          task.id,
-          'parent agent left - task unclaimed',
-          state.currentChannel
-        );
-      }
-
-      logFeedEvent(cwd, state.agentName, 'leave', undefined, undefined, state.currentChannel);
-    }
+    await handleSessionShutdown(state, dirs);
     activityTracker.dispose();
-    store.unregister(state, dirs);
   });
 
   // ===========================================================================
   // Reservation Enforcement
   // ===========================================================================
 
-  pi.on('tool_call', async (event, _ctx) => {
-    if (!['edit', 'write'].includes(event.toolName)) return;
-
-    const input = event.input as Record<string, unknown>;
-    const filePath = typeof input.path === 'string' ? input.path : null;
-    if (!filePath) return;
-
-    const conflicts = store.getConflictsWithOtherAgents(filePath, state, dirs);
-    if (conflicts.length === 0) return;
-
-    const c = conflicts[0];
-    const folder = extractFolder(c.registration.cwd);
-    const locationPart = c.registration.gitBranch
-      ? ` (in ${folder} on ${c.registration.gitBranch})`
-      : ` (in ${folder})`;
-
-    const lines = [filePath, `Reserved by: ${c.agent}${locationPart}`];
-    if (c.reason) lines.push(`Reason: "${c.reason}"`);
-    lines.push('');
-    lines.push(`Coordinate via pi-messenger-swarm send ${c.agent} "..."`);
-
-    return { block: true, reason: lines.join('\n') };
+  pi.on('tool_call', async (event, ctx) => {
+    return handleReservationEnforcement(event, ctx, state, dirs);
   });
 }

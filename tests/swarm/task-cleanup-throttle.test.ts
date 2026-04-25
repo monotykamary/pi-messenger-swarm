@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import * as taskStore from '../../swarm/task-store.js';
-import { readFeedEvents } from '../../feed.js';
+import { readFeedEvents } from '../../feed/index.js';
 import { createTempMessengerDirs } from '../helpers/temp-dirs.js';
 
 const TEST_SESSION = 'test-cleanup-throttle';

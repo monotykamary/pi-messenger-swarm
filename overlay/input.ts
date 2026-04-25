@@ -12,14 +12,14 @@ import {
   jumpToTop,
   scrollDown,
   scrollUp,
-} from '../feed-scroll.js';
+} from '../feed/scroll.js';
 import {
   handleBlockReasonInput,
   handleConfirmInput,
   handleMessageInput,
   handleTaskKeyBinding,
   type MessengerViewState,
-} from '../overlay-actions.js';
+} from './actions.js';
 import { navigateSwarm, navigateTask } from '../overlay-render.js';
 
 const FEED_GG_LOAD_SIZE = 100;

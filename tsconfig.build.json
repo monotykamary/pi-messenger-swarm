@@ -17,6 +17,7 @@
   "include": [
     "*.ts",
     "handlers/**/*.ts",
+    "feed/**/*.ts",
     "overlay/**/*.ts",
     "store/**/*.ts",
     "extension/**/*.ts",

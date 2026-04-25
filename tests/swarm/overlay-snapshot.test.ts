@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { generateSwarmSnapshot } from '../../overlay/snapshot.js';
 import * as taskStore from '../../swarm/task-store.js';
-import { logFeedEvent } from '../../feed.js';
+import { logFeedEvent } from '../../feed/index.js';
 import { createMessengerFixture, createState } from '../helpers/messenger-fixtures.js';
 
 const TEST_SESSION = 'test-session-snapshot';
