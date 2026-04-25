@@ -137,17 +137,9 @@ export function renderEmptyState(
 
   lines.push(theme.fg('dim', 'No swarm tasks yet — create one or spawn a specialist.'));
   lines.push(
-    theme.fg(
-      'dim',
-      'task.create: pi_messenger({ action: "task.create", title: "Investigate bug" })'
-    )
+    theme.fg('dim', 'task.create: pi-messenger-swarm task create --title "Investigate bug"')
   );
-  lines.push(
-    theme.fg(
-      'dim',
-      'spawn: pi_messenger({ action: "spawn", role: "Researcher", message: "Analyze issue" })'
-    )
-  );
+  lines.push(theme.fg('dim', 'spawn: pi-messenger-swarm spawn --role Researcher "Analyze issue"'));
   lines.push(theme.fg('dim', `stuck ${config.stuckThreshold}s · feed ${config.feedRetention}`));
 
   if (lines.length > height) {

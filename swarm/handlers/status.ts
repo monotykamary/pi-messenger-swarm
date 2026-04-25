@@ -20,9 +20,9 @@ export function executeSwarmStatus(cwd: string, channelId: string, sessionId: st
     if (completedCount > 0 || failedCount > 0) {
       text += `\n\n${completedCount} completed, ${failedCount} failed agents in history.`;
     }
-    text += `\n\nCreate one:\n  pi_messenger({ action: "task.create", title: "...", content: "..." })\n\nSpawn a subagent:\n  pi_messenger({ action: "spawn", role: "Researcher", message: "Investigate ..." })`;
+    text += `\n\nCreate one:\n  pi-messenger-swarm task create --title \"...\" --content \"...\"\n\nSpawn a subagent:\n  pi-messenger-swarm spawn --role Researcher \"Investigate ...\"`;
     if (completedCount > 0 || failedCount > 0) {
-      text += `\n\nView history:\n  pi_messenger({ action: "spawn.history" })`;
+      text += `\n\nView history:\n  pi-messenger-swarm spawn history`;
     }
     return result(text, {
       mode: 'swarm',
@@ -54,7 +54,7 @@ export function executeSwarmStatus(cwd: string, channelId: string, sessionId: st
   if (completedCount > 0 || failedCount > 0) {
     lines.push(`## Agent History`);
     lines.push(`- ${completedCount} completed · ${failedCount} failed`);
-    lines.push(`- View: pi_messenger({ action: "spawn.history" })`);
+    lines.push(`- View: pi-messenger-swarm spawn history`);
     lines.push('');
   }
 

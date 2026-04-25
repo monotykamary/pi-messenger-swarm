@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "esModuleInterop": true,
+    "strict": false,
+    "skipLibCheck": true,
+    "noEmit": false,
+    "resolveJsonModule": true,
+    "outDir": "dist",
+    "rootDir": ".",
+    "declaration": false,
+    "sourceMap": false
+  },
+  "include": [
+    "*.ts",
+    "handlers/**/*.ts",
+    "overlay/**/*.ts",
+    "store/**/*.ts",
+    "extension/**/*.ts",
+    "swarm/**/*.ts",
+    "lib/**/*.ts",
+    "skills/**/*.ts",
+    "harness/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist", "tests", "vitest.config.ts", "knip.json"]
+}

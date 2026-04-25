@@ -112,7 +112,7 @@ export function executeJoin(
   if (agents.length > 0) {
     text += `\n\nActive peers: ${agents.map((a) => a.name).join(', ')}`;
     text +=
-      '\n\nUse pi_messenger({ action: "list" }) for details, pi_messenger({ action: "task.list" }) for tasks.';
+      '\n\nUse `pi-messenger-swarm list` for details, `pi-messenger-swarm task list` for tasks.';
   }
 
   if (specWarning) {

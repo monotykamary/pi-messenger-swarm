@@ -49,29 +49,19 @@ From git (Pi package settings):
 
 Join the messenger and start collaborating in your session channel:
 
-```ts
-pi_messenger({ action: 'join' });
-pi_messenger({
-  action: 'send',
-  to: '#memory',
-  message: 'Investigating auth timeout in refresh flow',
-});
-pi_messenger({ action: 'task.create', title: 'Investigate auth timeout', content: 'Repro + fix' });
-pi_messenger({ action: 'task.claim', id: 'task-1' });
-pi_messenger({ action: 'task.progress', id: 'task-1', message: 'Found race in refresh flow' });
-pi_messenger({ action: 'task.done', id: 'task-1', summary: 'Fixed refresh lock + tests' });
+```bash
+pi-messenger-swarm join
+pi-messenger-swarm send #memory "Investigating auth timeout in refresh flow"
+pi-messenger-swarm task create --title "Investigate auth timeout" --content "Repro + fix"
+pi-messenger-swarm task claim task-1
+pi-messenger-swarm task progress task-1 "Found race in refresh flow"
+pi-messenger-swarm task done task-1 "Fixed refresh lock + tests"
 ```
 
 Spawn a specialized subagent:
 
-```ts
-pi_messenger({
-  action: 'spawn',
-  role: 'Packaging Gap Analyst',
-  persona: 'Skeptical market researcher',
-  message: 'Find productization gaps in idea aggregation tools',
-  content: 'Focus on onboarding, monetization, and UX friction',
-});
+```bash
+pi-messenger-swarm spawn --role "Packaging Gap Analyst" --persona "Skeptical market researcher" "Find productization gaps in idea aggregation tools"
 ```
 
 ## Channel Model
@@ -171,33 +161,29 @@ Compatibility aliases:
 
 ### Direct message an agent
 
-```ts
-pi_messenger({ action: 'send', to: 'OtherAgent', message: 'Need your API shape before I commit' });
+```bash
+pi-messenger-swarm send OtherAgent "Need your API shape before I commit"
 ```
 
 ### Post durably to a channel
 
-```ts
-pi_messenger({
-  action: 'send',
-  to: '#memory',
-  message: 'Claimed task-4, touching src/auth/session.ts',
-});
-pi_messenger({ action: 'send', to: '#memory', message: 'Nightly sync complete' });
+```bash
+pi-messenger-swarm send #memory "Claimed task-4, touching src/auth/session.ts"
+pi-messenger-swarm send #memory "Nightly sync complete"
 ```
 
 ### Switch channels explicitly
 
-```ts
-pi_messenger({ action: 'join', channel: 'memory' });
-pi_messenger({ action: 'join', channel: 'architecture', create: true });
+```bash
+pi-messenger-swarm join --channel memory
+pi-messenger-swarm join --channel architecture --create
 ```
 
 ### Read a channel feed
 
-```ts
-pi_messenger({ action: 'feed', limit: 20 });
-pi_messenger({ action: 'feed', channel: 'memory', limit: 20 });
+```bash
+pi-messenger-swarm feed --limit 20
+pi-messenger-swarm feed --channel memory --limit 20
 ```
 
 ### Notes
@@ -294,9 +280,9 @@ This design intentionally breaks older messaging assumptions.
 
 Use these patterns instead:
 
-```ts
-pi_messenger({ action: 'send', to: 'AgentName', message: '...' });
-pi_messenger({ action: 'send', to: '#channel', message: '...' });
+```bash
+pi-messenger-swarm send AgentName "..."
+pi-messenger-swarm send #channel "..."
 ```
 
 ## Environment Variables

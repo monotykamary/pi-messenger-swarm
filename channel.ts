@@ -268,6 +268,36 @@ export function writeChannel(dirs: Dirs, record: ChannelRecord): ChannelRecord {
   return record;
 }
 
+/**
+ * Patch the sessionId on a channel's metadata header if it's currently empty.
+ * Used by the harness server when it discovers the session ID after the channel
+ * was already created (race condition with session-id file).
+ * Returns true if the channel was patched, false if no change was needed.
+ */
+export function patchChannelSessionId(dirs: Dirs, channelId: string, sessionId: string): boolean {
+  if (!sessionId) return false;
+  const header = readChannelHeader(dirs, channelId);
+  if (!header || header.sessionId) return false; // already set or missing
+
+  const filePath = channelPath(dirs, channelId);
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const lines = content.split('\n');
+    if (lines.length === 0) return false;
+
+    const meta = JSON.parse(lines[0]) as ChannelMetaHeader;
+    meta.sessionId = sessionId;
+    lines[0] = JSON.stringify(meta);
+
+    const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+    fs.writeFileSync(tmp, lines.join('\n'));
+    fs.renameSync(tmp, filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function ensureNamedChannel(
   dirs: Dirs,
   channelId: string,

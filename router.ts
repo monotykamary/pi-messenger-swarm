@@ -120,7 +120,7 @@ export async function executeAction(
 
     case 'broadcast':
       return result(
-        'Action "broadcast" was removed. Use pi_messenger({ action: "send", to: "#channel", message: "..." }) instead.',
+        'Action "broadcast" was removed. Use `pi-messenger-swarm send #channel "message"` instead.',
         { mode: 'broadcast_removed', error: 'removed_action', action }
       );
 

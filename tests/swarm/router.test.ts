@@ -343,7 +343,7 @@ describe('swarm router', () => {
       () => {}
     );
     expect(broadcast.content[0]?.text).toContain('Action "broadcast" was removed');
-    expect(broadcast.content[0]?.text).toContain('action: "send", to: "#channel"');
+    expect(broadcast.content[0]?.text).toContain('pi-messenger-swarm send #channel');
   });
 
   it('rejects unknown legacy actions', async () => {

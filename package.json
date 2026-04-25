@@ -26,16 +26,19 @@
     "cli"
   ],
   "bin": {
-    "pi-messenger-swarm": "install.mjs"
+    "pi-messenger": "install.mjs",
+    "pi-messenger-swarm": "dist/harness/cli.js"
   },
   "files": [
     "*.ts",
     "*.mjs",
+    "dist/**",
     "handlers/**",
     "overlay/**",
     "store/**",
     "extension/**",
     "swarm/**",
+    "harness/**",
     "migrations/**",
     "skills/**",
     "docs/**",
@@ -43,6 +46,8 @@
     "CHANGELOG.md"
   ],
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -67,7 +72,6 @@
     "@commitlint/config-conventional": "^20.5.0",
     "@mariozechner/pi-coding-agent": "*",
     "@mariozechner/pi-tui": "*",
-    "@sinclair/typebox": "*",
     "@types/node": "^25.5.0",
     "@vitest/coverage-v8": "^4.1.2",
     "knip": "^6.2.0",

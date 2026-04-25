@@ -8,7 +8,7 @@ export function executeAutoRegisterPath(action: 'add' | 'remove' | 'list') {
   if (action === 'list') {
     if (paths.length === 0) {
       return result(
-        'No auto-register paths configured.\n\nUse pi_messenger({ action: "autoRegisterPath", autoRegisterPath: "add" }) to add the current folder.',
+        'No auto-register paths configured.\n\nUse `pi-messenger-swarm autoRegisterPath add` to add the current folder.',
         {
           mode: 'autoRegisterPath',
           action: 'list',

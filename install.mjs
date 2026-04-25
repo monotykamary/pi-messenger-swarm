@@ -94,6 +94,6 @@ copyDir(PACKAGE_DIR, EXTENSION_DIR);
 const action = isUpdate ? "Updated" : "Installed";
 console.log(`${action} pi-messenger v${VERSION} → ${EXTENSION_DIR}
 
-Tools:    pi_messenger
+Harness:  pi-messenger-swarm CLI
 Commands: /messenger, /messenger config
 Docs:     ${EXTENSION_DIR}/README.md`);

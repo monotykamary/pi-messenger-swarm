@@ -6,8 +6,8 @@ export function result(text: string, details: Record<string, unknown>) {
 }
 
 export function notRegisteredError() {
-  return result(
-    'Not registered. Use pi_messenger({ action: "join" }) to join the agent mesh first.',
-    { mode: 'error', error: 'not_registered' }
-  );
+  return result('Not registered. Use \`pi-messenger-swarm join\` to join the agent mesh first.', {
+    mode: 'error',
+    error: 'not_registered',
+  });
 }

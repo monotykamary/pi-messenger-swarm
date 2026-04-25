@@ -2,28 +2,23 @@
  * Pi Messenger Extension
  *
  * Enables pi agents to discover and communicate with each other across terminal sessions.
- * Uses file-based coordination - no daemon required.
+ * Uses file-based coordination with a harness server for action dispatch.
+ *
+ * Architecture:
+ * - This extension manages lifecycle hooks (registration, status, overlay, reservations)
+ * - A long-lived harness server (pi-messenger-swarm) handles all action dispatch
+ * - Models interact via the CLI, not a tool call — no eager invocation risk
+ * - The SKILL.md teaches models how to use the CLI
  */
 
 import { homedir } from 'node:os';
 import * as fs from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawn as spawnChild, type ChildProcess } from 'node:child_process';
 import type { ExtensionAPI, ExtensionContext } from '@mariozechner/pi-coding-agent';
 import type { OverlayHandle, TUI } from '@mariozechner/pi-tui';
 import { truncateToWidth } from '@mariozechner/pi-tui';
-import { Type, type TUnsafe } from '@sinclair/typebox';
-
-function StringEnum<T extends readonly string[]>(
-  values: T,
-  options?: { description?: string; default?: T[number] }
-): TUnsafe<T[number]> {
-  return Type.Unsafe<T[number]>({
-    type: 'string',
-    enum: [...values],
-    ...(options?.description && { description: options.description }),
-    ...(options?.default && { default: options.default }),
-  });
-}
 import {
   type MessengerState,
   type Dirs,
@@ -34,14 +29,11 @@ import {
 } from './lib.js';
 import { displayChannelLabel } from './channel.js';
 import * as store from './store.js';
-import * as handlers from './handlers.js';
-import { getEffectiveSessionId } from './store/shared.js';
+import { getContextSessionId, getEffectiveSessionId } from './store/shared.js';
 import { MessengerOverlay, type OverlayCallbacks } from './overlay.js';
 import { MessengerConfigOverlay } from './config-overlay.js';
 import { loadConfig, matchesAutoRegisterPath, type MessengerConfig } from './config.js';
-import { executeAction } from './router.js';
 import { logFeedEvent, pruneFeed } from './feed.js';
-import type { MessengerActionParams } from './action-types.js';
 import * as taskStore from './swarm/task-store.js';
 import { onLiveWorkersChanged } from './swarm/live-progress.js';
 import { stopAllSpawned } from './swarm/spawn.js';
@@ -61,7 +53,7 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
   const config: MessengerConfig = loadConfig(process.cwd());
 
   const state: MessengerState = {
-    agentName: process.env.PI_AGENT_NAME || '',
+    agentName: '',
     registered: false,
     reservations: [],
     chatHistory: new Map(),
@@ -90,15 +82,13 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
   // ===========================================================================
   // Directory setup (project-scoped by default)
   // ===========================================================================
-  // Note: This runs at extension load time with process.cwd().
-  // The actual project path is set correctly when pi starts in a project.
+
   function getMessengerDirs(): Dirs {
-    // Priority: PI_MESSENGER_DIR > project-scoped (default) > global (legacy)
     const baseDir =
       process.env.PI_MESSENGER_DIR ||
       (process.env.PI_MESSENGER_GLOBAL === '1'
-        ? join(homedir(), '.pi/agent/messenger') // Legacy global mode
-        : join(process.cwd(), '.pi/messenger')); // Project-scoped (default)
+        ? join(homedir(), '.pi/agent/messenger')
+        : join(process.cwd(), '.pi/messenger'));
     return {
       base: baseDir,
       registry: join(baseDir, 'registry'),
@@ -168,16 +158,72 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
   });
 
   // ===========================================================================
-  // Registration Context
+  // Registration Context & Shell Setup
   // ===========================================================================
+
+  /**
+   * Resolve the path to the CLI entry point.
+   * Works regardless of how the extension is loaded (source via tsx, or compiled dist/).
+   */
+  function getCliPath(): string {
+    const __dirname = fileURLToPath(new URL('.', import.meta.url));
+    // When running from dist/: __dirname = .../dist, so dist/harness/cli.js exists
+    const compiledPath = join(__dirname, 'harness', 'cli.js');
+    if (fs.existsSync(compiledPath)) return compiledPath;
+    // When running from source via tsx: __dirname = project root
+    // Need to use dist/harness/cli.js (built output)
+    const fromSource = join(__dirname, 'dist', 'harness', 'cli.js');
+    if (fs.existsSync(fromSource)) return fromSource;
+    // Last resort: return the expected compiled path even if it doesn't exist yet
+    return compiledPath;
+  }
+
+  /**
+   * Write a small shell wrapper script at ~/.pi/agent/bin/pi-messenger-swarm
+   * that invokes the CLI via node. Pi adds ~/.pi/agent/bin/ to PATH for
+   * every bash invocation (`getShellEnv()` prepends it), so the CLI becomes
+   * available as a normal command regardless of install method.
+   *
+   * Uses a wrapper script instead of a symlink because the CLI's location
+   * depends on whether the extension runs from source (tsx) or compiled (dist/).
+   */
+  function installShellAlias(): void {
+    try {
+      const agentBinDir = join(homedir(), '.pi', 'agent', 'bin');
+      if (!fs.existsSync(agentBinDir)) {
+        fs.mkdirSync(agentBinDir, { recursive: true });
+      }
+      const cliPath = getCliPath();
+      const linkPath = join(agentBinDir, 'pi-messenger-swarm');
+
+      // Write a shell wrapper that resolves the correct node + cli path
+      const wrapperContent = `#!/bin/sh
+exec node "${cliPath}" "$@"
+`;
+
+      // Only write if content differs (avoids unnecessary writes on every session_start)
+      let currentContent: string | null = null;
+      try {
+        currentContent = fs.readFileSync(linkPath, 'utf-8');
+      } catch {
+        // doesn't exist
+      }
+      if (currentContent !== wrapperContent) {
+        fs.writeFileSync(linkPath, wrapperContent, { mode: 0o755 });
+      }
+    } catch {
+      // Best effort — CLI path is still available via getCliPath()
+    }
+  }
 
   function sendRegistrationContext(ctx: ExtensionContext): void {
     const folder = extractFolder(process.cwd());
     const locationPart = state.gitBranch ? `${folder} on ${state.gitBranch}` : folder;
+
     pi.sendMessage(
       {
         customType: 'messenger_context',
-        content: `You are agent "${state.agentName}" in ${locationPart}. Your current channel is ${displayChannelLabel(state.currentChannel)}. Named channel ${displayChannelLabel('memory')} exists for durable cross-session notes. Send direct messages with pi_messenger({ action: "send", to: "AgentName", message: "..." }). Post durable channel updates with pi_messenger({ action: "send", to: "${displayChannelLabel(state.currentChannel)}", message: "..." }) or named channels like ${displayChannelLabel('memory')}. Use pi_messenger({ action: "swarm" }) to inspect swarm tasks in the current channel, task.* to claim/complete work, join with { channel: "..." } to switch channels, and spawn.* to manage subagents.`,
+        content: `You are agent "${state.agentName}" in ${locationPart}. Your current channel is ${displayChannelLabel(state.currentChannel)}. Named channel ${displayChannelLabel('memory')} exists for durable cross-session notes. Use pi-messenger-swarm for all coordination. Examples: pi-messenger-swarm join | pi-messenger-swarm swarm | pi-messenger-swarm task create --title "..." | pi-messenger-swarm task claim task-1 | pi-messenger-swarm spawn --role Researcher "Analyze X" | pi-messenger-swarm send AgentName "hello" | pi-messenger-swarm feed --limit 20. See SKILL for full reference.`,
         display: false,
       },
       { triggerTurn: false }
@@ -185,150 +231,52 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
   }
 
   // ===========================================================================
-  // Tool Registration
+  // Harness Server Lifecycle
   // ===========================================================================
 
-  pi.registerTool({
-    name: 'pi_messenger',
-    label: 'Pi Messenger',
-    description: `Multi-agent coordination and task orchestration.
+  let harnessProcess: ChildProcess | null = null;
 
-Usage (swarm-first API):
-  // Coordination
-  pi_messenger({ action: "join" })
-  pi_messenger({ action: "status" })
-  pi_messenger({ action: "list" })
-  pi_messenger({ action: "feed", limit: 20 })
-  pi_messenger({ action: "send", to: "Agent", message: "hi" })
-  pi_messenger({ action: "send", to: "#memory", message: "remember this" })
-  pi_messenger({ action: "reserve", paths: ["src/"] })
+  function startHarnessServer(): void {
+    if (harnessProcess) return;
+    // Spawned subagents reuse their parent's harness server —
+    // the CLI forwards agent identity headers on every request.
+    if (process.env.PI_SWARM_SPAWNED === '1') return;
 
-  // Swarm board
-  pi_messenger({ action: "swarm" })
+    const env: Record<string, string> = {
+      ...(process.env as Record<string, string>),
+    };
 
-  // Tasks (peer-created, peer-claimed)
-  pi_messenger({ action: "task.create", title: "Investigate bug", content: "..." })
-  pi_messenger({ action: "task.list" })
-  pi_messenger({ action: "task.show", id: "task-1" })
-  pi_messenger({ action: "task.claim", id: "task-1" })
-  pi_messenger({ action: "task.progress", id: "task-1", message: "Checked auth middleware" })
-  pi_messenger({ action: "task.done", id: "task-1", summary: "Implemented fix" })
-  pi_messenger({ action: "task.archive_done" })
-  // Dynamic subagents
-  pi_messenger({ action: "spawn", role: "Researcher", message: "Analyze competitor X" })
-  pi_messenger({ action: "spawn.list" })
-  pi_messenger({ action: "spawn.stop", id: "<spawn-id>" })`,
-    parameters: Type.Object({
-      action: Type.Optional(
-        Type.String({
-          description: "Action to perform (e.g., 'join', 'swarm', 'task.create', 'spawn')",
-        })
-      ),
+    if (process.env.PI_MESSENGER_DIR) {
+      env.PI_MESSENGER_DIR = process.env.PI_MESSENGER_DIR;
+    }
+    if (process.env.PI_MESSENGER_GLOBAL) {
+      env.PI_MESSENGER_GLOBAL = process.env.PI_MESSENGER_GLOBAL;
+    }
 
-      // Core task fields
-      id: Type.Optional(
-        Type.String({ description: 'Task ID (task-N), or spawn ID for spawn.stop' })
-      ),
-      taskId: Type.Optional(
-        Type.String({ description: 'Task ID alias for claim/unclaim/complete compatibility' })
-      ),
-      title: Type.Optional(
-        Type.String({ description: 'Task title (task.create) or spawn role fallback' })
-      ),
-      content: Type.Optional(Type.String({ description: 'Task spec content or spawn context' })),
-      dependsOn: Type.Optional(
-        Type.Array(Type.String(), { description: 'Task dependencies for task.create' })
-      ),
-      summary: Type.Optional(Type.String({ description: 'Completion summary for task.done' })),
-      evidence: Type.Optional(
-        Type.Object(
-          {
-            commits: Type.Optional(Type.Array(Type.String())),
-            tests: Type.Optional(Type.Array(Type.String())),
-            prs: Type.Optional(Type.Array(Type.String())),
-          },
-          { description: 'Evidence for task.done' }
-        )
-      ),
-      cascade: Type.Optional(
-        Type.Boolean({ description: 'Cascade reset dependents (task.reset)' })
-      ),
+    const cliPath = getCliPath();
 
-      // Spawn fields
-      role: Type.Optional(Type.String({ description: 'Subagent role title for spawn' })),
-      persona: Type.Optional(Type.String({ description: 'Optional subagent persona' })),
-      prompt: Type.Optional(Type.String({ description: 'Alias objective text for spawn' })),
-      agentFile: Type.Optional(
-        Type.String({
-          description:
-            'Path to markdown file (with YAML frontmatter) to use as system prompt for spawn',
-        })
-      ),
+    try {
+      harnessProcess = spawnChild('node', [cliPath, '--start'], {
+        cwd: process.cwd(),
+        stdio: ['ignore', 'ignore', 'ignore'],
+        detached: true,
+        env,
+      });
+      harnessProcess.unref();
+    } catch {
+      // Harness server is optional — the extension still works for lifecycle hooks
+    }
+  }
 
-      // Coordination and utility
-      limit: Type.Optional(Type.Number({ description: 'Feed line limit' })),
-      paths: Type.Optional(Type.Array(Type.String(), { description: 'Paths for reserve/release' })),
-      name: Type.Optional(Type.String({ description: 'Rename self or set spawned agent name' })),
-      channel: Type.Optional(
-        Type.String({
-          description:
-            "Optional channel name/id for join/feed/swarm/task actions, or to constrain a direct send to a specific joined channel. For channel posts, prefer to: '#channel'.",
-        })
-      ),
-      create: Type.Optional(
-        Type.Boolean({ description: 'Create the channel if it does not exist when joining.' })
-      ),
-      to: Type.Optional(
-        Type.Any({
-          description:
-            "Required for send. Target agent name, array of agent names, or channel name starting with # (for example '#memory').",
-        })
-      ),
-      message: Type.Optional(
-        Type.String({ description: 'Message text for send, or spawn objective text.' })
-      ),
-      replyTo: Type.Optional(Type.String({ description: 'Message ID for replies' })),
-      reason: Type.Optional(Type.String({ description: 'Reason for reserve or task.block' })),
-      autoRegisterPath: Type.Optional(
-        StringEnum(['add', 'remove', 'list'], { description: 'Manage auto-register paths' })
-      ),
-    }),
-
-    async execute(_toolCallId, rawParams, signal, _onUpdate, ctx) {
-      const params = rawParams as MessengerActionParams;
-      latestCtx = ctx;
-      syncContextSession(ctx);
-
-      const action = params.action;
-      if (!action) {
-        return handlers.executeStatus(state, dirs, ctx.cwd ?? process.cwd());
-      }
-
-      const result = await executeAction(
-        action,
-        params,
-        state,
-        dirs,
-        ctx,
-        deliverMessage,
-        updateStatus,
-        (type, data) => pi.appendEntry(type, data),
-        {
-          stuckThreshold: config.stuckThreshold,
-          swarmEventsInFeed: config.swarmEventsInFeed,
-          nameTheme,
-          feedRetention: config.feedRetention,
-        },
-        signal
-      );
-
-      if (action === 'join' && state.registered && config.registrationContext) {
-        sendRegistrationContext(ctx);
-      }
-
-      return result;
-    },
-  });
+  function stopHarnessServer(): void {
+    if (!harnessProcess) return;
+    try {
+      harnessProcess.kill('SIGTERM');
+    } catch {
+      // Best effort
+    }
+    harnessProcess = null;
+  }
 
   // ===========================================================================
   // Commands
@@ -359,6 +307,9 @@ Usage (swarm-first API):
           return;
         }
         updateStatus(ctx);
+        if (config.registrationContext) {
+          sendRegistrationContext(ctx);
+        }
       }
 
       if (overlayHandle && overlayHandle.isHidden()) {
@@ -454,8 +405,6 @@ Usage (swarm-first API):
   // ===========================================================================
   // Activity Tracking
   // ===========================================================================
-  // Activity Tracking
-  // ===========================================================================
 
   const activityTracker = createActivityTracker({ state, dirs, config });
 
@@ -481,8 +430,32 @@ Usage (swarm-first API):
 
     syncContextSession(ctx);
 
+    // Write the session ID to disk so the harness server (and CLI)
+    // can discover it. The harness runs as a separate process and
+    // has no access to pi's SessionManager — this file bridges that gap.
+    const sessionId = getContextSessionId(ctx);
+    if (sessionId) {
+      try {
+        const sessionFilePath = join(dirs.base, 'session-id');
+        fs.writeFileSync(sessionFilePath, sessionId, 'utf-8');
+      } catch {
+        // Best effort
+      }
+    }
+
+    // Install the CLI wrapper so all child bash processes
+    // can find and use pi-messenger-swarm.
+    installShellAlias();
+
     const shouldAutoRegister =
       config.autoRegister || matchesAutoRegisterPath(process.cwd(), config.autoRegisterPaths);
+
+    // Start the harness server even without auto-register —
+    // the model needs it for CLI actions regardless.
+    if (!process.env.PI_SWARM_SPAWNED) {
+      const sessionId = getEffectiveSessionId(ctx.cwd ?? process.cwd(), state);
+      startHarnessServer();
+    }
 
     if (!shouldAutoRegister) {
       maybeAutoOpenSwarmOverlay(ctx);
@@ -557,6 +530,7 @@ Usage (swarm-first API):
     const cwd = process.cwd();
     stopAllSpawned(cwd);
     stopStatusHeartbeat();
+    stopHarnessServer();
     overlayOpening = false;
     overlayHandle = null;
     overlayTui = null;
@@ -630,7 +604,7 @@ Usage (swarm-first API):
     const lines = [filePath, `Reserved by: ${c.agent}${locationPart}`];
     if (c.reason) lines.push(`Reason: "${c.reason}"`);
     lines.push('');
-    lines.push(`Coordinate via pi_messenger({ action: "send", to: "${c.agent}", message: "..." })`);
+    lines.push(`Coordinate via pi-messenger-swarm send ${c.agent} "..."`);
 
     return { block: true, reason: lines.join('\n') };
   });

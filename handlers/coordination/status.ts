@@ -33,8 +33,7 @@ export function executeStatus(state: MessengerState, dirs: Dirs, cwd: string = p
     text += `Reservations: ${myRes.join(', ')}\n`;
   }
   text += `Joined channels: ${state.joinedChannels.map(displayChannelLabel).join(', ')}\n`;
-  text +=
-    '\nUse pi_messenger({ action: "list" }) for details, pi_messenger({ action: "task.list" }) for tasks.';
+  text += '\nUse `pi-messenger-swarm list` for details, `pi-messenger-swarm task list` for tasks.';
 
   return result(text, {
     mode: 'status',

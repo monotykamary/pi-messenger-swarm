@@ -66,7 +66,7 @@ export function generateSwarmSnapshot(
       '',
       `Agents: You (${snapshotIdleLabel(state)})`,
       '',
-      'Create task: pi_messenger({ action: "task.create", title: "..." })',
+      'Create task: pi-messenger-swarm task create --title "..."',
     ].join('\n');
   }
 

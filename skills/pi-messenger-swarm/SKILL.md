@@ -1,141 +1,136 @@
 ---
 name: pi-messenger-swarm
-description: Use pi-messenger in swarm mode. Agents can create/claim tasks directly and spawn dynamic subagents with role/persona/mission prompts.
+description: Multi-agent coordination and task orchestration. Run actions via the `pi-messenger-swarm` CLI — a persistent harness server handles all state. Use for swarm coordination, task management, agent messaging, and subagent spawning.
 ---
 
 # Pi-Messenger Swarm Skill
 
-Pi-messenger now runs in **swarm-first mode**.
+Multi-agent coordination via the `pi-messenger-swarm` CLI.
+
+The CLI auto-spawns a long-lived HTTP server (the **harness**) on first use. Every call dispatches an action to the harness, which holds persistent state — agent registrations, task store, feed — across calls.
 
 - No planning agent
 - No fixed planner/worker/reviewer roles
 - Any joined or spawned agent can create/claim/complete tasks
 
-## Core protocol (all agents)
+## Setup
+
+If installed globally (`npm install -g pi-messenger-swarm`), the `pi-messenger-swarm` command is on your PATH. Otherwise, the extension installs a shell wrapper script at `~/.pi/agent/bin/pi-messenger-swarm` which pi adds to PATH automatically — no manual setup needed.
+
+Agent identity is resolved automatically by the CLI — it walks its own process tree to find the parent `pi` process and sends the PID to the harness server, which matches it against registrations on disk. No environment variables or configuration needed.
+
+```
+pi-messenger-swarm join
+pi-messenger-swarm task list
+pi-messenger-swarm swarm
+```
+
+## Core protocol
 
 1. Join first
 
-```typescript
-pi_messenger({ action: 'join' });
+```bash
+pi-messenger-swarm join
 ```
 
 2. Inspect swarm state
 
-```typescript
-pi_messenger({ action: 'swarm' });
-pi_messenger({ action: 'task.list' });
+```bash
+pi-messenger-swarm swarm
+pi-messenger-swarm task list
 ```
 
 3. Claim work before implementing
 
-```typescript
-pi_messenger({ action: 'task.claim', id: 'task-1' });
+```bash
+pi-messenger-swarm task claim task-1
 ```
 
 4. Reserve files before edits
 
-```typescript
-pi_messenger({ action: 'reserve', paths: ['src/auth/'], reason: 'task-1' });
+```bash
+pi-messenger-swarm reserve src/auth/ --reason task-1
 ```
 
 5. Log progress and complete
 
-```typescript
-pi_messenger({ action: 'task.progress', id: 'task-1', message: 'Implemented JWT verification' });
-pi_messenger({ action: 'task.done', id: 'task-1', summary: 'Auth middleware + tests' });
-pi_messenger({ action: 'release' });
+```bash
+pi-messenger-swarm task progress task-1 "Implemented JWT verification"
+pi-messenger-swarm task done task-1 "Auth middleware + tests"
+pi-messenger-swarm release
 ```
 
-## Task operations
+## Command reference
 
-```typescript
-pi_messenger({
-  action: 'task.create',
-  title: 'Fix token refresh race',
-  content: '...',
-  dependsOn: ['task-2'],
-});
-pi_messenger({ action: 'task.list' });
-pi_messenger({ action: 'task.show', id: 'task-3' });
-pi_messenger({ action: 'task.ready' });
-pi_messenger({ action: 'task.unclaim', id: 'task-3' });
-pi_messenger({ action: 'task.block', id: 'task-3', reason: 'Awaiting API key' });
-pi_messenger({ action: 'task.unblock', id: 'task-3' });
-pi_messenger({ action: 'task.reset', id: 'task-3', cascade: true });
-pi_messenger({ action: 'task.archive_done' });
+### Coordination
+
+```bash
+pi-messenger-swarm join [--channel dev] [--create]
+pi-messenger-swarm status
+pi-messenger-swarm list
+pi-messenger-swarm feed [--limit 20] [--channel dev]
+pi-messenger-swarm send AgentName "hello"
+pi-messenger-swarm send #memory "remember this"
+pi-messenger-swarm reserve src/ --reason task-1
+pi-messenger-swarm release
+pi-messenger-swarm whois AgentName
+pi-messenger-swarm set-status "debugging auth"
+pi-messenger-swarm rename NewName
 ```
 
-## Dynamic subagent spawning
+### Swarm board
 
-Spawn specialized subagents at runtime:
-
-```typescript
-pi_messenger({
-  action: 'spawn',
-  role: 'Packaging Gap Analyst',
-  persona: 'Skeptical market researcher',
-  message: 'Analyze idea aggregation products and find productization gaps',
-  context: 'Focus on monetization and onboarding friction',
-  taskId: 'task-6',
-});
+```bash
+pi-messenger-swarm swarm [--channel dev]
 ```
 
-- `message` (or `prompt`) = **The mission/objective** — required main task for the subagent
-- `context` = **Additional context** — supplementary information, constraints, or background
-- `role` = Agent role label (defaults to 'Subagent')
-- `persona` = Tone/behavior modifier
-- `taskId` = Optional task to associate with this spawn
-- `agentFile` = Path to markdown file with YAML frontmatter (alternative to role/persona)
+### Task operations
 
-The `agentFile` parameter can be used to specify a markdown file with YAML frontmatter:
-
-```markdown
----
-role: Security Reviewer
-persona: Paranoid about edge cases
-objective: Review code for security vulnerabilities
----
-
-You are a security expert. Focus on input validation and auth boundaries.
+```bash
+pi-messenger-swarm task list
+pi-messenger-swarm task ready
+pi-messenger-swarm task show task-3
+pi-messenger-swarm task create --title "Fix token refresh race"
+pi-messenger-swarm task create --title "..." --content "..." --depends-on task-2
+pi-messenger-swarm task claim task-3
+pi-messenger-swarm task unclaim task-3
+pi-messenger-swarm task progress task-3 "Fixed the race"
+pi-messenger-swarm task done task-3 "Auth middleware + tests"
+pi-messenger-swarm task block task-3 --reason "Awaiting API key"
+pi-messenger-swarm task unblock task-3
+pi-messenger-swarm task reset task-3 [--cascade]
+pi-messenger-swarm task archive-done
 ```
 
-```typescript
-pi_messenger({
-  action: 'spawn',
-  agentFile: './agents/security-reviewer.md',
-  message: 'Review the auth implementation', // Optional: overrides frontmatter objective
-});
+### Dynamic subagent spawning
+
+```bash
+pi-messenger-swarm spawn --role Researcher "Analyze competitor X"
+pi-messenger-swarm spawn --role Analyst --persona "Skeptical market researcher" "Find productization gaps"
+pi-messenger-swarm spawn --task-id task-1 --role Debugger "Fix the race condition"
+pi-messenger-swarm spawn list
+pi-messenger-swarm spawn history
+pi-messenger-swarm spawn stop <id>
 ```
 
-Frontmatter fields (all optional):
+### Server management
 
-- `role` — Agent role label
-- `persona` — Tone/behavior modifier
-- `objective` — Default mission (overridable via `message`)
-- `model` — Model specification (provider/model format, e.g., `openai/gpt-4o`)
+| Command                        | Behavior                    |
+| ------------------------------ | --------------------------- |
+| `pi-messenger-swarm --status`  | Print health JSON or exit 1 |
+| `pi-messenger-swarm --start`   | Start the harness server    |
+| `pi-messenger-swarm --stop`    | Graceful shutdown           |
+| `pi-messenger-swarm --restart` | Stop + start fresh          |
+| `pi-messenger-swarm --logs`    | `tail -f` the server log    |
 
-The body after `---` becomes the system prompt.
+### JSON passthrough
 
-Manage spawned agents:
+For programmatic use or complex actions, JSON is still accepted:
 
-```typescript
-pi_messenger({ action: 'spawn.list' }); // Only shows running agents
-pi_messenger({ action: 'spawn.history' }); // Shows all agents including completed/failed/stopped
-pi_messenger({ action: 'spawn.stop', id: '<spawn-id>' });
+```bash
+pi-messenger-swarm '{ "action": "join", "channel": "dev" }'
+pi-messenger-swarm '{ "action": "spawn", "role": "Researcher", "message": "Analyze X", "taskId": "task-1" }'
 ```
-
-## Messaging and coordination
-
-```typescript
-pi_messenger({ action: 'send', to: 'OtherAgent', message: 'Need your API shape before I commit' });
-pi_messenger({
-  action: 'send',
-  to: '#memory',
-  message: 'Claimed task-4, touching src/auth/session.ts',
-});
-```
-
-⚠️ **Warning when messaging completed agents**: If you try to send a message to a spawned subagent that has already completed, failed, or stopped, you'll receive a warning. The message is still logged to the feed, but the agent process is no longer active. Use `pi_messenger({ action: "spawn.history" })` to see which agents are still running.
 
 ## Swarm Philosophy
 
@@ -150,8 +145,6 @@ Good pattern: inspect once at decision points, act, move on.
 - Before claiming: check what's ready
 - After spawning: trust the agent to execute
 - On uncertainty: message the agent directly
-
-Avoid loops that poll status. The system already does this.
 
 ### Spawn-and-collaborate, don't coordinate
 
@@ -173,22 +166,13 @@ Swarm data is **project-scoped by default** (isolated per project):
 ```
 .pi/messenger/
 ├── channels/
-│   └── <channel>.jsonl       # Unified format: metadata header (line 1) + feed events
-├── swarm/
-│   ├── tasks/
-│   │   ├── task-1.json
-│   │   ├── task-1.md
-│   │   └── task-1.progress.md
-│   └── blocks/
-└── locks/              # Race-safe coordination locks
+│   └── <channel>.jsonl       # Metadata header (line 1) + feed events
+├── tasks/                    # Task event JSONL (per session)
+│   └── <session>.jsonl
+├── agents/                   # Spawn event JSONL (per session)
+│   └── <session>.jsonl
+└── locks/                    # Race-safe coordination locks
 ```
-
-Channels use a unified JSONL format where:
-
-- Line 1: Metadata header with `_meta: true`, channel id, type, createdAt, etc.
-- Line 2+: Append-only feed events
-
-This prevents cross-project agent contamination. Agents only see other agents in the same project.
 
 ### Override locations
 

@@ -47,7 +47,9 @@ export function register(
   ensureStateChannels(state, dirs, ctx);
   state.contextSessionId = getContextSessionId(ctx);
 
-  const isExplicitName = !!process.env.PI_AGENT_NAME;
+  const effectivePid = state.callerPid ?? process.pid;
+
+  const isExplicitName = !!state.agentName;
   const maxAttempts = isExplicitName ? 1 : 3;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -65,7 +67,7 @@ export function register(
       if (fs.existsSync(regPath)) {
         try {
           const existing: AgentRegistration = JSON.parse(fs.readFileSync(regPath, 'utf-8'));
-          if (isProcessAlive(existing.pid) && existing.pid !== process.pid) {
+          if (isProcessAlive(existing.pid) && existing.pid !== effectivePid) {
             if (ctx.hasUI) {
               ctx.ui.notify(
                 `Agent name "${state.agentName}" already in use (PID ${existing.pid})`,
@@ -103,7 +105,7 @@ export function register(
     const now = new Date().toISOString();
     const registration: AgentRegistration = {
       name: state.agentName,
-      pid: process.pid,
+      pid: effectivePid,
       sessionId: getContextSessionId(ctx),
       cwd,
       model:
@@ -134,7 +136,7 @@ export function register(
     let verifyError = false;
     try {
       const written: AgentRegistration = JSON.parse(fs.readFileSync(regPath, 'utf-8'));
-      verified = written.pid === process.pid;
+      verified = written.pid === effectivePid;
     } catch {
       verifyError = true;
     }
@@ -154,7 +156,7 @@ export function register(
       try {
         const checkContent = fs.readFileSync(regPath, 'utf-8');
         const checkReg: AgentRegistration = JSON.parse(checkContent);
-        if (checkReg.pid === process.pid) {
+        if (checkReg.pid === effectivePid) {
           fs.unlinkSync(regPath);
         }
       } catch {
@@ -289,7 +291,7 @@ export function rebindContextSession(
 
   const inheritedChannel = process.env.PI_MESSENGER_CHANNEL?.trim();
   const shouldRebind =
-    !!inheritedChannel ||
+    (!!inheritedChannel && !state.sessionChannel) ||
     (!!currentContextSessionId && currentContextSessionId !== previousContextSessionId);
 
   if (!shouldRebind) {
@@ -354,7 +356,8 @@ export function renameAgent(
   if (fs.existsSync(newRegPath)) {
     try {
       const existing: AgentRegistration = JSON.parse(fs.readFileSync(newRegPath, 'utf-8'));
-      if (isProcessAlive(existing.pid) && existing.pid !== process.pid) {
+      const effectivePid = state.callerPid ?? process.pid;
+      if (isProcessAlive(existing.pid) && existing.pid !== effectivePid) {
         return { success: false, error: 'name_taken' };
       }
     } catch {
@@ -368,9 +371,10 @@ export function renameAgent(
   const cwd = normalizeCwd(process.cwd());
   const gitBranch = getGitBranch(cwd);
   const now = new Date().toISOString();
+  const effectivePid = state.callerPid ?? process.pid;
   const registration: AgentRegistration = {
     name: newName,
-    pid: process.pid,
+    pid: effectivePid,
     sessionId: getContextSessionId(ctx),
     cwd,
     model:
@@ -401,7 +405,7 @@ export function renameAgent(
   let verifyError = false;
   try {
     const written: AgentRegistration = JSON.parse(fs.readFileSync(newRegPath, 'utf-8'));
-    verified = written.pid === process.pid;
+    verified = written.pid === effectivePid;
   } catch {
     verifyError = true;
   }
@@ -410,7 +414,7 @@ export function renameAgent(
     if (verifyError) {
       try {
         const checkReg: AgentRegistration = JSON.parse(fs.readFileSync(newRegPath, 'utf-8'));
-        if (checkReg.pid === process.pid) {
+        if (checkReg.pid === effectivePid) {
           fs.unlinkSync(newRegPath);
         }
       } catch {

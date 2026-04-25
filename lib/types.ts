@@ -62,6 +62,10 @@ export interface ReservationConflict {
 export interface MessengerState {
   agentName: string;
   registered: boolean;
+  /** The PID of the caller's pi process, set by the harness server.
+   *  Used by register() to write the correct PID to the registration file.
+   */
+  callerPid?: number;
   reservations: FileReservation[];
   chatHistory: Map<string, AgentMailMessage[]>;
   unreadCounts: Map<string, number>;

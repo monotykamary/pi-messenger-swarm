@@ -210,13 +210,13 @@ function buildSystemPrompt(request: SpawnRequest): string {
   lines.push(
     '',
     '## Swarm Operating Protocol',
-    '1. Join the mesh first: pi_messenger({ action: "join" }).',
+    '1. Join the mesh first: `pi-messenger-swarm join`.',
     '2. Coordinate via messaging/reservations/task actions before risky edits.',
-    '3. Task claiming is required: If assigned a taskId, claim it before beginning work: pi_messenger({ action: "task.claim", id: "<taskId>" }). Failure to claim indicates another agent owns it; report the conflict and await further instruction.',
-    '4. Progress updates are required: Update task progress every 3-5 tool calls or at significant milestones: pi_messenger({ action: "task.progress", id: "<taskId>", message: "Specific achievement and rationale" }).',
-    '5. Task completion is required: Mark the task done upon mission completion: pi_messenger({ action: "task.done", id: "<taskId>", summary: "Concrete accomplishment with evidence" }).',
+    '3. Task claiming is required: If assigned a taskId, claim it before beginning work: `pi-messenger-swarm task claim <taskId>`. Failure to claim indicates another agent owns it; report the conflict and await further instruction.',
+    '4. Progress updates are required: Update task progress every 3-5 tool calls or at significant milestones: `pi-messenger-swarm task progress <taskId> "Specific achievement and rationale"`.',
+    '5. Task completion is required: Mark the task done upon mission completion: `pi-messenger-swarm task done <taskId> "Concrete accomplishment with evidence"`.',
     '6. Be concise, evidence-based, and stay in role.',
-    '7. Clarify ambiguity early: if mission scope, expected output format, or framing is unclear or seems incomplete, send a brief targeted question via pi_messenger({ action: "send", to: "AgentName", message: "..." }) before proceeding. A 30-second alignment check prevents off-target work.',
+    '7. Clarify ambiguity early: if mission scope, expected output format, or framing is unclear or seems incomplete, send a brief targeted question via `pi-messenger-swarm send AgentName "..."` before proceeding. A 30-second alignment check prevents off-target work.',
     '8. Exit when mission is complete: use bash({ command: "exit 0" }) to self-terminate. Remain active only if explicitly instructed (e.g., council discussions, monitoring, or awaiting further input). Do not stay alive indefinitely unless serving an ongoing purpose.'
   );
 
@@ -239,15 +239,15 @@ function buildPrompt(request: SpawnRequest): string {
       'Follow this sequence when executing an assigned task:',
       '',
       '1. Claim the task before starting:',
-      `   pi_messenger({ action: "task.claim", id: "${request.taskId}" })`,
+      `   pi-messenger-swarm task claim ${request.taskId}`,
       '   If the claim fails, report the conflict and await instruction. Do not proceed with unclaimed work.',
       '',
       '2. Update progress at regular intervals:',
-      `   pi_messenger({ action: "task.progress", id: "${request.taskId}", message: "Specific milestone achieved" })`,
+      `   pi-messenger-swarm task progress ${request.taskId} "Specific milestone achieved"`,
       '   Send updates every 3-5 tool calls or upon completing significant milestones. Include what was done and why.',
       '',
       '3. Mark the task done upon completion:',
-      `   pi_messenger({ action: "task.done", id: "${request.taskId}", summary: "Concrete accomplishment with evidence" })`,
+      `   pi-messenger-swarm task done ${request.taskId} "Concrete accomplishment with evidence"`,
       '   Provide evidence of completion in the summary.'
     );
   }
@@ -256,8 +256,10 @@ function buildPrompt(request: SpawnRequest): string {
     '',
     '## Definition of Done',
     '- Objective addressed with concrete output.',
-    request.taskId ? `- Progress updates recorded via pi_messenger at appropriate intervals.` : '',
-    request.taskId ? `- Task marked done via pi_messenger before exit.` : '',
+    request.taskId
+      ? `- Progress updates recorded via pi-messenger-swarm at appropriate intervals.`
+      : '',
+    request.taskId ? `- Task marked done via pi-messenger-swarm before exit.` : '',
     '- Any file reservations released before exit.',
     '- Exit with: bash({ command: "exit 0" })'
   );
@@ -481,7 +483,6 @@ export function spawnSubagent(
 
   const env = {
     ...process.env,
-    PI_AGENT_NAME: name,
     PI_SWARM_SPAWNED: '1',
     ...(inheritedChannel ? { PI_MESSENGER_CHANNEL: inheritedChannel } : {}),
   };
