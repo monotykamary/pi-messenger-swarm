@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.25.2](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.1...v0.25.2) (2026-04-25)
+
+
+### Bug Fixes
+
+* **spawn:** always append swarm operating protocol to agent system prompt ([82e0630](https://github.com/monotykamary/pi-messenger-swarm/commit/82e0630de523acc1e8794fbfe6475be509b23e61))
+
 ### [0.25.1](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.0...v0.25.1) (2026-04-25)
 
 
