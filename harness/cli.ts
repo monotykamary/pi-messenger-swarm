@@ -27,7 +27,7 @@
  *   pi-messenger-swarm release
  *   pi-messenger-swarm set-status "debugging auth"
  *   pi-messenger-swarm rename NewName
- *   pi-messenger-swarm spawn --role Researcher "Analyze the protocol" [--persona "..."] [--task-id task-1]
+ *   pi-messenger-swarm spawn --role Researcher "Analyze the protocol" [--persona "..."] [--task-id task-1] [--agent-file path] [--objective "..."] [--context "..."]
  *   pi-messenger-swarm spawn list
  *   pi-messenger-swarm spawn history
  *   pi-messenger-swarm spawn stop <id>
@@ -355,7 +355,7 @@ Usage:
   pi-messenger-swarm task reset <id> [--cascade]
   pi-messenger-swarm task archive-done
 
-  pi-messenger-swarm spawn --role Researcher "Analyze X" [--persona "..."] [--task-id <id>] [--name <name>]
+  pi-messenger-swarm spawn --role Researcher "Analyze X" [--persona "..."] [--task-id <id>] [--name <name>] [--agent-file <path>] [--objective "..."] [--context "..."]
   pi-messenger-swarm spawn list
   pi-messenger-swarm spawn history
   pi-messenger-swarm spawn stop <id>
@@ -656,13 +656,17 @@ Environment:
         await postAction(buildAction({ action: 'spawn.stop', id }));
       } else {
         // spawn --role Role "mission text" [--persona "..."] [--task-id task-1] [--name name]
+        //      [--agent-file path] [--objective "..."] [--context "..."]
         const role = extractFlag(args, 'role') || extractFlag(args, 'title');
         const persona = extractFlag(args, 'persona');
         const taskId = extractFlag(args, 'task-id');
         const name = extractFlag(args, 'name');
+        const agentFile = extractFlag(args, 'agent-file');
+        const objective = extractFlag(args, 'objective');
+        const context = extractFlag(args, 'context');
         const message = args.filter((a) => !a.startsWith('--')).join(' ');
-        if (!message) {
-          process.stderr.write('Error: spawn requires mission text.\n');
+        if (!message && !agentFile) {
+          process.stderr.write('Error: spawn requires mission text or --agent-file.\n');
           process.exit(1);
         }
         await postAction(
@@ -672,7 +676,10 @@ Environment:
             persona: persona || undefined,
             taskId: taskId || undefined,
             name: name || undefined,
-            message,
+            agentFile: agentFile || undefined,
+            objective: objective || undefined,
+            context: context || undefined,
+            message: message || undefined,
           })
         );
       }

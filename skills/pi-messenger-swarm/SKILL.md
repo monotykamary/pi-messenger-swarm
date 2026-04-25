@@ -108,6 +108,8 @@ pi-messenger-swarm task archive-done
 pi-messenger-swarm spawn --role Researcher "Analyze competitor X"
 pi-messenger-swarm spawn --role Analyst --persona "Skeptical market researcher" "Find productization gaps"
 pi-messenger-swarm spawn --task-id task-1 --role Debugger "Fix the race condition"
+pi-messenger-swarm spawn --agent-file agents/researcher.md "Analyze the codebase"
+pi-messenger-swarm spawn --objective "Find bugs" --context "Focus on auth" --role Auditor "Review code"
 pi-messenger-swarm spawn list
 pi-messenger-swarm spawn history
 pi-messenger-swarm spawn stop <id>

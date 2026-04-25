@@ -39,6 +39,7 @@ export interface MessengerActionParams {
   // Spawn
   role?: string;
   persona?: string;
+  objective?: string;
   context?: string;
   model?: string;
   agentFile?: string;

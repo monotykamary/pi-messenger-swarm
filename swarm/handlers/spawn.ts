@@ -175,6 +175,7 @@ function spawnCreate(
   if (params.agentFile) {
     const request: SpawnRequest = {
       agentFile: params.agentFile,
+      objective: params.objective,
       message,
       context: params.context,
       taskId: params.taskId,
@@ -206,9 +207,9 @@ function spawnCreate(
   }
 
   // Autoregressive spawn mode (traditional)
-  const objective = message;
+  const objective = params.objective?.trim() || message;
   if (!objective) {
-    return result('Error: spawn requires mission text via message or prompt.', {
+    return result('Error: spawn requires mission text or --objective.', {
       mode: 'spawn',
       error: 'missing_objective',
     });
