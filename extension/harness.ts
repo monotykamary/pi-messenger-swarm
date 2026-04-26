@@ -10,19 +10,20 @@ import { spawn as spawnChild, type ChildProcess } from 'node:child_process';
 
 /**
  * Resolve the path to the CLI entry point.
- * Works regardless of how the extension is loaded (source via tsx, or compiled dist/).
+ * The extension runs from TypeScript source via tsx — there is no
+ * compiled cli.js on disk (dist/ is gitignored and not shipped).
+ * The shell wrapper uses 'npx tsx' to invoke the .ts source directly.
  */
 export function getCliPath(): string {
   const __dirname = fileURLToPath(new URL('.', import.meta.url));
-  // When running from dist/: __dirname = .../dist, so dist/harness/cli.js exists
-  const compiledPath = join(__dirname, 'harness', 'cli.js');
-  if (fs.existsSync(compiledPath)) return compiledPath;
-  // When running from source via tsx: __dirname = project root
-  // Need to use dist/harness/cli.js (built output)
-  const fromSource = join(__dirname, 'dist', 'harness', 'cli.js');
-  if (fs.existsSync(fromSource)) return fromSource;
-  // Last resort: return the expected compiled path even if it doesn't exist yet
-  return compiledPath;
+  // Source .ts entry point (always present)
+  return join(__dirname, '..', 'harness', 'cli.ts');
+}
+
+/** Resolve the project root for cwd. */
+function getProjectRoot(): string {
+  const __dirname = fileURLToPath(new URL('.', import.meta.url));
+  return join(__dirname, '..');
 }
 
 /**
@@ -44,8 +45,12 @@ export function installShellAlias(): void {
     const linkPath = join(agentBinDir, 'pi-messenger-swarm');
 
     // Write a shell wrapper that resolves the correct node + cli path
+    // Uses npx tsx so it works from source without a compiled cli.js.
+    // The project root must be cwd so relative imports in cli.ts resolve.
+    const projectRoot = getProjectRoot();
     const wrapperContent = `#!/bin/sh
-exec node "${cliPath}" "$@"
+cd "${projectRoot}" 2>/dev/null
+exec npx tsx "${cliPath}" "$@"
 `;
 
     // Only write if content differs (avoids unnecessary writes on every session_start)
@@ -89,10 +94,11 @@ export function createHarnessServer(): HarnessServerController {
     }
 
     const cliPath = getCliPath();
+    const projectRoot = getProjectRoot();
 
     try {
-      harnessProcess = spawnChild('node', [cliPath, '--start'], {
-        cwd: process.cwd(),
+      harnessProcess = spawnChild('npx', ['tsx', cliPath, '--start'], {
+        cwd: projectRoot,
         stdio: ['ignore', 'ignore', 'ignore'],
         detached: true,
         env,
