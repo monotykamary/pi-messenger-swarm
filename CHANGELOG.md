@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.25.4](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.3...v0.25.4) (2026-04-26)
+
+
+### Bug Fixes
+
+* shell alias uses npx tsx for CLI instead of nonexistent cli.js ([27b20ee](https://github.com/monotykamary/pi-messenger-swarm/commit/27b20ee9b01897a1c3971c3055d2769db4794f53))
+
 ### [0.25.3](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.2...v0.25.3) (2026-04-25)
 
 ### [0.25.2](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.1...v0.25.2) (2026-04-25)
