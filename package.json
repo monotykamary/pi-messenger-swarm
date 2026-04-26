@@ -26,7 +26,6 @@
     "cli"
   ],
   "bin": {
-    "pi-messenger": "install.mjs",
     "pi-messenger-swarm": "dist/harness/cli.js"
   },
   "files": [
