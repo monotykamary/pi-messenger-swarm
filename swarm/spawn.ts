@@ -29,10 +29,6 @@ function spawnLiveKey(id: string): string {
   return `spawn-${id}`;
 }
 
-// ============================================================================
-// Event-Sourced Persistence (JSONL)
-// ============================================================================
-
 interface SpawnEvent {
   id: string;
   type: 'spawned' | 'completed' | 'failed' | 'stopped' | 'progress';
@@ -175,10 +171,6 @@ function generateAgentFile(cwd: string, sessionId: string, agent: SpawnedAgent):
   fs.writeFileSync(filePath, lines.join('\n'), 'utf-8');
   return filePath;
 }
-
-// ============================================================================
-// Prompt Building
-// ============================================================================
 
 /**
  * The swarm operating protocol — always appended to every subagent's system prompt.

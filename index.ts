@@ -46,10 +46,6 @@ let overlayHandle: OverlayHandle | null = null;
 let overlayOpening = false;
 
 export default function piMessengerExtension(pi: ExtensionAPI) {
-  // ===========================================================================
-  // State & Configuration
-  // ===========================================================================
-
   const config: MessengerConfig = loadConfig(process.cwd());
 
   const state: MessengerState = {
@@ -78,10 +74,6 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
   };
 
   const nameTheme = { theme: config.nameTheme, customWords: config.nameWords };
-
-  // ===========================================================================
-  // Directory setup (project-scoped by default)
-  // ===========================================================================
 
   function getMessengerDirs(): Dirs {
     const baseDir =
@@ -157,10 +149,6 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
     overlayTui?.requestRender();
   });
 
-  // ===========================================================================
-  // Registration Context
-  // ===========================================================================
-
   function sendRegistrationContext(ctx: ExtensionContext): void {
     const folder = extractFolder(process.cwd());
     const locationPart = state.gitBranch ? `${folder} on ${state.gitBranch}` : folder;
@@ -175,15 +163,7 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
     );
   }
 
-  // ===========================================================================
-  // Harness Server
-  // ===========================================================================
-
   const harnessServer = createHarnessServer();
-
-  // ===========================================================================
-  // Commands
-  // ===========================================================================
 
   pi.registerCommand('messenger', {
     description: "Open messenger overlay, or 'config' to manage settings",
@@ -275,10 +255,6 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
     },
   });
 
-  // ===========================================================================
-  // Message Renderer
-  // ===========================================================================
-
   pi.registerMessageRenderer<AgentMailMessage>('agent_message', (message, _options, theme) => {
     const details = message.details;
     if (!details) return undefined;
@@ -305,10 +281,6 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
     };
   });
 
-  // ===========================================================================
-  // Activity Tracking
-  // ===========================================================================
-
   const activityTracker = createActivityTracker({ state, dirs, config });
 
   pi.on('tool_call', async (event, ctx) => {
@@ -318,10 +290,6 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
   pi.on('tool_result', async (event, ctx) => {
     await activityTracker.handleToolResult(event, ctx);
   });
-
-  // ===========================================================================
-  // Event Handlers
-  // ===========================================================================
 
   pi.on('session_start', async (_event, ctx) => {
     latestCtx = ctx;
@@ -419,10 +387,6 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
     maybeAutoOpenSwarmOverlay(ctx);
   });
 
-  // ===========================================================================
-  // Agent End Lifecycle
-  // ===========================================================================
-
   pi.on('agent_end', async (_event, ctx) => {
     latestCtx = ctx;
     updateStatus(ctx);
@@ -439,10 +403,6 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
     await handleSessionShutdown(state, dirs);
     activityTracker.dispose();
   });
-
-  // ===========================================================================
-  // Reservation Enforcement
-  // ===========================================================================
 
   pi.on('tool_call', async (event, ctx) => {
     return handleReservationEnforcement(event, ctx, state, dirs);

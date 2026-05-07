@@ -61,10 +61,6 @@ const BASE_URL = `http://${HOST}:${PORT}`;
 const LOG = process.env.PI_MESSENGER_LOG ?? '/tmp/pi-messenger-swarm.log';
 const SERVER_SCRIPT = path.resolve(__dirname, 'server.js');
 
-// =============================================================================
-// HTTP helpers
-// =============================================================================
-
 function httpGet(url: string): Promise<{ status: number; body: string }> {
   return new Promise((resolve) => {
     const req = http.get(url, { timeout: 2000 }, (res) => {
@@ -192,10 +188,6 @@ function agentHeaders(): Record<string, string> {
   return headers;
 }
 
-// =============================================================================
-// Server lifecycle
-// =============================================================================
-
 async function isUp(): Promise<boolean> {
   const { status } = await httpGet(`${BASE_URL}/health`);
   return status === 200;
@@ -236,10 +228,6 @@ async function startServer(): Promise<boolean> {
   return false;
 }
 
-// =============================================================================
-// Action dispatch
-// =============================================================================
-
 async function postAction(jsonBody: string): Promise<void> {
   const { status, body } = await httpPost(`${BASE_URL}/action`, jsonBody, agentHeaders());
   if (status === 200) {
@@ -272,10 +260,6 @@ async function postAction(jsonBody: string): Promise<void> {
 function buildAction(params: Record<string, unknown>): string {
   return JSON.stringify(params);
 }
-
-// =============================================================================
-// Argument parser — natural subcommand syntax
-// =============================================================================
 
 function parseFlag(args: string[], name: string): string | undefined {
   const idx = args.findIndex((a) => a === `--${name}`);
@@ -310,10 +294,6 @@ function positional(args: string[], index: number): string | undefined {
   const positional = args.filter((a) => !a.startsWith('--'));
   return positional[index];
 }
-
-// =============================================================================
-// CLI entrypoint
-// =============================================================================
 
 async function main(): Promise<void> {
   const rawArgs = process.argv.slice(2);

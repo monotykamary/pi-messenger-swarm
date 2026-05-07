@@ -1,9 +1,5 @@
 import type * as fs from 'node:fs';
 
-// =============================================================================
-// Core Types
-// =============================================================================
-
 export interface FileReservation {
   pattern: string;
   reason?: string;

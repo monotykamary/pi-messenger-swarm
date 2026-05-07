@@ -34,10 +34,6 @@ import {
 } from '../channel.js';
 import { ensureDirSync, getGitBranch, normalizeCwd } from '../store/shared.js';
 
-// =============================================================================
-// Bootstrap: directories, channels, default config
-// =============================================================================
-
 function getMessengerDirs(): Dirs {
   const baseDir =
     process.env.PI_MESSENGER_DIR ||
@@ -65,10 +61,6 @@ const routerConfig: RouterConfig = {
   nameTheme,
   feedRetention: config.feedRetention,
 };
-
-// =============================================================================
-// Per-request state resolution
-// =============================================================================
 
 interface RegistrationFile {
   name: string;
@@ -266,10 +258,6 @@ function createHarnessContext(sessionId: string, cwd?: string): HarnessContext {
 // The in-process extension picks up messages via its own delivery mechanism.
 const deliverMessage = (_msg: AgentMailMessage): void => {};
 const updateStatus = (_ctx: unknown): void => {};
-
-// =============================================================================
-// HTTP Server
-// =============================================================================
 
 const PORT = Number(process.env.PI_MESSENGER_PORT ?? 9877);
 const startedAt = Date.now();

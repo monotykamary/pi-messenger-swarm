@@ -1,9 +1,5 @@
 import type { SwarmTaskEvidence } from '../types.js';
 
-// =============================================================================
-// Task Event Sourcing Types
-// =============================================================================
-
 export type TaskEventType =
   | 'created'
   | 'claimed'
