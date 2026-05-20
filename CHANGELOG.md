@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.25.5](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.4...v0.25.5) (2026-05-20)
+
+
+### Bug Fixes
+
+* **deps:** migrate pi-coding-agent namespace from [@mariozechner](https://github.com/mariozechner) to [@earendil-works](https://github.com/earendil-works) ([28963eb](https://github.com/monotykamary/pi-messenger-swarm/commit/28963ebae2dae4b54e88bc3fe58b725a5292e749))
+* **deps:** supply-chain hardening ([a7fd772](https://github.com/monotykamary/pi-messenger-swarm/commit/a7fd77226457255c46e3d311c711be90e24272b0))
+* **deps:** sync package-lock.json with [@earendil-works](https://github.com/earendil-works) namespace ([0991cc4](https://github.com/monotykamary/pi-messenger-swarm/commit/0991cc4c56b8eb8faf2616ea7a9e7936dc227040))
+* sync package-lock.json with package.json ([8f8f7bd](https://github.com/monotykamary/pi-messenger-swarm/commit/8f8f7bda284963267e1ad30d184a6be816ba1734))
+
 ### [0.25.4](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.3...v0.25.4) (2026-04-26)
 
 
