@@ -60,6 +60,7 @@ const routerConfig: RouterConfig = {
   swarmEventsInFeed: config.swarmEventsInFeed,
   nameTheme,
   feedRetention: config.feedRetention,
+  maxConcurrentSpawns: config.maxConcurrentSpawns,
 };
 
 interface RegistrationFile {

@@ -1,12 +1,13 @@
 import { displayChannelLabel, normalizeChannelId } from '../../channel.js';
 import { result } from '../result.js';
 import * as taskStore from '../task-store.js';
-import { cleanupExitedSpawned, listSpawnedHistory } from '../spawn.js';
+import { cleanupExitedSpawned, listSpawnedHistory, reconcileSpawnedAgents } from '../spawn.js';
 import { formatRoleLabel } from '../labels.js';
 import { summaryLine } from './_utils.js';
 
 export function executeSwarmStatus(cwd: string, channelId: string, sessionId: string) {
   cleanupExitedSpawned(cwd, sessionId);
+  reconcileSpawnedAgents(cwd, sessionId);
   const tasks = taskStore.getTasks(cwd, sessionId);
   const summary = taskStore.getSummary(cwd, sessionId);
   const allAgents = listSpawnedHistory(cwd, sessionId);

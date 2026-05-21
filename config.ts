@@ -1,6 +1,6 @@
 /**
  * Pi Messenger - Configuration
- * 
+ *
  * Priority (highest to lowest):
  * 1. Project: .pi/pi-messenger.json
  * 2. Extension-specific: ~/.pi/agent/pi-messenger.json
@@ -8,15 +8,15 @@
  * 4. Defaults
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 export interface MessengerConfig {
   autoRegister: boolean;
   autoRegisterPaths: string[];
   scopeToFolder: boolean;
-  contextMode: "full" | "minimal" | "none";
+  contextMode: 'full' | 'minimal' | 'none';
   registrationContext: boolean;
   replyHint: boolean;
   senderDetailsOnFirstContact: boolean;
@@ -28,54 +28,56 @@ export interface MessengerConfig {
   autoStatus: boolean;
   autoOverlay: boolean;
   swarmEventsInFeed: boolean;
+  maxConcurrentSpawns: number;
 }
 
 const DEFAULT_CONFIG: MessengerConfig = {
   autoRegister: false,
   autoRegisterPaths: [],
   scopeToFolder: true, // Default to project-scoped isolation for swarm safety
-  contextMode: "full",
+  contextMode: 'full',
   registrationContext: true,
   replyHint: true,
   senderDetailsOnFirstContact: true,
-  nameTheme: "default",
+  nameTheme: 'default',
   feedRetention: 50,
   stuckThreshold: 900,
   stuckNotify: true,
   autoStatus: true,
   autoOverlay: true,
   swarmEventsInFeed: true,
+  maxConcurrentSpawns: 3,
 };
 
 function readJsonFile(path: string): Record<string, unknown> | null {
   if (!existsSync(path)) return null;
   try {
-    return JSON.parse(readFileSync(path, "utf-8"));
+    return JSON.parse(readFileSync(path, 'utf-8'));
   } catch {
     return null;
   }
 }
 
 function expandHome(p: string): string {
-  if (p.startsWith("~/")) {
+  if (p.startsWith('~/')) {
     return join(homedir(), p.slice(2));
   }
   return p;
 }
 
 export function matchesAutoRegisterPath(cwd: string, paths: string[]): boolean {
-  const normalizedCwd = cwd.replace(/\/+$/, ""); // Remove trailing slashes
-  
+  const normalizedCwd = cwd.replace(/\/+$/, ''); // Remove trailing slashes
+
   for (const pattern of paths) {
-    const expanded = expandHome(pattern).replace(/\/+$/, "");
-    
+    const expanded = expandHome(pattern).replace(/\/+$/, '');
+
     // Simple glob support: trailing /* matches any subdirectory
-    if (expanded.endsWith("/*")) {
+    if (expanded.endsWith('/*')) {
       const base = expanded.slice(0, -2);
-      if (normalizedCwd === base || normalizedCwd.startsWith(base + "/")) {
+      if (normalizedCwd === base || normalizedCwd.startsWith(base + '/')) {
         return true;
       }
-    } else if (expanded.endsWith("*")) {
+    } else if (expanded.endsWith('*')) {
       // Prefix match: /path/prefix* matches /path/prefix-anything
       const prefix = expanded.slice(0, -1);
       if (normalizedCwd.startsWith(prefix)) {
@@ -88,35 +90,35 @@ export function matchesAutoRegisterPath(cwd: string, paths: string[]): boolean {
       }
     }
   }
-  
+
   return false;
 }
 
 export function saveAutoRegisterPaths(paths: string[]): void {
-  const configPath = join(homedir(), ".pi", "agent", "pi-messenger.json");
+  const configPath = join(homedir(), '.pi', 'agent', 'pi-messenger.json');
   let existing: Record<string, unknown> = {};
-  
+
   if (existsSync(configPath)) {
     try {
-      existing = JSON.parse(readFileSync(configPath, "utf-8"));
+      existing = JSON.parse(readFileSync(configPath, 'utf-8'));
     } catch {
       // Start fresh if malformed
     }
   }
-  
+
   existing.autoRegisterPaths = paths;
-  
-  const dir = join(homedir(), ".pi", "agent");
+
+  const dir = join(homedir(), '.pi', 'agent');
   mkdirSync(dir, { recursive: true });
   writeFileSync(configPath, JSON.stringify(existing, null, 2));
 }
 
 export function getAutoRegisterPaths(): string[] {
-  const configPath = join(homedir(), ".pi", "agent", "pi-messenger.json");
+  const configPath = join(homedir(), '.pi', 'agent', 'pi-messenger.json');
   if (!existsSync(configPath)) return [];
-  
+
   try {
-    const config = JSON.parse(readFileSync(configPath, "utf-8"));
+    const config = JSON.parse(readFileSync(configPath, 'utf-8'));
     return Array.isArray(config.autoRegisterPaths) ? config.autoRegisterPaths : [];
   } catch {
     return [];
@@ -124,14 +126,18 @@ export function getAutoRegisterPaths(): string[] {
 }
 
 export function loadConfig(cwd: string): MessengerConfig {
-  const projectPath = join(cwd, ".pi", "pi-messenger.json");
-  const extensionGlobalPath = join(homedir(), ".pi", "agent", "pi-messenger.json");
-  const mainSettingsPath = join(homedir(), ".pi", "agent", "settings.json");
+  const projectPath = join(cwd, '.pi', 'pi-messenger.json');
+  const extensionGlobalPath = join(homedir(), '.pi', 'agent', 'pi-messenger.json');
+  const mainSettingsPath = join(homedir(), '.pi', 'agent', 'settings.json');
 
   // Load from main settings.json (lowest priority of the three sources)
   let settingsConfig: Partial<MessengerConfig> = {};
   const mainSettings = readJsonFile(mainSettingsPath);
-  if (mainSettings && typeof mainSettings.messenger === "object" && mainSettings.messenger !== null) {
+  if (
+    mainSettings &&
+    typeof mainSettings.messenger === 'object' &&
+    mainSettings.messenger !== null
+  ) {
     settingsConfig = mainSettings.messenger as Partial<MessengerConfig>;
   }
 
@@ -141,32 +147,47 @@ export function loadConfig(cwd: string): MessengerConfig {
   // Load project config (highest priority)
   const projectConfig = readJsonFile(projectPath) as Partial<MessengerConfig> | null;
 
-  const merged = { 
-    ...DEFAULT_CONFIG, 
+  const merged = {
+    ...DEFAULT_CONFIG,
     ...settingsConfig,
-    ...(extensionConfig ?? {}), 
-    ...(projectConfig ?? {}) 
+    ...(extensionConfig ?? {}),
+    ...(projectConfig ?? {}),
   };
 
-  const nameWords = (merged as Record<string, unknown>).nameWords as { adjectives: string[]; nouns: string[] } | undefined;
+  const nameWords = (merged as Record<string, unknown>).nameWords as
+    | { adjectives: string[]; nouns: string[] }
+    | undefined;
 
   const sharedFields = {
-    nameTheme: typeof merged.nameTheme === "string" ? merged.nameTheme : DEFAULT_CONFIG.nameTheme,
-    nameWords: nameWords && Array.isArray(nameWords.adjectives) && Array.isArray(nameWords.nouns) ? nameWords : undefined,
-    feedRetention: typeof merged.feedRetention === "number" ? merged.feedRetention : DEFAULT_CONFIG.feedRetention,
-    stuckThreshold: typeof merged.stuckThreshold === "number" ? merged.stuckThreshold : DEFAULT_CONFIG.stuckThreshold,
+    nameTheme: typeof merged.nameTheme === 'string' ? merged.nameTheme : DEFAULT_CONFIG.nameTheme,
+    nameWords:
+      nameWords && Array.isArray(nameWords.adjectives) && Array.isArray(nameWords.nouns)
+        ? nameWords
+        : undefined,
+    feedRetention:
+      typeof merged.feedRetention === 'number'
+        ? merged.feedRetention
+        : DEFAULT_CONFIG.feedRetention,
+    stuckThreshold:
+      typeof merged.stuckThreshold === 'number'
+        ? merged.stuckThreshold
+        : DEFAULT_CONFIG.stuckThreshold,
     stuckNotify: merged.stuckNotify !== false,
     autoStatus: merged.autoStatus !== false,
     autoOverlay: merged.autoOverlay !== false,
     swarmEventsInFeed: (merged as Record<string, unknown>).swarmEventsInFeed !== false,
+    maxConcurrentSpawns:
+      typeof merged.maxConcurrentSpawns === 'number' && merged.maxConcurrentSpawns > 0
+        ? merged.maxConcurrentSpawns
+        : DEFAULT_CONFIG.maxConcurrentSpawns,
   };
 
-  if (merged.contextMode === "none") {
+  if (merged.contextMode === 'none') {
     return {
       autoRegister: merged.autoRegister === true,
       autoRegisterPaths: Array.isArray(merged.autoRegisterPaths) ? merged.autoRegisterPaths : [],
       scopeToFolder: merged.scopeToFolder === true,
-      contextMode: "none",
+      contextMode: 'none',
       registrationContext: false,
       replyHint: false,
       senderDetailsOnFirstContact: false,
@@ -174,12 +195,12 @@ export function loadConfig(cwd: string): MessengerConfig {
     };
   }
 
-  if (merged.contextMode === "minimal") {
+  if (merged.contextMode === 'minimal') {
     return {
       autoRegister: merged.autoRegister === true,
       autoRegisterPaths: Array.isArray(merged.autoRegisterPaths) ? merged.autoRegisterPaths : [],
       scopeToFolder: merged.scopeToFolder === true,
-      contextMode: "minimal",
+      contextMode: 'minimal',
       registrationContext: false,
       replyHint: true,
       senderDetailsOnFirstContact: false,
@@ -191,7 +212,7 @@ export function loadConfig(cwd: string): MessengerConfig {
     autoRegister: merged.autoRegister === true,
     autoRegisterPaths: Array.isArray(merged.autoRegisterPaths) ? merged.autoRegisterPaths : [],
     scopeToFolder: merged.scopeToFolder === true,
-    contextMode: "full",
+    contextMode: 'full',
     registrationContext: merged.registrationContext !== false,
     replyHint: merged.replyHint !== false,
     senderDetailsOnFirstContact: merged.senderDetailsOnFirstContact !== false,

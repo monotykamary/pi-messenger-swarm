@@ -38,6 +38,7 @@ import {
 class FakeProcess extends EventEmitter {
   stdout = new EventEmitter();
   stderr = new EventEmitter();
+  pid = 99999 + Math.floor(Math.random() * 1000);
   exitCode: number | null = null;
   signalCode: NodeJS.Signals | null = null;
   kill = vi.fn((signal: NodeJS.Signals | number) => {
@@ -98,14 +99,18 @@ describe('cleanupExitedSpawned with event-sourced persistence', () => {
 
     expect(listSpawned(cwd, sessionId)).toHaveLength(1);
 
-    // Check event log has spawn event
+    // Check event log has spawn event + PID progress event
     const jsonlPath = getAgentEventsJsonlPath(cwd, sessionId);
     expect(fs.existsSync(jsonlPath)).toBe(true);
     const events = fs.readFileSync(jsonlPath, 'utf-8').trim().split('\n');
-    expect(events).toHaveLength(1);
+    expect(events).toHaveLength(2);
     const spawnEvent = JSON.parse(events[0]!);
     expect(spawnEvent.type).toBe('spawned');
     expect(spawnEvent.id).toBe(agent.id);
+    const pidEvent = JSON.parse(events[1]!);
+    expect(pidEvent.type).toBe('progress');
+    expect(pidEvent.id).toBe(agent.id);
+    expect(pidEvent.agent.pid).toBeDefined();
 
     // Simulate clean exit with code 0
     proc.exitCode = 0;
@@ -120,10 +125,10 @@ describe('cleanupExitedSpawned with event-sourced persistence', () => {
     // By default, listSpawned only returns running agents (should be 0 now)
     expect(listSpawned(cwd, sessionId)).toHaveLength(0);
 
-    // Check event log now has both events
+    // Check event log now has spawned + pid + completed events
     const updatedEvents = fs.readFileSync(jsonlPath, 'utf-8').trim().split('\n').filter(Boolean);
-    expect(updatedEvents).toHaveLength(2);
-    const completeEvent = JSON.parse(updatedEvents[1]!);
+    expect(updatedEvents).toHaveLength(3);
+    const completeEvent = JSON.parse(updatedEvents[2]!);
     expect(completeEvent.type).toBe('completed');
 
     cleanupTempDir(cwd);
@@ -391,11 +396,13 @@ describe('cleanupExitedSpawned with event-sourced persistence', () => {
     proc.exitCode = 0;
     proc.emit('close', 0);
 
-    // Get full event history
+    // Get full event history (spawned + pid progress + completed)
     const history = getAgentEventHistory(cwd, sessionId, agent.id);
-    expect(history).toHaveLength(2);
+    expect(history).toHaveLength(3);
     expect(history[0]?.type).toBe('spawned');
-    expect(history[1]?.type).toBe('completed');
+    expect(history[1]?.type).toBe('progress');
+    expect(history[1]?.agent?.pid).toBeDefined();
+    expect(history[2]?.type).toBe('completed');
 
     cleanupTempDir(cwd);
   });

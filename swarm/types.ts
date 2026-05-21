@@ -73,4 +73,5 @@ export interface SpawnedAgent {
   exitCode?: number;
   error?: string;
   sessionId?: string;
+  pid?: number;
 }

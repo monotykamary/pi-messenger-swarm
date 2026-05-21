@@ -152,6 +152,7 @@ function generateAgentFile(cwd: string, sessionId: string, agent: SpawnedAgent):
     `status: ${agent.status}`,
     ...(agent.endedAt ? [`ended: ${agent.endedAt}`] : []),
     ...(agent.exitCode !== undefined ? [`exitCode: ${agent.exitCode}`] : []),
+    ...(agent.pid ? [`pid: ${agent.pid}`] : []),
     ...(agent.taskId ? [`taskId: ${agent.taskId}`] : []),
     '---',
     '',
@@ -360,8 +361,31 @@ function attachHandlers(
     state.stderr += data.toString();
   });
 
-  proc.on('error', () => {
+  proc.on('error', (err) => {
     cleanupTmpDir(promptTmpDir);
+    const runtime = runtimes.get(state.id);
+    if (!runtime) return;
+
+    runtime.record = {
+      ...runtime.record,
+      status: 'failed',
+      endedAt: new Date().toISOString(),
+      exitCode: 1,
+      error: err.message || 'spawn failed',
+    };
+    runtime.persisted = true;
+    appendEvent(state.cwd, sessionId, {
+      id: state.id,
+      type: 'failed',
+      timestamp: runtime.record.endedAt!,
+      agent: {
+        status: 'failed',
+        endedAt: runtime.record.endedAt,
+        exitCode: 1,
+        error: runtime.record.error,
+      },
+    });
+    generateAgentFile(state.cwd, sessionId, runtime.record);
   });
 
   proc.on('close', (code, signal) => {
@@ -510,6 +534,16 @@ export function spawnSubagent(
     env,
   });
 
+  // Persist the child PID so we can detect dead processes after harness restart.
+  // Written to the record and event log right after spawn succeeds.
+  record.pid = proc.pid;
+  appendEvent(cwd, sessionId, {
+    id,
+    type: 'progress',
+    timestamp: startedAt,
+    agent: { pid: proc.pid },
+  });
+
   attachHandlers(proc, state, promptTmpDir, sessionId);
 
   runtimes.set(id, {
@@ -652,6 +686,82 @@ export function cleanupExitedSpawned(cwd: string, sessionId: string): number {
     finalized++;
   }
   return finalized;
+}
+
+/**
+ * Check whether a process is still alive using a zero-signal probe.
+ * Returns false if the process has exited or the PID is unavailable.
+ */
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Reconcile persisted "running" agents against actual process liveness.
+ *
+ * When the harness server restarts, all in-memory `runtimes` are lost and
+ * `proc.on('close')` handlers are gone. Any subagent that died while the
+ * harness was down (or was killed externally, e.g. by NW concurrency
+ * limits) stays stuck as "running" in the JSONL event log. This function
+ * detects and corrects those orphans by checking PID liveness (if available)
+ * or a staleness timeout.
+ *
+ * Should be called before any read operation (list, status, swarm).
+ */
+export function reconcileSpawnedAgents(cwd: string, sessionId: string): number {
+  const persisted = loadSpawnedAgents(cwd, sessionId);
+  let reconciled = 0;
+
+  for (const agent of persisted) {
+    if (agent.status !== 'running') continue;
+
+    // If we have a PID, do a definitive liveness check
+    if (agent.pid && !isProcessAlive(agent.pid)) {
+      appendEvent(cwd, sessionId, {
+        id: agent.id,
+        type: 'failed',
+        timestamp: new Date().toISOString(),
+        agent: {
+          status: 'failed',
+          endedAt: new Date().toISOString(),
+          exitCode: 1,
+          error: 'Process exited (detected by PID liveness check)',
+        },
+      });
+      reconciled++;
+      continue;
+    }
+
+    // No PID (happens for agents spawned before this field was added) —
+    // fall back to staleness detection. If a "running" agent has been
+    // alive for more than 2 hours without any progress or completion
+    // event, it's almost certainly dead.
+    if (!agent.pid) {
+      const runningForMs = Date.now() - Date.parse(agent.startedAt);
+      const STALE_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2 hours
+      if (runningForMs > STALE_THRESHOLD_MS) {
+        appendEvent(cwd, sessionId, {
+          id: agent.id,
+          type: 'failed',
+          timestamp: new Date().toISOString(),
+          agent: {
+            status: 'failed',
+            endedAt: new Date().toISOString(),
+            exitCode: 1,
+            error: 'Agent exceeded staleness threshold (no PID, no completion event)',
+          },
+        });
+        reconciled++;
+      }
+    }
+  }
+
+  return reconciled;
 }
 
 export function getRunningSpawnCount(cwd?: string): number {

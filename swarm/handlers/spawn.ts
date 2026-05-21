@@ -6,8 +6,10 @@ import { logFeedEvent } from '../../feed/index.js';
 import * as taskStore from '../task-store.js';
 import {
   cleanupExitedSpawned,
+  getRunningSpawnCount,
   listSpawned,
   listSpawnedHistory,
+  reconcileSpawnedAgents,
   spawnSubagent,
   stopSpawn,
 } from '../spawn.js';
@@ -19,12 +21,14 @@ export function executeSpawn(
   params: MessengerActionParams,
   state: MessengerState,
   cwd: string,
-  sessionId: string
+  sessionId: string,
+  maxConcurrentSpawns?: number
 ) {
   cleanupExitedSpawned(cwd, sessionId);
+  reconcileSpawnedAgents(cwd, sessionId);
 
   if (!op) {
-    return spawnCreate(params, state, cwd, sessionId);
+    return spawnCreate(params, state, cwd, sessionId, maxConcurrentSpawns);
   }
 
   if (op === 'list') {
@@ -167,8 +171,28 @@ function spawnCreate(
   params: MessengerActionParams,
   state: MessengerState,
   cwd: string,
-  sessionId: string
+  sessionId: string,
+  maxConcurrentSpawns?: number
 ) {
+  // Enforce concurrency limit to prevent thundering-herd API failures.
+  // When more subagents run than the provider supports concurrently,
+  // excess agents hit rate limits and spin on retries — wasting tokens
+  // and making the whole swarm appear stuck.
+  const running = getRunningSpawnCount(cwd);
+  const limit = maxConcurrentSpawns ?? 3;
+  if (running >= limit) {
+    return result(
+      `Error: ${running} subagent${running === 1 ? '' : 's'} already running (limit: ${limit}). ` +
+        `Wait for one to complete or increase maxConcurrentSpawns in .pi/pi-messenger.json.`,
+      {
+        mode: 'spawn',
+        error: 'concurrency_limit',
+        running,
+        limit,
+      }
+    );
+  }
+
   const message = params.message?.trim() || params.prompt?.trim();
 
   // File-based spawn mode
