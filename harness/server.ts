@@ -19,7 +19,7 @@
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import * as fs from 'node:fs';
 import type { MessengerState, Dirs, AgentMailMessage, NameThemeConfig } from '../lib.js';
 import { loadConfig, type MessengerConfig } from '../config.js';
@@ -113,11 +113,12 @@ function resolveAgentState(
   state: MessengerState;
   resolvedCwd: string;
 } {
-  // Default to process.cwd() (the harness's own cwd), but prefer
-  // the cwd stored in the agent's registration file — this is the
-  // user's actual project directory, which is where feed events,
-  // tasks, and spawn history should be written.
-  let resolvedCwd = normalizeCwd(process.cwd());
+  // Default to the project directory derived from PI_MESSENGER_DIR
+  // (set by the extension when spawning the harness). Fall back to
+  // process.cwd() if not available.
+  let resolvedCwd = normalizeCwd(
+    process.env.PI_MESSENGER_DIR ? dirname(process.env.PI_MESSENGER_DIR) : process.cwd()
+  );
   const gitBranch = getGitBranch(resolvedCwd);
 
   let registered = false;
@@ -138,7 +139,6 @@ function resolveAgentState(
       currentChannel = match.currentChannel || '';
       sessionChannel = match.sessionChannel || currentChannel;
       joinedChannels = match.joinedChannels || [];
-      if (match.cwd) resolvedCwd = normalizeCwd(match.cwd);
       registered = true;
     }
   }
@@ -152,7 +152,6 @@ function resolveAgentState(
       currentChannel = reg.currentChannel || '';
       sessionChannel = reg.sessionChannel || currentChannel;
       joinedChannels = reg.joinedChannels || [];
-      if (reg.cwd) resolvedCwd = normalizeCwd(reg.cwd);
       registered = true;
     } else {
       // Multiple agents, no caller PID — pick most recently active by mtime
@@ -171,7 +170,6 @@ function resolveAgentState(
           currentChannel = reg.currentChannel || '';
           sessionChannel = reg.sessionChannel || currentChannel;
           joinedChannels = reg.joinedChannels || [];
-          if (reg.cwd) resolvedCwd = normalizeCwd(reg.cwd);
           registered = true;
         }
       }

@@ -100,7 +100,7 @@ export function register(
       }
     }
 
-    const cwd = normalizeCwd(process.cwd());
+    const cwd = normalizeCwd(ctx.cwd ?? process.cwd());
     const gitBranch = getGitBranch(cwd);
     const now = new Date().toISOString();
     const registration: AgentRegistration = {
@@ -368,7 +368,7 @@ export function renameAgent(
   const oldName = state.agentName;
   const oldRegPath = getRegistrationPath(state, dirs);
 
-  const cwd = normalizeCwd(process.cwd());
+  const cwd = normalizeCwd(ctx.cwd ?? process.cwd());
   const gitBranch = getGitBranch(cwd);
   const now = new Date().toISOString();
   const effectivePid = state.callerPid ?? process.pid;

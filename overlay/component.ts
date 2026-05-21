@@ -85,6 +85,7 @@ export class MessengerOverlay implements Component, Focusable {
   } | null = null;
   private discoveredChannelsCache: { channels: string[]; expiresAt: number } | null = null;
   private autoSwitchedToChannel = new Set<string>();
+  private lastRenderedChannel: string | null = null;
 
   constructor(
     private tui: TUI,
@@ -365,6 +366,21 @@ export class MessengerOverlay implements Component, Focusable {
     // Auto-switch to newly discovered channels (e.g. created by subagents).
     // Runs on each render and switches at most once per new channel.
     this.autoSwitchToNewChannel();
+
+    // If the channel changed (e.g. via auto-switch or external state mutation),
+    // reset the feed window so it reloads for the new channel.
+    const currentCh = this.currentChannel();
+    if (this.lastRenderedChannel !== null && this.lastRenderedChannel !== currentCh) {
+      this.feedLineCountCache = null;
+      this.discoveredChannelsCache = null;
+      this.viewState.feedLoadedEvents = [];
+      this.viewState.feedWindowStart = 0;
+      this.viewState.feedWindowEnd = 0;
+      this.viewState.feedTotalLines = 0;
+      this.viewState.feedLineScrollOffset = 0;
+      this.viewState.lastSeenEventTs = null;
+    }
+    this.lastRenderedChannel = currentCh;
 
     const w = this.width;
     const innerW = w - 2;
