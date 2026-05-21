@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.25.9](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.8...v0.25.9) (2026-05-21)
+
+
+### Bug Fixes
+
+* shell interpolation on spawn, per-request project resolution, soft restart ([25d2ace](https://github.com/monotykamary/pi-messenger-swarm/commit/25d2ace083a70a7de3f95dbb3929b12378681efa))
+
 ### [0.25.8](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.7...v0.25.8) (2026-05-21)
 
 
