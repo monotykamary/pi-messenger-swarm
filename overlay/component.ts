@@ -5,6 +5,8 @@
 import type { Component, Focusable, TUI } from '@earendil-works/pi-tui';
 import { truncateToWidth, visibleWidth } from '@earendil-works/pi-tui';
 import type { Theme } from '@earendil-works/pi-coding-agent';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import type { MessengerState, Dirs } from '../lib.js';
 import { displayChannelLabel, listChannels } from '../channel.js';
 import { getEffectiveSessionId } from '../store/shared.js';
@@ -150,8 +152,9 @@ export class MessengerOverlay implements Component, Focusable {
    * - #memory: always visible (cross-session by design)
    * - Channels the main agent has joined: always visible
    * - Session channels from this session: visible
-   * - Named channels from this session: visible + auto-switch eligible
-   * - Named channels from other sessions: visible in cycling (user can browse)
+   * - Named channels from this session: always visible
+   * - Named channels from other sessions: visible only if recently active
+   *   (stale channels from dead sessions are hidden to reduce noise)
    * - Session channels from other sessions: hidden (never relevant)
    */
   private getDiscoveredChannelIds(): string[] {
@@ -161,6 +164,7 @@ export class MessengerOverlay implements Component, Focusable {
     }
     const mySessionId = this.state.contextSessionId ?? '';
     const joinedSet = new Set(this.state.joinedChannels);
+    const staleThresholdMs = 30 * 60 * 1000; // 30 minutes
     const channels = listChannels(this.dirs)
       .filter((c) => {
         // Always show channels the main agent has joined
@@ -171,9 +175,17 @@ export class MessengerOverlay implements Component, Focusable {
         if (c.type === 'session' && c.sessionId !== mySessionId) return false;
         // Session channels from this session: visible
         if (c.type === 'session') return true;
-        // Named channels: visible regardless of session
-        // (users may want to browse other sessions' named channels)
-        if (c.type === 'named') return true;
+        // Named channels from this session: always visible
+        if (c.type === 'named' && c.sessionId === mySessionId) return true;
+        // Named channels from other sessions: only if recently active
+        if (c.type === 'named') {
+          try {
+            const stat = fs.statSync(path.join(this.dirs.base, 'channels', `${c.id}.jsonl`));
+            return now - stat.mtimeMs < staleThresholdMs;
+          } catch {
+            return false;
+          }
+        }
         return false;
       })
       .map((c) => c.id);
