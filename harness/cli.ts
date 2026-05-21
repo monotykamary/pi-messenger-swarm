@@ -207,7 +207,7 @@ async function startServer(): Promise<boolean> {
   const args = useTsx ? ['tsx', serverScript] : [serverScript];
 
   const env: Record<string, string> = {};
-  for (const key of ['PI_MESSENGER_DIR', 'PI_MESSENGER_GLOBAL'] as const) {
+  for (const key of ['PI_MESSENGER_DIR', 'PI_MESSENGER_GLOBAL', 'PI_MESSENGER_CWD'] as const) {
     if (process.env[key]) env[key] = process.env[key]!;
   }
 

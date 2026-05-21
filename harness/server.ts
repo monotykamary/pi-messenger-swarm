@@ -19,7 +19,7 @@
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { homedir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join } from 'node:path';
 import * as fs from 'node:fs';
 import type { MessengerState, Dirs, AgentMailMessage, NameThemeConfig } from '../lib.js';
 import { loadConfig, type MessengerConfig } from '../config.js';
@@ -113,12 +113,9 @@ function resolveAgentState(
   state: MessengerState;
   resolvedCwd: string;
 } {
-  // Default to the project directory derived from PI_MESSENGER_DIR
-  // (set by the extension when spawning the harness). Fall back to
-  // process.cwd() if not available.
-  let resolvedCwd = normalizeCwd(
-    process.env.PI_MESSENGER_DIR ? dirname(process.env.PI_MESSENGER_DIR) : process.cwd()
-  );
+  // Default to the project cwd (set by the extension via PI_MESSENGER_CWD
+  // when spawning the harness). Fall back to process.cwd() if not available.
+  let resolvedCwd = normalizeCwd(process.env.PI_MESSENGER_CWD ?? process.cwd());
   const gitBranch = getGitBranch(resolvedCwd);
 
   let registered = false;

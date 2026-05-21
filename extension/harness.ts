@@ -88,6 +88,7 @@ export function createHarnessServer(messengerDir: string): HarnessServerControll
       // directory as the extension, even though the harness is spawned
       // with cwd: projectRoot (the pi-messenger repo).
       PI_MESSENGER_DIR: messengerDir,
+      PI_MESSENGER_CWD: process.cwd(),
     };
 
     if (process.env.PI_MESSENGER_GLOBAL) {
