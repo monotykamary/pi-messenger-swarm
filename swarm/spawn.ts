@@ -11,12 +11,15 @@ import { formatRoleLabel } from './labels.js';
 import { loadAgentDefinition } from './agent-loader.js';
 import { RpcConnection, type AgentEvent } from './rpc-connection.js';
 
+const AGENT_END_DESPAWN_MS = 10 * 60 * 1000;
+
 interface SpawnRuntime {
   rpc: RpcConnection;
   record: SpawnedAgent;
   startMs: number;
   stopping: boolean;
   persisted?: boolean;
+  idleTimer?: ReturnType<typeof setTimeout>;
 }
 
 const runtimes = new Map<string, SpawnRuntime>();
@@ -315,10 +318,49 @@ function attachRpcHandlers(
   promptTmpDir: string | null,
   sessionId: string
 ) {
+  const runtime = runtimes.get(state.id);
+
+  function clearIdleTimer(): void {
+    if (runtime?.idleTimer) {
+      clearTimeout(runtime.idleTimer);
+      runtime.idleTimer = undefined;
+    }
+  }
+
+  function setAgentEndTimer(): void {
+    clearIdleTimer();
+    if (!runtime) return;
+    runtime.idleTimer = setTimeout(() => {
+      if (runtime.rpc.isAlive) {
+        appendEvent(state.cwd, sessionId, {
+          id: state.id,
+          type: 'failed',
+          timestamp: new Date().toISOString(),
+          agent: {
+            status: 'failed',
+            endedAt: new Date().toISOString(),
+            exitCode: 1,
+            error: `Agent did not exit within ${AGENT_END_DESPAWN_MS / 60000} min after agent_end`,
+          },
+        });
+        runtime.rpc.kill();
+      }
+    }, AGENT_END_DESPAWN_MS);
+  }
+
   // Subscribe to agent events for live progress tracking
   rpc.onEvent((event: AgentEvent) => {
     if (event.type === 'tool_call' || event.type === 'tool_result' || event.type === 'turn_end') {
       updateProgress(state.progress, event, state.startMs);
+    }
+
+    if (event.type === 'agent_end') {
+      // Agent finished its turn; if it doesn't exit naturally within the
+      // grace period, force-kill it to prevent zombies.
+      setAgentEndTimer();
+    } else {
+      // Agent is still working; cancel any pending post-agent_end timer.
+      clearIdleTimer();
     }
 
     updateLiveWorker(state.cwd, state.taskId || spawnLiveKey(state.id), {
@@ -340,6 +382,11 @@ function attachRpcHandlers(
 
     const runtime = runtimes.get(state.id);
     if (!runtime) return;
+
+    if (runtime.idleTimer) {
+      clearTimeout(runtime.idleTimer);
+      runtime.idleTimer = undefined;
+    }
 
     const endedAt = new Date().toISOString();
     let status: SpawnedAgent['status'] = 'completed';
@@ -582,6 +629,11 @@ export function stopSpawn(cwd: string, id: string): boolean {
   if (!runtime) return false;
   if (runtime.record.cwd !== cwd) return false;
   if (!runtime.rpc.isAlive) return false;
+
+  if (runtime.idleTimer) {
+    clearTimeout(runtime.idleTimer);
+    runtime.idleTimer = undefined;
+  }
 
   runtime.stopping = true;
   runtime.rpc.kill();
