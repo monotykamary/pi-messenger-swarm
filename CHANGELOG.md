@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.25.13](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.12...v0.25.13) (2026-05-25)
+
+
+### Bug Fixes
+
+* **swarm:** prevent zombie agents and make output discoverable ([84f5ebe](https://github.com/monotykamary/pi-messenger-swarm/commit/84f5ebeebcdc3b7843fa9f2ae08edac464b9162b))
+
 ### [0.25.12](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.11...v0.25.12) (2026-05-25)
 
 
