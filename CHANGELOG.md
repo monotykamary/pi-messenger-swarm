@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.25.12](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.11...v0.25.12) (2026-05-25)
+
+
+### Bug Fixes
+
+* **swarm:** prevent parent agent from hoarding delegated tasks ([934c44a](https://github.com/monotykamary/pi-messenger-swarm/commit/934c44adfb9c83adc3b574a2aeae8f238246fac7))
+
 ### [0.25.11](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.10...v0.25.11) (2026-05-24)
 
 
