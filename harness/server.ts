@@ -490,6 +490,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
         agents,
         version: SERVER_VERSION,
         cwd: normalizeCwd(process.cwd()),
+        dataDir: startupDirs.base,
         runningSpawns: getRunningSpawnCount(),
       })
     );

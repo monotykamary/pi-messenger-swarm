@@ -38,8 +38,12 @@ import { stopAllSpawned } from './swarm/spawn.js';
 import { createDeliverMessage } from './extension/deliver-message.js';
 import { createStatusController } from './extension/status.js';
 import { createActivityTracker } from './extension/activity.js';
-import { installShellAlias, createHarnessServer } from './extension/harness.js';
+import { installShellAlias, createHarnessServer, resolveCli } from './extension/harness.js';
 import { handleReservationEnforcement } from './extension/reservation.js';
+import { createMentionAutocompleteProvider } from './extension/mention-autocomplete.js';
+import { handleHashInput } from './extension/handle-input.js';
+import { syncDirsFromServer } from './extension/sync-dirs.js';
+import { splitCliArgs } from './harness/commands.js';
 import { handleSessionShutdown } from './extension/shutdown.js';
 
 let overlayTui: TUI | null = null;
@@ -101,7 +105,6 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
     state,
     dirs,
     config,
-    maybeAutoOpenSwarmOverlay,
   });
 
   function syncContextSession(ctx: ExtensionContext): void {
@@ -131,7 +134,6 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
   const STATUS_HEARTBEAT_MS = 15_000;
   let latestCtx: ExtensionContext | null = null;
   let statusHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
-
   function startStatusHeartbeat(): void {
     if (statusHeartbeatTimer) return;
     statusHeartbeatTimer = setInterval(() => {
@@ -301,6 +303,10 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
     latestCtx = ctx;
     startStatusHeartbeat();
     state.isHuman = ctx.hasUI;
+
+    if (ctx.hasUI) {
+      ctx.ui.addAutocompleteProvider(createMentionAutocompleteProvider(state, dirs));
+    }
     try {
       fs.rmSync(join(homedir(), '.pi/agent/messenger/feed.jsonl'), { force: true });
     } catch {}
@@ -338,10 +344,21 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
     // the model needs it for CLI actions regardless.
     if (!process.env.PI_SWARM_SPAWNED) {
       harnessServer.start();
+      // Sync the extension's dirs to the running server's dataDir so that
+      // direct filesystem reads (e.g. # autocomplete candidates) always use
+      // the same registry as the harness server.
+      //
+      // Background: the harness server is a singleton process that may have
+      // been started by a different pi session with a different working
+      // directory or PI_MESSENGER_DIR.  The extension computes its own
+      // dirs at startup from process.cwd(), which may not match the server's
+      // dataDir — causing getActiveAgents() to read an empty (or wrong)
+      // registry and silently return no peers for autocomplete.
+      // Best-effort: errors are absorbed inside syncDirsFromServer.
+      void syncDirsFromServer(dirs);
     }
 
     if (!shouldAutoRegister) {
-      maybeAutoOpenSwarmOverlay(ctx);
       return;
     }
 
@@ -358,13 +375,7 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
         sendRegistrationContext(ctx);
       }
     }
-
-    maybeAutoOpenSwarmOverlay(ctx);
   });
-
-  function maybeAutoOpenSwarmOverlay(_ctx: ExtensionContext): void {
-    // Swarm mode intentionally disables planning/autonomous auto-overlay behavior.
-  }
 
   pi.on('session_start', async (event, ctx) => {
     // Handle new, resume, and fork reasons (existing sessions), not startup/reload
@@ -372,12 +383,10 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
     latestCtx = ctx;
     syncContextSession(ctx);
     updateStatus(ctx);
-    maybeAutoOpenSwarmOverlay(ctx);
   });
   pi.on('session_tree', async (_event, ctx) => {
     latestCtx = ctx;
     updateStatus(ctx);
-    maybeAutoOpenSwarmOverlay(ctx);
   });
 
   pi.on('turn_end', async (event, ctx) => {
@@ -396,8 +405,6 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
         }
       }
     }
-
-    maybeAutoOpenSwarmOverlay(ctx);
   });
 
   pi.on('agent_end', async (_event, ctx) => {
@@ -422,6 +429,57 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
     overlayTui = null;
     await handleSessionShutdown(state, dirs);
     activityTracker.dispose();
+  });
+
+  pi.on('input', async (event, ctx) => {
+    // Skip extension-injected messages to avoid loops
+    if (event.source === 'extension') return { action: 'continue' };
+    const text = event.text.trim();
+    const cwd = ctx.cwd ?? process.cwd();
+    const notify = (msg: string, kind?: 'info' | 'warning' | 'error') =>
+      ctx.ui?.notify(msg, kind ?? 'info');
+
+    // ##cmd [args] — run pi-messenger-swarm directly, never touching the LLM.
+    // ## inherits the # autocomplete trigger so completions pop up automatically.
+    // Output is shown immediately in the session view (display: true, triggerTurn: false)
+    // and is filtered from LLM context by the `context` event handler below.
+    if (text.startsWith('##')) {
+      const rest = text.slice(2).trim();
+      if (rest) {
+        try {
+          const { command, prefixArgs, cliPath, cwd: cliCwd } = resolveCli();
+          // Use schema-aware splitting so multi-word trailing args (e.g. task
+          // summaries, progress messages) are passed as a single token, which
+          // the CLI then receives intact without requiring shell quoting.
+          const cliArgs = splitCliArgs(rest);
+          const result = await pi.exec(command, [...prefixArgs, cliPath, ...cliArgs], {
+            cwd: cliCwd,
+          });
+          const output = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
+          if (output) {
+            await pi.sendMessage(
+              { customType: 'swarm_cmd_result', content: output, display: true },
+              { triggerTurn: false }
+            );
+          }
+        } catch (err) {
+          ctx.ui?.notify(`##${rest}: ${err instanceof Error ? err.message : String(err)}`, 'error');
+        }
+      }
+      return { action: 'handled' };
+    }
+
+    return handleHashInput(text, state, dirs, cwd, notify);
+  });
+
+  // Filter swarm_cmd_result messages from LLM context so that ##cmd output
+  // is shown to the user but never sent to the model.
+  pi.on('context', async (event) => {
+    const filtered = event.messages.filter(
+      (m) => !('customType' in m && m.customType === 'swarm_cmd_result')
+    );
+    if (filtered.length === event.messages.length) return undefined;
+    return { messages: filtered };
   });
 
   pi.on('tool_call', async (event, ctx) => {

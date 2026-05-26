@@ -94,44 +94,45 @@ describe('channel-aware registration', () => {
     expect(listed.success).toBe(true);
   });
 
-  it('creates phrase-based session channels and restores them for the same pi session id', () => {
+  it('creates agent-name-derived session channels and restores them for the same pi session id', () => {
     const cwd = createTempCwd();
     const dirs = createDirs(cwd);
     const ctx = createContext(cwd, 'session-abc');
 
-    const first = createState('Alpha');
+    const first = createState('NiceOwl');
     expect(store.register(first, dirs, ctx)).toBe(true);
     const initialChannel = first.currentChannel;
-    expect(initialChannel).toMatch(/^[a-z0-9]+(?:-[a-z0-9]+)+$/);
+    // Channel should be derived from agent name: NiceOwl → nice-owl
+    expect(initialChannel).toBe('nice-owl');
+    expect(initialChannel).toMatch(/^[a-z0-9][a-z0-9-]*$/);
     expect(initialChannel).not.toBe('memory');
     expect(first.joinedChannels).toContain(initialChannel);
     expect(first.joinedChannels).toContain('memory');
     store.unregister(first, dirs);
 
-    const second = createState('Alpha');
+    const second = createState('NiceOwl');
     expect(store.register(second, dirs, ctx)).toBe(true);
     expect(second.currentChannel).toBe(initialChannel);
     expect(second.sessionChannel).toBe(initialChannel);
   });
 
-  it('avoids collisions when two session channels would get the same phrase', () => {
+  it('avoids collisions when two sessions use the same agent name', () => {
     const cwd = createTempCwd();
     const dirs = createDirs(cwd);
     const ctxA = createContext(cwd, 'session-a');
     const ctxB = createContext(cwd, 'session-b');
 
-    const originalRandom = Math.random;
-    Math.random = () => 0.123456789;
-    try {
-      const first = createState('Alpha');
-      expect(store.register(first, dirs, ctxA)).toBe(true);
-      const second = createState('Beta');
-      expect(store.register(second, dirs, ctxB)).toBe(true);
-      expect(second.currentChannel).not.toBe(first.currentChannel);
-      expect(second.currentChannel.startsWith(first.currentChannel)).toBe(true);
-    } finally {
-      Math.random = originalRandom;
-    }
+    // Both sessions have an agent named 'SwiftRaven' → both want channel 'swift-raven'
+    const first = createState('SwiftRaven');
+    expect(store.register(first, dirs, ctxA)).toBe(true);
+    expect(first.currentChannel).toBe('swift-raven');
+    store.unregister(first, dirs);
+
+    const second = createState('SwiftRaven');
+    expect(store.register(second, dirs, ctxB)).toBe(true);
+    // Second session gets a suffixed channel to avoid collision
+    expect(second.currentChannel).not.toBe(first.currentChannel);
+    expect(second.currentChannel.startsWith('swift-raven')).toBe(true);
   });
 
   it('rebinds stale cached state back to the resumed pi session channel', () => {

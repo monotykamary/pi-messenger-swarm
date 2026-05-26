@@ -337,6 +337,11 @@ export function ensureDefaultNamedChannels(dirs: Dirs, createdBy?: string): Chan
   );
 }
 
+export function agentNameToChannelId(name: string): string {
+  const result = toKebabCase(name);
+  return isValidChannelId(result) ? result : '';
+}
+
 function toKebabCase(value: string): string {
   return value
     .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
@@ -359,8 +364,8 @@ function allocateSessionChannelId(dirs: Dirs, baseId: string): string {
   return `${normalizedBase}-${suffix}`;
 }
 
-export function generateSessionChannelId(): string {
-  const generated = generateMemorableName();
+export function generateSessionChannelId(agentName?: string): string {
+  const generated = agentName ?? generateMemorableName();
   return toKebabCase(generated);
 }
 
@@ -378,7 +383,7 @@ export function createSessionChannel(
   createdBy?: string
 ): ChannelRecord {
   return writeChannel(dirs, {
-    id: allocateSessionChannelId(dirs, generateSessionChannelId()),
+    id: allocateSessionChannelId(dirs, generateSessionChannelId(createdBy)),
     type: 'session',
     createdAt: new Date().toISOString(),
     createdBy,

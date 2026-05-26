@@ -368,6 +368,7 @@ function attachHandlers(
           recentTools: state.progress.recentTools.map((tool) => ({ ...tool })),
         },
         startedAt: state.startMs,
+        pid: proc.pid,
       });
     }
   });
