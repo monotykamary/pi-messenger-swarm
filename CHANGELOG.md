@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.25.20](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.19...v0.25.20) (2026-06-04)
+
+
+### Bug Fixes
+
+* use getAgentDir instead of hardcoded ~/.pi/agent ([45dbc79](https://github.com/monotykamary/pi-messenger-swarm/commit/45dbc79ce7d0a1ae6db176ae9e96aefcc2cc2fab))
+
 ### [0.25.19](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.18...v0.25.19) (2026-05-25)
 
 
