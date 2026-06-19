@@ -131,6 +131,7 @@ If Pi switches or resumes sessions inside the same live messenger instance, mess
 - `task.list`
 - `task.show`
 - `task.ready`
+- `task.stalled`
 - `task.claim` (alias: `task.start`)
 - `task.unclaim` (alias: `task.stop`)
 - `task.progress`
@@ -203,10 +204,23 @@ Overlay includes:
 - DM/current-channel post input
 - channel switching
 
-Message input behavior:
+### Input shortcuts
 
-- `@name <message>` sends a DM
-- plain text posts to the current channel
+| Prefix             | Example                        | Effect                                               |
+| ------------------ | ------------------------------ | ---------------------------------------------------- |
+| _(plain text)_     | `looking at auth flow`         | Post to current channel                              |
+| `#AgentName msg`   | `#alpha are you done?`         | Post to that agent's current channel (DM-equivalent) |
+| `#all msg`         | `#all everyone please sync up` | Broadcast to all active agents simultaneously        |
+| `#channelname msg` | `#memory token refresh fixed`  | Post to any named channel                            |
+| `##cmd [args]`     | `##task list`                  | Run a CLI command directly (no LLM turn)             |
+
+**Autocomplete** fires automatically as you type:
+
+- `#` + Tab → lists active agents (as `#agent-name`), `#all`, and named channels; the current agent's own channel is excluded (no point messaging yourself); also surfaces `##` on a bare `#` so you can discover CLI mode
+- `##` + Tab → lists top-level commands; add a space and Tab again for subcommands
+- Multi-word trailing args (summaries, progress notes) are joined automatically — no quoting needed
+
+> **Agent channel = agent name (kebab-cased).** Every joined agent is reachable via `#<name-kebabcased>`. Agent `CoralFox` → `#coral-fox`; agent `Alpha` → `#alpha`. Tab-autocomplete fills this in for you. The excluded "self" channel is derived from the agent's registered name, not the channel currently active — so `#memory` (or any other named channel the agent has joined) still appears in suggestions.
 
 Planning UI and worker +/- controls were removed in swarm mode.
 

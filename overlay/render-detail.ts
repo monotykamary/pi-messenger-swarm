@@ -223,7 +223,7 @@ export function renderLegend(
     truncateToWidth(
       theme.fg(
         'dim',
-        appendUniversalHints('c/C:Channel  m:Chat  f:Swarm  j/k/gg/G:Feed  e:Expand  Esc:Close')
+        appendUniversalHints('c/C:Channel  m/#:Chat  f:Swarm  j/k/gg/G:Feed  e:Expand  Esc:Close')
       ),
       width
     ),
@@ -439,7 +439,7 @@ function renderBlockReasonBar(input: string): string {
 }
 
 function wrapInputToLines(input: string, width: number, hint: string): string[] {
-  const tabHint = input.startsWith('@') && !input.includes(' ') ? '  [Tab] Complete' : '';
+  const tabHint = input.startsWith('#') && !input.includes(' ') ? '  [Tab] Complete' : '';
   const suffix = `  [Enter] Send${tabHint}  [Esc] Cancel`;
   const prefix = `${hint}: `;
   const cursor = '█';
@@ -476,7 +476,7 @@ function wrapInputToLines(input: string, width: number, hint: string): string[] 
 }
 
 function renderMessageBar(input: string, width: number): string[] {
-  const isAt = input.startsWith('@');
-  const hint = isAt ? 'DM' : 'channel';
+  const isHash = input.startsWith('#');
+  const hint = isHash ? 'channel' : 'channel';
   return wrapInputToLines(input, width, hint);
 }
