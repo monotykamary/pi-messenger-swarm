@@ -91,5 +91,6 @@
   },
   "overrides": {
     "brace-expansion": "5.0.6"
-  }
+  },
+  "packageManager": "pnpm@11.6.0"
 }
