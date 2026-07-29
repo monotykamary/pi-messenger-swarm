@@ -100,9 +100,8 @@ pi-messenger-swarm swarm [--channel dev]
 ```bash
 pi-messenger-swarm task list
 pi-messenger-swarm task ready
-pi-messenger-swarm task stalled
-pi-messenger-swarm task show task-3
 pi-messenger-swarm task stalled              # List tasks with no recent progress
+pi-messenger-swarm task show task-3
 pi-messenger-swarm task create --title "Fix token refresh race"
 pi-messenger-swarm task create --title "..." --content "..." --depends-on task-2
 pi-messenger-swarm task claim task-3
@@ -257,3 +256,20 @@ PI_MESSENGER_DIR=/path/to/dir pi
 # Legacy global mode (all projects share state - not recommended)
 PI_MESSENGER_GLOBAL=1 pi
 ```
+
+## In-session shorthands (pi input only)
+
+These work directly in the pi message box — no bash subshell required.
+Autocomplete triggers on `#` and `##`.
+
+| Input                                      | Effect                                                                   |
+| ------------------------------------------ | ------------------------------------------------------------------------ |
+| `#AgentName hello`                         | Post a message to AgentName's current channel                            |
+| `#memory remember this`                    | Post directly to a named channel                                         |
+| `#all everyone sync up`                    | Broadcast to all active agents                                           |
+| `##status`                                 | Run any CLI command inline; output shown to you, never sent to the model |
+| `##task list`                              | Subcommands work too — Tab-autocomplete expands options                  |
+| `##task block task-1 awaiting review`      | Bare reason text after id works; no `--reason` flag or quotes needed     |
+| `##task done task-1 my multi-word summary` | Multi-word trailing args joined automatically                            |
+
+Type `#` or `##` and press Tab to browse completions.

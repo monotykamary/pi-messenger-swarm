@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { matchesKey, type TUI } from '@earendil-works/pi-tui';
 import type { AgentMailMessage, Dirs, MessengerState } from '../lib.js';
-import { MAX_CHAT_HISTORY } from '../lib.js';
-import { getActiveAgents, resolveTargetChannel } from '../store.js';
+import { MAX_CHAT_HISTORY, isProcessAlive } from '../lib.js';
+import { getActiveAgents } from '../store.js';
+import { agentNameToChannelId } from '../channel.js';
 import { logFeedEvent, type FeedEvent } from '../feed/index.js';
 import * as taskStore from '../swarm/task-store.js';
 import { executeTaskAction as runTaskAction } from '../swarm/task-actions.js';
@@ -277,52 +278,77 @@ function resetMessageInput(viewState: MessengerViewState): void {
   viewState.mentionIndex = -1;
 }
 
-function collectMentionCandidates(
+export function collectChannelCandidates(
   prefix: string,
   state: MessengerState,
   dirs: Dirs,
   cwd: string
 ): string[] {
   const seen = new Set<string>();
-  const names: string[] = [];
+  const channels: string[] = [];
 
-  for (const agent of getActiveAgents(state, dirs)) {
+  // Compute the current agent's channelId so we can exclude it from
+  // autocomplete in both the agents and live-workers loops. We use the
+  // channelId form (e.g. "iron-eagle") rather than the raw name because
+  // that is what gets pushed into the candidates list, and because the
+  // name-equality check can silently miss if agentName isn't set yet.
+  const myChannelId = state.agentName
+    ? agentNameToChannelId(state.agentName) || state.agentName.toLowerCase()
+    : null;
+
+  // For autocomplete discovery, show ALL live agents regardless of project folder.
+  // scopeToFolder is for task/feed isolation, not peer discovery — cross-project
+  // agents should be visible so users can send messages to them via #agentName.
+  const discoveryState = state.scopeToFolder ? { ...state, scopeToFolder: false } : state;
+
+  // gc:false — autocomplete reads should not delete registry files for dead peers.
+  // A peer whose process just died should remain discoverable until the harness
+  // cleans up its own lifecycle; doing GC here would race with the harness.
+  for (const agent of getActiveAgents(discoveryState, dirs, { gc: false })) {
     if (agent.name === state.agentName) continue;
-    if (!seen.has(agent.name)) {
-      seen.add(agent.name);
-      names.push(agent.name);
+    const channelId = agentNameToChannelId(agent.name) || agent.name.toLowerCase();
+    if (myChannelId && channelId === myChannelId) continue;
+    if (!seen.has(channelId)) {
+      seen.add(channelId);
+      channels.push(channelId);
     }
   }
 
   for (const worker of getLiveWorkers(cwd).values()) {
-    if (!seen.has(worker.name)) {
-      seen.add(worker.name);
-      names.push(worker.name);
+    // Skip workers whose process has died without calling removeLiveWorker
+    // (e.g. crash before cleanup). Workers with no pid are legacy entries —
+    // treat them as alive for backward compatibility.
+    if (worker.pid !== undefined && !isProcessAlive(worker.pid)) continue;
+    const channelId = agentNameToChannelId(worker.name) || worker.name.toLowerCase();
+    // Exclude the current session — it makes no sense to send a message to yourself.
+    if (myChannelId && channelId === myChannelId) continue;
+    if (!seen.has(channelId)) {
+      seen.add(channelId);
+      channels.push(channelId);
     }
   }
 
-  names.push('all');
+  channels.push('all');
 
-  if (!prefix) return names;
+  if (!prefix) return channels;
   const lower = prefix.toLowerCase();
-  return names.filter((n) => n.toLowerCase().startsWith(lower));
+  return channels.filter((ch) => ch.toLowerCase().startsWith(lower));
 }
 
-function sendDirectMessage(
+function sendToChannel(
   state: MessengerState,
-  dirs: Dirs,
+  _dirs: Dirs,
   cwd: string,
-  target: string,
+  channelId: string,
   text: string,
   tui: TUI,
   viewState: MessengerViewState
 ): void {
   try {
-    const targetChannel = resolveTargetChannel(dirs, target) ?? state.currentChannel;
-    // Log to feed as @mention - all messaging is now feed-based
-    logFeedEvent(cwd, state.agentName, 'message', target, previewText(text), targetChannel);
+    // Log to feed in the target channel - all messaging is feed-based
+    logFeedEvent(cwd, state.agentName, 'message', undefined, previewText(text), channelId);
     resetMessageInput(viewState);
-    setNotification(viewState, tui, true, `Posted to ${targetChannel}`);
+    setNotification(viewState, tui, true, `Posted to #${channelId}`);
     tui.requestRender();
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'unknown error';
@@ -367,13 +393,13 @@ export function handleMessageInput(
   if (matchesKey(data, 'tab') || matchesKey(data, 'shift+tab')) {
     const input = viewState.messageInput;
     const cycling = viewState.mentionIndex >= 0 && viewState.mentionCandidates.length > 0;
-    if (!input.startsWith('@') || (input.includes(' ') && !cycling)) return;
+    if (!input.startsWith('#') || (input.includes(' ') && !cycling)) return;
 
     const reverse = matchesKey(data, 'shift+tab');
 
     if (!cycling) {
       const prefix = input.slice(1);
-      viewState.mentionCandidates = collectMentionCandidates(prefix, state, dirs, cwd);
+      viewState.mentionCandidates = collectChannelCandidates(prefix, state, dirs, cwd);
       if (viewState.mentionCandidates.length === 0) return;
       viewState.mentionIndex = 0;
     } else {
@@ -383,7 +409,7 @@ export function handleMessageInput(
         viewState.mentionCandidates.length;
     }
 
-    viewState.messageInput = `@${viewState.mentionCandidates[viewState.mentionIndex]} `;
+    viewState.messageInput = `#${viewState.mentionCandidates[viewState.mentionIndex]} `;
     tui.requestRender();
     return;
   }
@@ -392,40 +418,40 @@ export function handleMessageInput(
     const raw = viewState.messageInput.trim();
     if (!raw) return;
 
-    if (raw.startsWith('@all ')) {
+    if (raw.startsWith('#all ')) {
       const text = raw.slice(5).trim();
       if (!text) return;
       sendChannelPost(state, dirs, cwd, text, tui, viewState);
       return;
     }
 
-    if (raw.startsWith('@')) {
+    if (raw.startsWith('#')) {
       const firstSpace = raw.indexOf(' ');
       if (firstSpace <= 1) {
         setNotification(
           viewState,
           tui,
           false,
-          'Use @name <message> or type to post to the current channel'
+          'Use #channel <message> or type to post to the current channel'
         );
         tui.requestRender();
         return;
       }
 
-      const target = raw.slice(1, firstSpace).trim();
+      const channelId = raw.slice(1, firstSpace).trim();
       const text = raw.slice(firstSpace + 1).trim();
-      if (!target || !text) {
+      if (!channelId || !text) {
         setNotification(
           viewState,
           tui,
           false,
-          'Use @name <message> or type to post to the current channel'
+          'Use #channel <message> or type to post to the current channel'
         );
         tui.requestRender();
         return;
       }
 
-      sendDirectMessage(state, dirs, cwd, target, text, tui, viewState);
+      sendToChannel(state, dirs, cwd, channelId, text, tui, viewState);
       return;
     }
 

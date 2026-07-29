@@ -151,9 +151,9 @@ export function handleOverlayInput({
     return;
   }
 
-  if (data === '@' || matchesKey(data, 'm')) {
+  if (data === '#' || matchesKey(data, 'm')) {
     viewState.inputMode = 'message';
-    viewState.messageInput = data === '@' ? '@' : '';
+    viewState.messageInput = data === '#' ? '#' : '';
     tui.requestRender();
     return;
   }

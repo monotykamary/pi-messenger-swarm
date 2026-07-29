@@ -112,7 +112,12 @@ export function getAgentsInChannel(
   return getActiveAgents(state, dirs).filter((agent) => agentJoinedChannel(agent, normalized));
 }
 
-export function getActiveAgents(state: MessengerState, dirs: Dirs): AgentRegistration[] {
+export function getActiveAgents(
+  state: MessengerState,
+  dirs: Dirs,
+  options?: { gc?: boolean }
+): AgentRegistration[] {
+  const skipGc = options?.gc === false;
   const now = Date.now();
   const excludeName = state.agentName;
   const myCwd = normalizeCwd(process.cwd());
@@ -158,12 +163,14 @@ export function getActiveAgents(state: MessengerState, dirs: Dirs): AgentRegistr
       const reg = applyRegistrationDefaults(JSON.parse(content) as AgentRegistration);
 
       if (!isProcessAlive(reg.pid)) {
-        try {
-          fs.unlinkSync(join(dirs.registry, file));
-        } catch {
-          // Ignore cleanup errors
+        if (!skipGc) {
+          try {
+            fs.unlinkSync(join(dirs.registry, file));
+          } catch {
+            // Ignore cleanup errors
+          }
         }
-        continue;
+        if (!skipGc) continue;
       }
 
       reg.cwd = normalizeCwd(reg.cwd);

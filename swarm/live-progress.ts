@@ -1,4 +1,4 @@
-import type { AgentProgress } from "./progress.js";
+import type { AgentProgress } from './progress.js';
 
 export interface LiveWorkerInfo {
   cwd: string;
@@ -7,6 +7,8 @@ export interface LiveWorkerInfo {
   name: string;
   progress: AgentProgress;
   startedAt: number;
+  /** OS pid of the spawned process. Used to detect stale entries after crashes. */
+  pid?: number;
 }
 
 const liveWorkers = new Map<string, LiveWorkerInfo>();
@@ -39,7 +41,7 @@ function progressEqual(a: AgentProgress, b: AgentProgress): boolean {
 // Check if worker info has meaningfully changed
 function workerInfoChanged(
   existing: LiveWorkerInfo | undefined,
-  newInfo: Omit<LiveWorkerInfo, "cwd">
+  newInfo: Omit<LiveWorkerInfo, 'cwd'>
 ): boolean {
   if (!existing) return true;
   if (existing.name !== newInfo.name) return true;
@@ -48,7 +50,11 @@ function workerInfoChanged(
   return false;
 }
 
-export function updateLiveWorker(cwd: string, taskId: string, info: Omit<LiveWorkerInfo, "cwd">): void {
+export function updateLiveWorker(
+  cwd: string,
+  taskId: string,
+  info: Omit<LiveWorkerInfo, 'cwd'>
+): void {
   const key = getWorkerKey(cwd, taskId);
   const existing = liveWorkers.get(key);
 
