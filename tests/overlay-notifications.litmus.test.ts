@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeCompletionState, getSignificantEventMessage } from '../overlay/notifications.js';
-import type { FeedEvent } from '../feed.js';
+import type { FeedEvent } from '../feed/index.js';
 
 describe('overlay notifications litmus', () => {
   it('collapses repeated significant events into a concise summary', () => {

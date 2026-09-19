@@ -1,8 +1,9 @@
 import { formatDuration, type MessengerState } from '../lib.js';
-import { readFeedEvents, type FeedEvent } from '../feed.js';
-import * as swarmStore from '../swarm/store.js';
+import { readFeedEvents, type FeedEvent } from '../feed/index.js';
+import * as taskStore from '../swarm/task-store.js';
 import type { SwarmTask as Task } from '../swarm/types.js';
 import { getLiveWorkers } from '../swarm/live-progress.js';
+import { getEffectiveSessionId } from '../store/shared.js';
 
 function snapshotIdleLabel(state: MessengerState): string {
   const last = state.activity.lastActivityAt || state.sessionStartedAt;
@@ -55,7 +56,8 @@ export function generateSwarmSnapshot(
   channelId: string,
   state: MessengerState
 ): string {
-  const tasks = swarmStore.getTasks(cwd, channelId);
+  const sessionId = getEffectiveSessionId(cwd, state);
+  const tasks = taskStore.getTasks(cwd, sessionId);
   const liveWorkers = getLiveWorkers(cwd);
 
   if (tasks.length === 0) {
@@ -64,11 +66,11 @@ export function generateSwarmSnapshot(
       '',
       `Agents: You (${snapshotIdleLabel(state)})`,
       '',
-      'Create task: pi_messenger({ action: "task.create", title: "..." })',
+      'Create task: pi-messenger-swarm task create --title "..."',
     ].join('\n');
   }
 
-  const readyTasks = swarmStore.getReadyTasks(cwd, channelId);
+  const readyTasks = taskStore.getReadyTasks(cwd, sessionId);
   const readyIds = new Set(readyTasks.map((task) => task.id));
   const liveTaskIds = new Set(Array.from(liveWorkers.keys()));
   const activeLines = Array.from(liveWorkers.values()).map((worker) => {

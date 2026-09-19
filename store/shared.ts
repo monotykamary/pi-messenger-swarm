@@ -1,11 +1,10 @@
 import * as fs from 'node:fs';
 import { execSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
-import type { ExtensionContext } from '@mariozechner/pi-coding-agent';
+import type { ExtensionContext } from '@earendil-works/pi-coding-agent';
 import type { AgentRegistration, Dirs, MessengerState } from '../lib.js';
 import { isProcessAlive } from '../lib.js';
 import {
-  HEARTBEAT_CHANNEL_ID,
   MEMORY_CHANNEL_ID,
   ensureDefaultNamedChannels,
   ensureExistingOrCreateChannel,
@@ -64,7 +63,6 @@ export function normalizeJoinedChannels(
   if (sessionChannel) set.add(normalizeChannelId(sessionChannel));
   if (currentChannel) set.add(normalizeChannelId(currentChannel));
   set.add(MEMORY_CHANNEL_ID);
-  set.add(HEARTBEAT_CHANNEL_ID);
   return Array.from(set);
 }
 
@@ -88,10 +86,51 @@ export function getContextSessionId(ctx: ExtensionContext): string {
   }
 }
 
+/**
+ * Read a channel's sessionId from the project-scoped location.
+ * Returns null if channel doesn't exist or has no sessionId.
+ */
+export function getProjectChannelSessionId(cwd: string, channelId: string): string | null {
+  const normalized = normalizeChannelId(channelId);
+  const channelPath = join(cwd, '.pi', 'messenger', 'channels', `${normalized}.jsonl`);
+  try {
+    if (!fs.existsSync(channelPath)) return null;
+    const content = fs.readFileSync(channelPath, 'utf-8');
+    const lines = content.split('\n');
+    if (lines.length === 0) return null;
+    const header = JSON.parse(lines[0]) as { _meta?: boolean; sessionId?: string };
+    if (header._meta && header.sessionId) {
+      return header.sessionId;
+    }
+  } catch {
+    // Fall through
+  }
+  return null;
+}
+
+/**
+ * Get the effective session ID for swarm operations.
+ * Uses the current channel's stored sessionId if available,
+ * otherwise falls back to the current pi context session.
+ * This ensures all operations in a channel use consistent storage,
+ * regardless of which pi process (parent or subagent) performs them.
+ */
+export function getEffectiveSessionId(cwd: string, state: MessengerState): string {
+  const currentChannel = state.currentChannel ?? state.sessionChannel;
+  if (currentChannel) {
+    const channelSessionId = getProjectChannelSessionId(cwd, currentChannel);
+    if (channelSessionId) {
+      return channelSessionId;
+    }
+  }
+  return state.contextSessionId ?? '';
+}
+
 export function ensureStateChannels(
   state: MessengerState,
   dirs: Dirs,
-  ctx: ExtensionContext
+  ctx: ExtensionContext,
+  options?: { preserveNamedChannel?: boolean }
 ): void {
   ensureDefaultNamedChannels(dirs, state.agentName || undefined);
 
@@ -124,10 +163,26 @@ export function ensureStateChannels(
   state.sessionChannel = normalizeChannelId(sessionChannel);
 
   if (resetToSessionChannel) {
-    state.currentChannel = state.sessionChannel;
+    // When registering for the first time, preserve a valid named channel
+    // the agent may have joined via CLI so the overlay opens on the right
+    // channel. Skip this during session rebinding where we always want the
+    // session channel. We check the actual channel record type on disk
+    // rather than the ID pattern, because session channels use phrase IDs
+    // that do not start with 'session-'.
+    if (options?.preserveNamedChannel) {
+      const current = state.currentChannel?.trim();
+      const record = current ? getChannel(dirs, normalizeChannelId(current)) : null;
+      const isValidNamed = record?.type === 'named';
+      if (!isValidNamed) {
+        state.currentChannel = state.sessionChannel;
+      }
+    } else {
+      state.currentChannel = state.sessionChannel;
+    }
+
     state.joinedChannels = normalizeJoinedChannels(
       keepNamedChannels(dirs, state.joinedChannels),
-      state.sessionChannel,
+      state.currentChannel,
       state.sessionChannel
     );
     return;
@@ -182,77 +237,4 @@ export function updateChannelsInRegistration(
       state.sessionChannel
     ),
   };
-}
-
-const LOCK_STALE_MS = 10000;
-
-export async function withSwarmLock<T>(baseDir: string, fn: () => T): Promise<T> {
-  const lockPath = join(baseDir, 'swarm.lock');
-  const maxRetries = 50;
-  const retryDelay = 100;
-
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      const stat = fs.statSync(lockPath);
-      const ageMs = Date.now() - stat.mtimeMs;
-      if (ageMs > LOCK_STALE_MS) {
-        try {
-          const pid = parseInt(fs.readFileSync(lockPath, 'utf-8').trim(), 10);
-          if (!pid || !isProcessAlive(pid)) {
-            fs.unlinkSync(lockPath);
-          }
-        } catch {
-          try {
-            fs.unlinkSync(lockPath);
-          } catch {
-            // Ignore
-          }
-        }
-      }
-    } catch {
-      // Lock doesn't exist
-    }
-
-    try {
-      const fd = fs.openSync(
-        lockPath,
-        fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_RDWR
-      );
-      fs.writeSync(fd, String(process.pid));
-      fs.closeSync(fd);
-      break;
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code === 'EEXIST') {
-        if (i === maxRetries - 1) {
-          throw new Error('Failed to acquire swarm lock');
-        }
-        await new Promise((resolve) => setTimeout(resolve, retryDelay));
-        continue;
-      }
-      throw err;
-    }
-  }
-
-  try {
-    return fn();
-  } finally {
-    try {
-      fs.unlinkSync(lockPath);
-    } catch {
-      // Ignore
-    }
-  }
-}
-
-export function getMyInboxRoot(state: MessengerState, dirs: Dirs): string {
-  return join(dirs.inbox, state.agentName);
-}
-
-export function getMyInbox(
-  state: MessengerState,
-  dirs: Dirs,
-  channelId: string = state.currentChannel
-): string {
-  return join(getMyInboxRoot(state, dirs), normalizeChannelId(channelId));
 }

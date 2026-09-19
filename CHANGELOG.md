@@ -2,11 +2,476 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
-### [0.17.10](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.17.9...v0.17.10) (2026-03-31)
+### [0.25.20](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.19...v0.25.20) (2026-06-04)
+
+
+### Bug Fixes
+
+* use getAgentDir instead of hardcoded ~/.pi/agent ([45dbc79](https://github.com/monotykamary/pi-messenger-swarm/commit/45dbc79ce7d0a1ae6db176ae9e96aefcc2cc2fab))
+
+### [0.25.19](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.18...v0.25.19) (2026-05-25)
+
 
 ### Features
 
-- **overlay:** add 'q' keybinding to close messenger ([0355b8d](https://github.com/monotykamary/pi-messenger-swarm/commit/0355b8d230efb81db9f5140cfdd1f3fcecfd1767))
+* **swarm:** add task stalled query for stalled task visibility ([3f96e8c](https://github.com/monotykamary/pi-messenger-swarm/commit/3f96e8cf96956c42a843c6de58bf34a9f50dbbcc))
+* **swarm:** inherit non-extension skills in spawned agents ([945642b](https://github.com/monotykamary/pi-messenger-swarm/commit/945642bfcded2601783e1a1ce235abecb12ce597))
+
+### [0.25.18](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.17...v0.25.18) (2026-05-25)
+
+
+### Features
+
+* hide stale named channels (>30min) from overlay and CLI default view ([1572fc8](https://github.com/monotykamary/pi-messenger-swarm/commit/1572fc83a4792112ef9e28f91cf717fdbf768de5))
+
+### [0.25.17](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.16...v0.25.17) (2026-05-25)
+
+
+### Bug Fixes
+
+* preserve coordinator channel context across harness restarts ([7763df3](https://github.com/monotykamary/pi-messenger-swarm/commit/7763df3cf566cc2f133a18e634f54003ad3c64c4))
+* preserve spawned agents across harness server restarts ([7b6015a](https://github.com/monotykamary/pi-messenger-swarm/commit/7b6015aba27d6b0b7b8978a7c3c88c1c26510cc2))
+
+### [0.25.16](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.15...v0.25.16) (2026-05-25)
+
+
+### Features
+
+* add server version to health endpoint and CLI version mismatch warning ([a43482f](https://github.com/monotykamary/pi-messenger-swarm/commit/a43482f1ad69d5e5716867f2dc0dd3041fea8274))
+
+
+### Bug Fixes
+
+* auto-restart harness server on version mismatch ([dfb593a](https://github.com/monotykamary/pi-messenger-swarm/commit/dfb593a44ab5364a33e7c61d88a7253bcfb10868))
+
+### [0.25.15](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.14...v0.25.15) (2026-05-25)
+
+
+### Features
+
+* **swarm:** kill idle subagents 10 min after agent_end ([19ba26a](https://github.com/monotykamary/pi-messenger-swarm/commit/19ba26a3e0fa6e0fa5da7da79c801e7fc463109a))
+* **swarm:** revert RPC to JSON, fix identity model and channel discovery ([50330d5](https://github.com/monotykamary/pi-messenger-swarm/commit/50330d5329fcb375751d935101be555782aacc70))
+
+
+### Bug Fixes
+
+* hide other sessions' channels from overlay by default ([0bcd9e2](https://github.com/monotykamary/pi-messenger-swarm/commit/0bcd9e2a611c9a416343d44ad06f850b7317d069))
+* isolate channels per pi session and prevent PI_MESSENGER_CHANNEL leaks ([83bb951](https://github.com/monotykamary/pi-messenger-swarm/commit/83bb951277c15669d01a0bfd82238592ebf2b581))
+* prevent PI_MESSENGER_CHANNEL from polluting harness server env ([2c2b925](https://github.com/monotykamary/pi-messenger-swarm/commit/2c2b925c7bbaad54d21b57b2c056d95100cf4648))
+* prevent subagent session-id overwrite and misattribution ([5754869](https://github.com/monotykamary/pi-messenger-swarm/commit/57548696fa56969fe0209796bb1245356910d03e))
+* resolve project root so harness always uses the same .pi/messenger/ ([31ddeb4](https://github.com/monotykamary/pi-messenger-swarm/commit/31ddeb4c3db95b22d4711bde17b93a0ab10c4ee7))
+* subagent channel inheritance and identity isolation ([e571d2a](https://github.com/monotykamary/pi-messenger-swarm/commit/e571d2ad738024cb7c634a2250301d1e1a7e4fe9))
+* **swarm:** prevent unbound spawns and preserve CLI-joined named channels in overlay ([87b0347](https://github.com/monotykamary/pi-messenger-swarm/commit/87b03477c23ed79f7c2238f22b03e80fa49b4d73))
+* sync channel from disk before opening overlay ([7a2d60e](https://github.com/monotykamary/pi-messenger-swarm/commit/7a2d60e428030ade30c157f59ee1df6c6f0935fa))
+* sync channel state from disk so CLI changes appear in overlay and status bar ([b590770](https://github.com/monotykamary/pi-messenger-swarm/commit/b5907708ba24bfa7d4532f7e47ad98a2f2ee19ad))
+
+### [0.25.14](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.13...v0.25.14) (2026-05-25)
+
+### [0.25.13](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.12...v0.25.13) (2026-05-25)
+
+
+### Bug Fixes
+
+* **swarm:** prevent zombie agents and make output discoverable ([84f5ebe](https://github.com/monotykamary/pi-messenger-swarm/commit/84f5ebeebcdc3b7843fa9f2ae08edac464b9162b))
+
+### [0.25.12](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.11...v0.25.12) (2026-05-25)
+
+
+### Bug Fixes
+
+* **swarm:** prevent parent agent from hoarding delegated tasks ([934c44a](https://github.com/monotykamary/pi-messenger-swarm/commit/934c44adfb9c83adc3b574a2aeae8f238246fac7))
+
+### [0.25.11](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.10...v0.25.11) (2026-05-24)
+
+
+### Bug Fixes
+
+* resolve source-load fallback errors and prefer compiled CLI ([66c1f49](https://github.com/monotykamary/pi-messenger-swarm/commit/66c1f491b8aaa7642a569db6b9591335a8dc323a))
+
+### [0.25.10](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.9...v0.25.10) (2026-05-24)
+
+
+### Features
+
+* **overlay:** reduce overlay height by 2 rows ([518c1e3](https://github.com/monotykamary/pi-messenger-swarm/commit/518c1e3aada4950e0c171b5e754598c00e8fe769))
+
+### [0.25.9](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.8...v0.25.9) (2026-05-21)
+
+
+### Bug Fixes
+
+* shell interpolation on spawn, per-request project resolution, soft restart ([25d2ace](https://github.com/monotykamary/pi-messenger-swarm/commit/25d2ace083a70a7de3f95dbb3929b12378681efa))
+
+### [0.25.8](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.7...v0.25.8) (2026-05-21)
+
+
+### Features
+
+* **overlay:** discover subagent-created channels in channel cycling ([0c1c4b2](https://github.com/monotykamary/pi-messenger-swarm/commit/0c1c4b2e0570cbe96be7e8812719400f6946dea4))
+* **overlay:** session-aware channel discovery ([f0b65ec](https://github.com/monotykamary/pi-messenger-swarm/commit/f0b65ec48dcfb1a486b2c3c1f05d40725856a39f))
+* **swarm:** spawn subagents in RPC mode with push message delivery ([5de9d97](https://github.com/monotykamary/pi-messenger-swarm/commit/5de9d97e1a8a5e578f5dd36d55e57badfb64e76d))
+
+
+### Bug Fixes
+
+* **harness,overlay:** resolve cwd from PI_MESSENGER_DIR, reset feed on channel switch ([6d30b8f](https://github.com/monotykamary/pi-messenger-swarm/commit/6d30b8faf4a841e2d379c8ab3db9ae8d28d21fa7))
+* **harness:** pass project cwd explicitly as PI_MESSENGER_CWD ([4c2388b](https://github.com/monotykamary/pi-messenger-swarm/commit/4c2388bd38fd7ca2196993b3be34445ac262eb78))
+* **harness:** resolve cwd from registration, not process.cwd() ([68354e3](https://github.com/monotykamary/pi-messenger-swarm/commit/68354e3539b8d4af130e677107dcf44afb3cb591))
+* **overlay:** auto-switch to subagent channels and align harness dirs ([cf065b7](https://github.com/monotykamary/pi-messenger-swarm/commit/cf065b7c546c2924a9d67445c4ae3571a63a633f))
+* **overlay:** filter discovered channels to active only ([13698e6](https://github.com/monotykamary/pi-messenger-swarm/commit/13698e68a48aa80addf0d4a28f147857b14d3e40))
+* **overlay:** hide stale named channels from other sessions ([91f4907](https://github.com/monotykamary/pi-messenger-swarm/commit/91f4907faead30a28a9fd733a622c8e1d8398f7a))
+* **swarm:** cascade shutdown from main agent to spawned RPC subagents ([504dbb7](https://github.com/monotykamary/pi-messenger-swarm/commit/504dbb733d8454b428ed76b281f8489e00beb6d1))
+
+### [0.25.7](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.6...v0.25.7) (2026-05-21)
+
+
+### Features
+
+* **swarm:** detect dead subagents and enforce concurrency limits ([b9e2d01](https://github.com/monotykamary/pi-messenger-swarm/commit/b9e2d01c4f01e359a8026fdd9c317c48a6dbb9a0))
+* **swarm:** instruct subagents to poll channel feed for messages ([bc29516](https://github.com/monotykamary/pi-messenger-swarm/commit/bc29516502b6232567340883ab830d08876183bd))
+
+### [0.25.6](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.5...v0.25.6) (2026-05-21)
+
+
+### Features
+
+* add channels command and fix spawn channel inheritance ([df49599](https://github.com/monotykamary/pi-messenger-swarm/commit/df49599d7a970d3e5b7ffbe82dd6ff27cea796e0))
+
+### [0.25.5](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.4...v0.25.5) (2026-05-20)
+
+
+### Bug Fixes
+
+* **deps:** migrate pi-coding-agent namespace from [@mariozechner](https://github.com/mariozechner) to [@earendil-works](https://github.com/earendil-works) ([28963eb](https://github.com/monotykamary/pi-messenger-swarm/commit/28963ebae2dae4b54e88bc3fe58b725a5292e749))
+* **deps:** supply-chain hardening ([a7fd772](https://github.com/monotykamary/pi-messenger-swarm/commit/a7fd77226457255c46e3d311c711be90e24272b0))
+* **deps:** sync package-lock.json with [@earendil-works](https://github.com/earendil-works) namespace ([0991cc4](https://github.com/monotykamary/pi-messenger-swarm/commit/0991cc4c56b8eb8faf2616ea7a9e7936dc227040))
+* sync package-lock.json with package.json ([8f8f7bd](https://github.com/monotykamary/pi-messenger-swarm/commit/8f8f7bda284963267e1ad30d184a6be816ba1734))
+
+### [0.25.4](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.3...v0.25.4) (2026-04-26)
+
+
+### Bug Fixes
+
+* shell alias uses npx tsx for CLI instead of nonexistent cli.js ([27b20ee](https://github.com/monotykamary/pi-messenger-swarm/commit/27b20ee9b01897a1c3971c3055d2769db4794f53))
+
+### [0.25.3](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.2...v0.25.3) (2026-04-25)
+
+### [0.25.2](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.1...v0.25.2) (2026-04-25)
+
+
+### Bug Fixes
+
+* **spawn:** always append swarm operating protocol to agent system prompt ([82e0630](https://github.com/monotykamary/pi-messenger-swarm/commit/82e0630de523acc1e8794fbfe6475be509b23e61))
+
+### [0.25.1](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.0...v0.25.1) (2026-04-25)
+
+
+### Features
+
+* **spawn:** add --agent-file, --objective, --context CLI flags ([6c577d7](https://github.com/monotykamary/pi-messenger-swarm/commit/6c577d77a387398f8ff794c6edffccb220dcec46))
+
+## [0.25.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.24.2...v0.25.0) (2026-04-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* The pi_messenger tool has been removed. All actions
+are now dispatched through the pi-messenger-swarm CLI, which
+auto-spawns a long-lived HTTP harness server on first use. Models
+call pi-messenger-swarm join, pi-messenger-swarm task claim task-1,
+etc. instead of a tool invocation.
+
+Migration:
+- pi_messenger({ action: 'join' }) → pi-messenger-swarm join
+- pi_messenger({ action: 'task.claim', id: 'task-1' })
+  → pi-messenger-swarm task claim task-1
+- pi_messenger({ action: 'send', to: '#memory', message: '...' })
+  → pi-messenger-swarm send #memory '...'
+- JSON passthrough still works:
+  pi-messenger-swarm '{ "action": "join" }'
+
+New architecture:
+- harness/server.ts: long-lived Node.js HTTP server with
+  /action, /health, /quit endpoints
+- harness/cli.ts: natural subcommand CLI with auto-spawn,
+  process-tree identity resolution
+- index.ts: tool registration removed, extension manages
+  lifecycle/overlay only
+- Agent identity resolved via process tree (x-caller-pid
+  header) + disk-based registration lookup
+- Session ID bridged via .pi/messenger/session-id file
+  (extension writes at session_start, CLI forwards as
+  x-session-id header)
+- Shell wrapper at ~/.pi/agent/bin/pi-messenger-swarm
+  instead of symlink
+
+Fixes:
+- Tasks invisible in overlay: harness used empty sessionId
+  while extension used pi's real UUIDv7 session ID
+- Registration/channel sessionId patched on subsequent
+  requests when session-id file becomes available (race
+  condition guard)
+- renameAgent() used process.pid instead of callerPid in
+  harness context
+- Swarm operating protocol in subagent prompts updated from
+  JSON to CLI syntax
+- All hint strings across handlers, overlay, deliver-message
+  updated to CLI syntax
+- README.md and SKILL.md updated from pi_messenger() to CLI
+  examples
+- coverage/ added to .gitignore
+- knip.json updated with harness entry points
+
+### Features
+
+* replace tool-hoisting with CLI + harness server architecture ([8bf9259](https://github.com/monotykamary/pi-messenger-swarm/commit/8bf9259f1d6c60f30128ab7ece96f772b9b8fa98))
+
+### [0.24.2](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.24.1...v0.24.2) (2026-04-19)
+
+
+### Bug Fixes
+
+* make simple-git-hooks postinstall resilient to --omit=dev ([f091737](https://github.com/monotykamary/pi-messenger-swarm/commit/f091737f1c25032f1704d5bc8939a51b053962c0))
+
+### [0.24.1](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.24.0...v0.24.1) (2026-04-11)
+
+
+### Features
+
+* **spawn:** allow agents to persist for council and interactive workflows ([b5d5a6b](https://github.com/monotykamary/pi-messenger-swarm/commit/b5d5a6b6c18115bc7208bff5d3450b7b4ee8ff43))
+
+## [0.24.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.23.4...v0.24.0) (2026-04-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* **spawn:** spawn action no longer accepts `content` parameter.
+Use `context` instead for supplementary information.
+
+- `message`/`prompt`: required mission/objective
+- `context`: optional supplementary background info
+
+This clarifies the semantics:
+- task.create: `content` = task specification
+- spawn: `message` = mission, `context` = background
+
+### Features
+
+* **spawn:** rename content to context for spawn action ([18c8fb7](https://github.com/monotykamary/pi-messenger-swarm/commit/18c8fb7f7c6dabbb4af2bc2353e1e98f956c7be7))
+
+### [0.23.4](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.23.3...v0.23.4) (2026-04-07)
+
+### [0.23.3](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.23.2...v0.23.3) (2026-04-06)
+
+
+### Features
+
+* **overlay:** cap task list height to 7 lines ([6372fc6](https://github.com/monotykamary/pi-messenger-swarm/commit/6372fc6f21c6aae1c17926450c85d6f4a57eac3f))
+
+### [0.23.2](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.23.1...v0.23.2) (2026-04-06)
+
+
+### Bug Fixes
+
+* **swarm:** escape multiline YAML values in agent file frontmatter ([7c1b99d](https://github.com/monotykamary/pi-messenger-swarm/commit/7c1b99dcac262af4a524ea57dad6971979033b3d))
+
+### [0.23.1](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.23.0...v0.23.1) (2026-04-06)
+
+
+### Bug Fixes
+
+* **overlay:** trigger re-render when live workers change ([f8d25ea](https://github.com/monotykamary/pi-messenger-swarm/commit/f8d25eac28a8ae131d3201919e6734608e01e534))
+
+## [0.23.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.22.3...v0.23.0) (2026-04-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* None - all exports maintained through index re-exports
+
+* modularize large handler and store modules ([1e6c1d5](https://github.com/monotykamary/pi-messenger-swarm/commit/1e6c1d53932543af7f2518e3ccf51605549db4d5))
+
+### [0.22.3](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.22.2...v0.22.3) (2026-04-04)
+
+
+### Features
+
+* **spawn:** add agentFile parameter to spawn tool registration ([e67df89](https://github.com/monotykamary/pi-messenger-swarm/commit/e67df89cf6c9879e53e0f5c101daa7341e481d2c))
+
+
+### Bug Fixes
+
+* **swarm:** allow spawn with agentFile only, no message required ([8ed3ad5](https://github.com/monotykamary/pi-messenger-swarm/commit/8ed3ad5e43b68341b1e625b3278f838e10529983))
+
+### [0.22.2](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.22.1...v0.22.2) (2026-04-04)
+
+
+### Bug Fixes
+
+* **overlay:** use listSpawnedHistory for swarm navigation ([4fe14dc](https://github.com/monotykamary/pi-messenger-swarm/commit/4fe14dc03f55b4eaec8593e22d61bcd41ee2da63))
+* **swarm:** use listSpawnedHistory for status counts ([03007ab](https://github.com/monotykamary/pi-messenger-swarm/commit/03007abd9040a624cee38ba5878cb1dace07549c))
+
+### [0.22.1](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.22.0...v0.22.1) (2026-04-04)
+
+
+### Features
+
+* **swarm:** display model in agent overlay detail view ([8a55150](https://github.com/monotykamary/pi-messenger-swarm/commit/8a55150f1077d6a2b303647c4fdeff432f6b173f))
+
+## [0.22.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.21.0...v0.22.0) (2026-04-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* Remove all backwards compatibility fields and legacy actions
+
+- Delete migrations/legacy-agents.ts and store/legacy-claims.ts
+- Remove backwards compatibility fields (prd, target, type, autoWork, etc)
+- Remove legacy disabled actions (plan, work, review, sync, crew)
+- Remove deprecated overlay view state fields
+- Remove dead code: getSpawnByTask() function
+
+Features:
+- Implement progress_log field in SwarmTask type
+- Store progress events in task JSONL and replay into progress_log
+- Update getTaskProgress() to read from task state
+- Fix listSpawned() default to show only running agents
+
+Tests:
+- Add task-event-sourcing.test.ts (14 tests)
+- Add task-progress-events.test.ts (6 tests)
+- Update router.test.ts for new behavior
+
+Total: 170 tests passing
+
+### Bug Fixes
+
+* **overlay:** remove stop and claim buttons from user TUI ([7d90f90](https://github.com/monotykamary/pi-messenger-swarm/commit/7d90f904a9857823cc3116267d884ae61693d7f8))
+* **overlay:** show completed agents in swarm list ([69a1d5d](https://github.com/monotykamary/pi-messenger-swarm/commit/69a1d5dfa53de8504120653ef703723a56529a9f))
+* **overlay:** use channel sessionId for loading spawned agents ([4b660cc](https://github.com/monotykamary/pi-messenger-swarm/commit/4b660cc29597afd32455ef18a89918c73076f9c6))
+* **swarm:** show all agents by default in overlay and spawn.list ([d741b5d](https://github.com/monotykamary/pi-messenger-swarm/commit/d741b5d6038ec0387f76125e65aab903834b65e1))
+* **swarm:** use channel sessionId consistently for storage ([f64ddc7](https://github.com/monotykamary/pi-messenger-swarm/commit/f64ddc7b9cd61208c49b726d35b811b67d20a008))
+
+
+* purge legacy code and implement progress log event sourcing ([159d32f](https://github.com/monotykamary/pi-messenger-swarm/commit/159d32f6446c794fda1de04c499df184b9e98f6f))
+
+## [0.21.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.20.3...v0.21.0) (2026-04-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* **storage:** Removes legacy .json channel files and feed/ directory.
+Removes migrateLegacyChannelFiles() and legacy path helpers.
+
+Updates tests and documentation to reflect new unified format.
+
+### Bug Fixes
+
+* **overlay:** dim entire status bar line when no swarm tasks ([d21f5c3](https://github.com/monotykamary/pi-messenger-swarm/commit/d21f5c35ceb54984bdf4947375acbe8320b0b0f4))
+
+
+* **storage:** merge channel metadata and feed into unified jsonl ([8dc5817](https://github.com/monotykamary/pi-messenger-swarm/commit/8dc58175e5d21f7587440b47ac94bf444dba66ab))
+
+### [0.20.3](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.20.2...v0.20.3) (2026-04-04)
+
+
+### Features
+
+* **swarm:** filter running agents by default, add spawn.history and messaging warnings ([0fb1a9e](https://github.com/monotykamary/pi-messenger-swarm/commit/0fb1a9e90a0472456677dbc349c5ebabe70a191c))
+
+
+### Bug Fixes
+
+* **swarm:** use listSpawnedHistory in session shutdown to unclaim all spawned agent tasks ([212cd05](https://github.com/monotykamary/pi-messenger-swarm/commit/212cd052e2f558f9f1f0b39c9d04b35c204e2c3c))
+
+### [0.20.2](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.20.1...v0.20.2) (2026-04-04)
+
+### [0.20.1](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.20.0...v0.20.1) (2026-04-04)
+
+## [0.20.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.19.0...v0.20.0) (2026-04-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* Legacy spec-based claims system (claims.json/completions.json)
+has been removed. The new event-sourced session-scoped task system is now the
+only task management mechanism.
+
+Changes:
+- Remove handlers/legacy.ts (executeClaim, executeUnclaim, executeComplete, etc.)
+- Remove legacy-claims exports from store.ts
+- Remove legacy handlers export from handlers.ts
+- Update agentHasTask() to only check new session tasks
+- Update all callers (status.ts, render-detail.ts, coordination.ts) to use new API
+- Delete legacy test files
+
+The lib.ts types (ClaimEntry, AllClaims, etc.) are preserved for potential
+migration tooling but are no longer exported from main entry points.
+
+### Bug Fixes
+
+* **swarm:** restore auto-cleanup of stale task claims in getTasks ([b789e5a](https://github.com/monotykamary/pi-messenger-swarm/commit/b789e5afd5bbfe1dfb828df635267c0fb6b954d4))
+
+
+* remove legacy claims system and update all callers ([dfaeee0](https://github.com/monotykamary/pi-messenger-swarm/commit/dfaeee0a3025b1d06e29c13ec0ad13105d11f5f8))
+
+## [0.19.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.18.2...v0.19.0) (2026-04-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* **swarm:** Tasks now stored in tasks/<sessionId>.jsonl instead of
+tasks/<channel>/<id>.json. Task IDs are now per-session sequential.
+* **spawn:** spawnSubagent() now requires sessionId parameter
+
+- Remove 60-second auto-cleanup of spawned agents
+- Add event-sourced JSONL persistence (.pi/messenger/spawned/<session>.jsonl)
+- Auto-generate reusable agent files (.pi/messenger/agents/<session>/<name>-<id>.md)
+- Add session-scoping for spawned agents
+- Add getAgentEventHistory() for audit trail
+- Update all callers to pass sessionId
+- Update tests for new persistence model
+* session_switch and session_fork events removed in pi 0.65.0
+
+### Features
+
+* generate agent file immediately on spawn ([eab9630](https://github.com/monotykamary/pi-messenger-swarm/commit/eab96303fbd7691b44854ce6d0742c42c0fe5fec))
+* **spawn:** persist spawned agents to disk with event-sourced JSONL ([c8695cf](https://github.com/monotykamary/pi-messenger-swarm/commit/c8695cf6fa94060cb418528e337e61be050171d5))
+
+
+### Bug Fixes
+
+* **overlay:** update task detail view for event-sourced tasks ([c9e13bf](https://github.com/monotykamary/pi-messenger-swarm/commit/c9e13bf69435a400e0f04c6c2782386383e9293d))
+* remove call to deleted processAllPendingMessages function ([e853bba](https://github.com/monotykamary/pi-messenger-swarm/commit/e853bbae7b5e72dd3c3ddcd1bea4b8bf7c8e99fe))
+* resolve type errors and restore deleted handler functions ([f627fc5](https://github.com/monotykamary/pi-messenger-swarm/commit/f627fc51b271075bdda1b0abc5085d7f34bfa95d))
+* update remaining overlays and tests for event-sourced tasks ([cbe646f](https://github.com/monotykamary/pi-messenger-swarm/commit/cbe646f509638286d6439253fd135ad635e831f3))
+
+
+* migrate session events to new API ([2e478c9](https://github.com/monotykamary/pi-messenger-swarm/commit/2e478c9d7be47b1f0b88de4743dde4e80e44770e))
+* **swarm:** event-source tasks and consolidate agent storage ([c8b947e](https://github.com/monotykamary/pi-messenger-swarm/commit/c8b947e0d1977a5d33752797ec9897563144b0d9))
+
+### [0.18.2](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.18.1...v0.18.2) (2026-04-03)
+
+### [0.18.1](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.18.0...v0.18.1) (2026-04-02)
+
+## [0.18.0](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.17.10...v0.18.0) (2026-04-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **swarm:** The `model` parameter is removed from pi_messenger({ action: "spawn" }).
+Use agent files with frontmatter model field instead.
+
+### Features
+
+* **swarm:** remove model parameter from spawn api ([e2bafc2](https://github.com/monotykamary/pi-messenger-swarm/commit/e2bafc21ffe46cab271d21472c6718cd72aaae8c))
+
+### [0.17.10](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.17.9...v0.17.10) (2026-03-31)
+
+
+### Features
+
+* **overlay:** add 'q' keybinding to close messenger ([0355b8d](https://github.com/monotykamary/pi-messenger-swarm/commit/0355b8d230efb81db9f5140cfdd1f3fcecfd1767))
 
 ### [0.17.9](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.17.8...v0.17.9) (2026-03-29)
 

@@ -1,3 +1,14 @@
-export * from './agent.js';
-export * from './messaging.js';
-export * from './auto-register.js';
+// Re-export for backwards compatibility
+export {
+  executeJoin,
+  executeStatus,
+  executeSetStatus,
+  executeList,
+  executeWhois,
+  executeReserve,
+  executeRelease,
+  executeSend,
+  executeFeed,
+  executeRename,
+  executeChannels,
+} from './coordination/index.js';

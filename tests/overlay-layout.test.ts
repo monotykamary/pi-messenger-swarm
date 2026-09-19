@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Dirs, MessengerState } from '../lib.js';
 
-vi.mock('@mariozechner/pi-tui', () => ({
+vi.mock('@earendil-works/pi-tui', () => ({
   truncateToWidth: (text: string, width: number) =>
     text.length > width ? text.slice(0, Math.max(0, width)) : text,
   visibleWidth: (text: string) => text.replace(/\x1b\[[0-9;]*m/g, '').length,
@@ -45,7 +45,6 @@ function makeDirs(cwd: string): Dirs {
   return {
     base: path.join(cwd, '.pi', 'messenger'),
     registry: path.join(cwd, '.pi', 'messenger', 'registry'),
-    inbox: path.join(cwd, '.pi', 'messenger', 'inbox'),
   };
 }
 
@@ -74,6 +73,7 @@ function makeState(): MessengerState {
     currentChannel: 'general',
     sessionChannel: 'general',
     joinedChannels: ['general'],
+    contextSessionId: 'test-session-layout',
   };
 }
 
@@ -111,17 +111,22 @@ describe('overlay layout', () => {
     process.chdir(cwd);
 
     try {
-      const swarmStore = await import('../swarm/store.js');
-      const { logFeedEvent } = await import('../feed.js');
-      const { MessengerOverlay } = await import('../overlay.js');
+      const taskStore = await import('../swarm/task-store.js');
+      const { logFeedEvent } = await import('../feed/index.js');
+      const { MessengerOverlay } = await import('../overlay/component.js');
 
-      swarmStore.createTask(cwd, {
-        title: 'Single visible task',
-        createdBy: 'BenchAgent',
-      });
+      taskStore.createTask(
+        cwd,
+        state.contextSessionId!,
+        {
+          title: 'Single visible task',
+          createdBy: 'BenchAgent',
+        },
+        state.currentChannel
+      );
 
       for (let i = 0; i < 10; i++) {
-        logFeedEvent(cwd, 'BenchAgent', 'message', undefined, `Msg ${i}`);
+        logFeedEvent(cwd, 'BenchAgent', 'message', undefined, `Msg ${i}`, state.currentChannel);
       }
 
       const overlay = new MessengerOverlay(
@@ -137,7 +142,7 @@ describe('overlay layout', () => {
       overlay.dispose();
 
       const visibleMessages = extractVisibleMessages(frame);
-      expect(visibleMessages).toHaveLength(6);
+      expect(visibleMessages).toHaveLength(10);
       expect(visibleMessages.at(-1)).toContain('Msg 9');
     } finally {
       process.chdir(previousCwd);
@@ -154,11 +159,11 @@ describe('overlay layout', () => {
     process.chdir(cwd);
 
     try {
-      const { logFeedEvent } = await import('../feed.js');
-      const { MessengerOverlay } = await import('../overlay.js');
+      const { logFeedEvent } = await import('../feed/index.js');
+      const { MessengerOverlay } = await import('../overlay/component.js');
 
       for (let i = 0; i < 12; i++) {
-        logFeedEvent(cwd, 'BenchAgent', 'message', undefined, `Msg ${i}`);
+        logFeedEvent(cwd, 'BenchAgent', 'message', undefined, `Msg ${i}`, state.currentChannel);
       }
 
       const overlay = new MessengerOverlay(
@@ -180,7 +185,7 @@ describe('overlay layout', () => {
       expect(beforeMessages.length).toBeGreaterThan(0);
       expect(beforeMessages).not.toContain('Msg 11');
 
-      logFeedEvent(cwd, 'BenchAgent', 'message', undefined, 'Msg 12');
+      logFeedEvent(cwd, 'BenchAgent', 'message', undefined, 'Msg 12', state.currentChannel);
       (overlay as any).feedLineCountCache = null;
       (overlay as any).renderCache = null;
 
@@ -206,11 +211,11 @@ describe('overlay layout', () => {
     process.chdir(cwd);
 
     try {
-      const { logFeedEvent } = await import('../feed.js');
-      const { MessengerOverlay } = await import('../overlay.js');
+      const { logFeedEvent } = await import('../feed/index.js');
+      const { MessengerOverlay } = await import('../overlay/component.js');
 
       for (let i = 0; i < 12; i++) {
-        logFeedEvent(cwd, 'BenchAgent', 'message', undefined, `Msg ${i}`);
+        logFeedEvent(cwd, 'BenchAgent', 'message', undefined, `Msg ${i}`, state.currentChannel);
       }
 
       const overlay = new MessengerOverlay(
@@ -246,11 +251,11 @@ describe('overlay layout', () => {
     process.chdir(cwd);
 
     try {
-      const { logFeedEvent } = await import('../feed.js');
-      const { MessengerOverlay } = await import('../overlay.js');
+      const { logFeedEvent } = await import('../feed/index.js');
+      const { MessengerOverlay } = await import('../overlay/component.js');
 
       for (let i = 0; i < 12; i++) {
-        logFeedEvent(cwd, 'BenchAgent', 'message', undefined, `Msg ${i}`);
+        logFeedEvent(cwd, 'BenchAgent', 'message', undefined, `Msg ${i}`, state.currentChannel);
       }
 
       const overlay = new MessengerOverlay(
@@ -291,11 +296,11 @@ describe('overlay layout', () => {
     process.chdir(cwd);
 
     try {
-      const { logFeedEvent } = await import('../feed.js');
-      const { MessengerOverlay } = await import('../overlay.js');
+      const { logFeedEvent } = await import('../feed/index.js');
+      const { MessengerOverlay } = await import('../overlay/component.js');
 
       for (let i = 0; i < 3; i++) {
-        logFeedEvent(cwd, 'BenchAgent', 'message', undefined, `Msg ${i}`);
+        logFeedEvent(cwd, 'BenchAgent', 'message', undefined, `Msg ${i}`, state.currentChannel);
       }
 
       const overlay = new MessengerOverlay(
@@ -309,7 +314,7 @@ describe('overlay layout', () => {
 
       expect(extractVisibleMessages(overlay.render(100))).toContain('Msg 2');
 
-      logFeedEvent(cwd, 'BenchAgent', 'message', undefined, 'Msg 3');
+      logFeedEvent(cwd, 'BenchAgent', 'message', undefined, 'Msg 3', state.currentChannel);
       await sleep(120);
 
       const frame = overlay.render(100);
@@ -319,6 +324,52 @@ describe('overlay layout', () => {
     } finally {
       process.chdir(previousCwd);
       restoreTerminal();
+    }
+  });
+
+  it('bounds the main overlay to the supplied narrow width', async () => {
+    const cwd = createTempCwd();
+    const dirs = makeDirs(cwd);
+    const state = makeState();
+    const previousCwd = process.cwd();
+    process.chdir(cwd);
+
+    try {
+      const { MessengerOverlay } = await import('../overlay/component.js');
+      const overlay = new MessengerOverlay(
+        { requestRender: () => {} } as any,
+        theme as any,
+        state,
+        dirs,
+        () => {},
+        {}
+      );
+      const width = 20;
+      const frame = overlay.render(width);
+      expect(frame.every((line) => line.length <= width)).toBe(true);
+      overlay.dispose();
+    } finally {
+      process.chdir(previousCwd);
+    }
+  });
+
+  it('bounds the config overlay to the supplied narrow width', async () => {
+    const cwd = createTempCwd();
+    const previousCwd = process.cwd();
+    process.chdir(cwd);
+
+    try {
+      const { MessengerConfigOverlay } = await import('../overlay/config-overlay.js');
+      const overlay = new MessengerConfigOverlay(
+        { requestRender: () => {} } as any,
+        theme as any,
+        () => {}
+      );
+      const width = 20;
+      const frame = overlay.render(width);
+      expect(frame.every((line) => line.length <= width)).toBe(true);
+    } finally {
+      process.chdir(previousCwd);
     }
   });
 });

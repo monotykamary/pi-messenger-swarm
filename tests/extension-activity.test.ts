@@ -5,7 +5,7 @@ import {
   createContext,
   createState,
 } from './helpers/messenger-fixtures.js';
-import { readFeedEvents } from '../feed.js';
+import { readFeedEvents } from '../feed/index.js';
 
 const baseConfig = {
   autoRegister: false,

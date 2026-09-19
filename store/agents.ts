@@ -5,6 +5,52 @@ import { isProcessAlive, isValidAgentName, pathMatchesReservation } from '../lib
 import { MEMORY_CHANNEL_ID, normalizeChannelId } from '../channel.js';
 import { applyRegistrationDefaults, normalizeCwd, normalizeJoinedChannels } from './shared.js';
 
+/**
+ * Re-read the agent's registration file from disk and sync channel state
+ * (currentChannel, sessionChannel, joinedChannels) into the in-memory state.
+ * Returns true if anything changed.
+ *
+ * This bridges the gap between the CLI (which writes registration changes
+ * directly to disk via the harness server) and the extension (whose
+ * in-memory state would otherwise be stale after a CLI join/switch).
+ */
+const regMtimeCache = new Map<string, number>();
+
+export function syncChannelStateFromDisk(state: MessengerState, dirs: Dirs): boolean {
+  if (!state.registered || !state.agentName) return false;
+
+  const regPath = join(dirs.registry, `${state.agentName}.json`);
+  try {
+    const stat = fs.statSync(regPath);
+    const lastMtime = regMtimeCache.get(regPath) ?? 0;
+    // Skip the read if the file hasn't been modified since last sync.
+    if (stat.mtimeMs <= lastMtime) return false;
+    regMtimeCache.set(regPath, stat.mtimeMs);
+
+    const raw = JSON.parse(fs.readFileSync(regPath, 'utf-8')) as AgentRegistration;
+    const reg = applyRegistrationDefaults(raw);
+
+    const newCurrent = normalizeChannelId(reg.currentChannel || '');
+    const newSession = normalizeChannelId(reg.sessionChannel || '');
+    const newJoined = normalizeJoinedChannels(reg.joinedChannels, newCurrent, newSession);
+
+    const changed =
+      state.currentChannel !== newCurrent ||
+      state.sessionChannel !== newSession ||
+      JSON.stringify(state.joinedChannels) !== JSON.stringify(newJoined);
+
+    if (changed) {
+      state.currentChannel = newCurrent;
+      state.sessionChannel = newSession;
+      state.joinedChannels = newJoined;
+    }
+
+    return changed;
+  } catch {
+    return false;
+  }
+}
+
 interface AgentsCache {
   allAgents: AgentRegistration[];
   filtered: Map<string, AgentRegistration[]>;

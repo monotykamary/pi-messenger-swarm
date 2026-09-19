@@ -1,4 +1,4 @@
-export type SwarmTaskStatus = "todo" | "in_progress" | "done" | "blocked";
+export type SwarmTaskStatus = 'todo' | 'in_progress' | 'done' | 'blocked' | 'archived';
 
 export interface SwarmTaskEvidence {
   commits?: string[];
@@ -16,13 +16,17 @@ export interface SwarmTask {
   created_by?: string;
   claimed_by?: string;
   claimed_at?: string;
+  claim_reason?: string;
   completed_by?: string;
   completed_at?: string;
   summary?: string;
   evidence?: SwarmTaskEvidence;
   blocked_reason?: string;
+  blocked_by?: string;
   attempt_count: number;
   channel?: string;
+  archived_at?: string;
+  progress_log?: Array<{ timestamp: string; agent: string; message: string }>;
 }
 
 export interface SwarmTaskCreateInput {
@@ -48,7 +52,6 @@ export interface SpawnRequest {
   message?: string; // Alias for objective
   context?: string;
   taskId?: string;
-  model?: string;
   name?: string;
   agentFile?: string; // Path to markdown file (with YAML frontmatter) to use as system prompt
 }
@@ -58,15 +61,17 @@ export interface SpawnedAgent {
   cwd: string;
   name: string;
   role: string;
+  model?: string;
   persona?: string;
   objective: string;
   context?: string;
   taskId?: string;
-  model?: string;
   systemPrompt?: string;
-  status: "running" | "completed" | "failed" | "stopped";
+  status: 'running' | 'completed' | 'failed' | 'stopped';
   startedAt: string;
   endedAt?: string;
   exitCode?: number;
   error?: string;
+  sessionId?: string;
+  pid?: number;
 }

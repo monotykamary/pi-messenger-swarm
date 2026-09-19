@@ -1,5 +1,5 @@
-import { truncateToWidth, visibleWidth } from '@mariozechner/pi-tui';
-import type { Theme } from '@mariozechner/pi-coding-agent';
+import { truncateToWidth, visibleWidth } from '@earendil-works/pi-tui';
+import type { Theme } from '@earendil-works/pi-coding-agent';
 import {
   formatDuration,
   formatRelativeTime,
@@ -12,13 +12,14 @@ import {
   type MessengerState,
 } from '../lib.js';
 import * as store from '../store.js';
-import * as swarmStore from '../swarm/store.js';
+import * as taskStore from '../swarm/task-store.js';
 import type { SwarmTask as Task, SpawnedAgent } from '../swarm/types.js';
 import { formatRoleLabel } from '../swarm/labels.js';
 import { getLiveWorkers, type LiveWorkerInfo } from '../swarm/live-progress.js';
 import type { ToolEntry } from '../swarm/progress.js';
 import { loadConfig } from '../config.js';
-import type { MessengerViewState } from '../overlay-actions.js';
+import type { MessengerViewState } from './actions.js';
+import { getEffectiveSessionId } from '../store/shared.js';
 
 let listLegendCache: {
   task: Task;
@@ -92,9 +93,10 @@ export function renderAgentsRow(
   liveWorkers: ReadonlyMap<string, LiveWorkerInfo> = getLiveWorkers(cwd)
 ): string {
   const activeAgents = store.getActiveAgents(state, dirs);
-  let allClaims: ReturnType<typeof store.getClaims> | null = null;
   const rowParts: string[] = [];
   const seen = new Set<string>();
+  const sessionId = getEffectiveSessionId(cwd, state);
+  const sessionTasks = taskStore.getTasks(cwd, sessionId);
 
   const self = buildSelfRegistration(state);
   rowParts.push(`🟢 You (${idleLabel(self.activity?.lastActivityAt ?? self.startedAt)})`);
@@ -102,17 +104,9 @@ export function renderAgentsRow(
 
   for (const agent of activeAgents) {
     if (seen.has(agent.name)) continue;
-    allClaims ??= store.getClaims(dirs);
     const computed = computeStatus(
       agent.activity?.lastActivityAt ?? agent.startedAt,
-      agentHasTask(
-        agent.name,
-        allClaims,
-        swarmStore.getTasks(
-          agent.cwd,
-          agent.currentChannel ?? agent.sessionChannel ?? state.currentChannel
-        )
-      ),
+      agentHasTask(agent.name, sessionTasks),
       (agent.reservations?.length ?? 0) > 0,
       stuckThresholdMs
     );
@@ -136,17 +130,17 @@ export function renderEmptyState(
   cwd: string,
   width: number,
   height: number,
-  channelId: string = 'general'
+  channelId: string
 ): string[] {
   const lines: string[] = [];
   const config = loadConfig(cwd);
 
-  lines.push('No swarm tasks yet — create one or spawn a specialist.');
-  lines.push('task.create: pi_messenger({ action: "task.create", title: "Investigate bug" })');
+  lines.push(theme.fg('dim', 'No swarm tasks yet — create one or spawn a specialist.'));
   lines.push(
-    'spawn: pi_messenger({ action: "spawn", role: "Researcher", message: "Analyze issue" })'
+    theme.fg('dim', 'task.create: pi-messenger-swarm task create --title "Investigate bug"')
   );
-  lines.push(`stuck ${config.stuckThreshold}s · feed ${config.feedRetention}`);
+  lines.push(theme.fg('dim', 'spawn: pi-messenger-swarm spawn --role Researcher "Analyze issue"'));
+  lines.push(theme.fg('dim', `stuck ${config.stuckThreshold}s · feed ${config.feedRetention}`));
 
   if (lines.length > height) {
     return lines.slice(0, height).map((line) => truncateToWidth(line, width));
@@ -162,7 +156,7 @@ export function renderLegend(
   viewState: MessengerViewState,
   task: Task | null,
   swarmAgent: SpawnedAgent | null,
-  channelId: string = 'general'
+  channelId: string
 ): string[] {
   if (viewState.confirmAction) {
     const text = renderConfirmBar(
@@ -242,7 +236,8 @@ export function renderDetailView(
   width: number,
   height: number,
   viewState: MessengerViewState,
-  channelId: string = 'general',
+  channelId: string,
+  sessionId: string = '',
   liveWorkers: ReadonlyMap<string, LiveWorkerInfo> = getLiveWorkers(cwd)
 ): string[] {
   const live = liveWorkers.get(task.id);
@@ -287,7 +282,7 @@ export function renderDetailView(
     if (task.depends_on.length > 0) {
       lines.push('Dependencies:');
       for (const depId of task.depends_on) {
-        const dep = swarmStore.getTask(cwd, depId, channelId);
+        const dep = taskStore.getTask(cwd, sessionId, depId);
         if (!dep) lines.push(`  ○ ${depId}: (missing)`);
         else
           lines.push(
@@ -297,7 +292,7 @@ export function renderDetailView(
       lines.push('');
     }
 
-    const progress = swarmStore.getTaskProgress(cwd, task.id, channelId);
+    const progress = sessionId ? taskStore.getTaskProgress(cwd, sessionId, task.id) : null;
     if (progress) {
       lines.push('Progress:');
       for (const line of progress.trimEnd().split('\n')) lines.push(`  ${line}`);
@@ -306,11 +301,6 @@ export function renderDetailView(
 
     if (task.status === 'blocked') {
       lines.push(`Block Reason: ${task.blocked_reason ?? 'Unknown'}`);
-      const blockContext = swarmStore.getBlockContext(cwd, task.id, channelId);
-      if (blockContext) {
-        lines.push('', 'Block Context:');
-        for (const line of blockContext.trimEnd().split('\n')) lines.push(`  ${line}`);
-      }
       lines.push('');
     }
 
@@ -330,7 +320,7 @@ export function renderDetailView(
     }
 
     lines.push('Spec:');
-    const spec = swarmStore.getTaskSpec(cwd, task.id, channelId);
+    const spec = sessionId ? taskStore.getTaskSpec(cwd, sessionId, task.id) : null;
     if (!spec || spec.trimEnd().length === 0) lines.push('  *No spec available*');
     else for (const line of spec.trimEnd().split('\n')) lines.push(`  ${line}`);
   }
@@ -357,6 +347,7 @@ export function renderSwarmDetail(
 
   lines.push(`${agent.name} (${agent.id})`);
   lines.push(`Role: ${formatRoleLabel(agent.role)}  │  Status: ${agent.status}`);
+  if (agent.model?.trim()) lines.push(`Model: ${agent.model.trim()}`);
   if (agent.persona?.trim()) lines.push(`Persona: ${agent.persona.trim()}`);
   lines.push(`Started: ${formatRelativeTime(agent.startedAt)}`);
   if (agent.endedAt) {
@@ -364,7 +355,6 @@ export function renderSwarmDetail(
     lines.push(`Ended: ${formatRelativeTime(agent.endedAt)}${exit}`);
   }
   if (agent.taskId) lines.push(`Task: ${agent.taskId}`);
-  if (agent.model) lines.push(`Model: ${agent.model}`);
 
   if (agent.context?.trim()) {
     lines.push('', 'Context:');
@@ -405,9 +395,7 @@ export function renderSwarmDetail(
 
 function renderDetailStatusBar(cwd: string, task: Task): string {
   const hints: string[] = [];
-  if (task.status === 'in_progress') hints.push('q:Stop');
   if (task.status === 'blocked') hints.push('u:Unblock');
-  if (task.status === 'todo') hints.push('s:Claim');
   if (task.status === 'in_progress') hints.push('b:Block');
   if (task.status === 'done') hints.push('x:Archive');
   hints.push('m:Chat', 'f:Swarm', 'j/k/gg/G:Feed', 'e:Expand', '←→:Nav');
@@ -416,9 +404,7 @@ function renderDetailStatusBar(cwd: string, task: Task): string {
 
 function renderListStatusBar(cwd: string, task: Task): string {
   const hints: string[] = ['Enter:Detail'];
-  if (task.status === 'in_progress') hints.push('q:Stop');
   if (task.status === 'blocked') hints.push('u:Unblock');
-  if (task.status === 'todo') hints.push('s:Claim');
   if (task.status === 'in_progress') hints.push('b:Block');
   if (task.status === 'done') hints.push('x:Archive');
   hints.push('m:Chat', 'f:Swarm', 'j/k/gg/G:Feed', 'e:Expand');

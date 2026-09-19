@@ -1,4 +1,4 @@
-import type { FeedEvent, FeedEventType } from '../feed.js';
+import type { FeedEvent, FeedEventType } from '../feed/index.js';
 import type { SwarmTask as Task } from '../swarm/types.js';
 
 const SIGNIFICANT_EVENTS = new Set<FeedEventType>([

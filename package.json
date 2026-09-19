@@ -1,6 +1,6 @@
 {
   "name": "pi-messenger-swarm",
-  "version": "0.17.10",
+  "version": "0.25.24",
   "description": "Swarm-first multi-agent messaging and task orchestration extension for Pi",
   "type": "module",
   "author": "Tom X Nguyen",
@@ -26,16 +26,18 @@
     "cli"
   ],
   "bin": {
-    "pi-messenger-swarm": "install.mjs"
+    "pi-messenger-swarm": "dist/harness/cli.js"
   },
   "files": [
     "*.ts",
     "*.mjs",
+    "dist/**",
     "handlers/**",
     "overlay/**",
     "store/**",
     "extension/**",
     "swarm/**",
+    "harness/**",
     "migrations/**",
     "skills/**",
     "docs/**",
@@ -43,10 +45,13 @@
     "CHANGELOG.md"
   ],
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
+    "lint:dead": "knip --no-gitignore",
     "release": "standard-version",
     "release:dry-run": "standard-version --dry-run",
     "prepare": "simple-git-hooks"
@@ -62,26 +67,30 @@
     ]
   },
   "devDependencies": {
-    "@commitlint/cli": "^20.5.0",
-    "@commitlint/config-conventional": "^20.5.0",
-    "@mariozechner/pi-coding-agent": "*",
-    "@mariozechner/pi-tui": "*",
-    "@sinclair/typebox": "*",
-    "@types/node": "^25.5.0",
-    "@vitest/coverage-v8": "^4.1.2",
-    "lint-staged": "^16.4.0",
-    "prettier": "^3.8.1",
-    "simple-git-hooks": "^2.13.1",
-    "standard-version": "^9.5.0",
-    "typescript": "^6.0.2",
-    "vitest": "^4.1.2"
+    "@commitlint/cli": "21.0.1",
+    "@commitlint/config-conventional": "21.0.1",
+    "@earendil-works/pi-coding-agent": "0.80.6",
+    "@earendil-works/pi-tui": "0.80.6",
+    "@types/node": "25.9.1",
+    "@vitest/coverage-v8": "4.1.7",
+    "knip": "6.14.1",
+    "lint-staged": "17.0.5",
+    "prettier": "3.8.3",
+    "simple-git-hooks": "2.13.1",
+    "standard-version": "9.5.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.7"
   },
   "pi": {
     "extensions": [
-      "./index.ts"
+      "./dist/index.js"
     ],
     "skills": [
       "./skills"
     ]
-  }
+  },
+  "overrides": {
+    "brace-expansion": "5.0.6"
+  },
+  "packageManager": "pnpm@11.6.0"
 }

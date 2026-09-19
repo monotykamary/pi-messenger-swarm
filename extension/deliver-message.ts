@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from '@mariozechner/pi-coding-agent';
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import type { AgentMailMessage, Dirs, MessengerState } from '../lib.js';
 import { extractFolder, MAX_CHAT_HISTORY } from '../lib.js';
 import type { MessengerConfig } from '../config.js';
@@ -50,9 +50,7 @@ export function createDeliverMessage({
       content += `*${msg.from} is in ${locationPart} (${sender.model})*\n\n`;
     }
 
-    const replyHint = config.replyHint
-      ? ` — reply: pi_messenger({ action: "send", to: "${msg.from}", message: "..." })`
-      : '';
+    const replyHint = config.replyHint ? ` — reply: pi-messenger-swarm send ${msg.from} "..."` : '';
 
     content += `**Message from ${msg.from}**${replyHint}\n\n${msg.text}`;
 

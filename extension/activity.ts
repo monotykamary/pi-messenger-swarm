@@ -1,9 +1,9 @@
-import type { ExtensionContext } from '@mariozechner/pi-coding-agent';
+import type { ExtensionContext } from '@earendil-works/pi-coding-agent';
 import type { Dirs, MessengerState } from '../lib.js';
 import { generateAutoStatus } from '../lib.js';
 import type { MessengerConfig } from '../config.js';
 import * as store from '../store.js';
-import { logFeedEvent } from '../feed.js';
+import { logFeedEvent } from '../feed/index.js';
 
 interface ActivityTrackerOptions {
   state: MessengerState;

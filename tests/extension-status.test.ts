@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ExtensionContext } from '@mariozechner/pi-coding-agent';
+import type { ExtensionContext } from '@earendil-works/pi-coding-agent';
 import { createStatusController } from '../extension/status.js';
-import * as swarmStore from '../swarm/store.js';
+import * as taskStore from '../swarm/task-store.js';
 import {
   createMessengerFixture,
   createState,
@@ -28,12 +28,14 @@ const baseConfig = {
 describe('extension status controller', () => {
   it('updates status text and drops unread counts for inactive senders', () => {
     const { cwd, dirs } = createMessengerFixture('pi-messenger-status-');
+    const TEST_SESSION = 'test-session-status';
     const state = createState('AgentA', {
       registered: true,
       currentChannel: 'general',
       sessionChannel: 'general',
-      joinedChannels: ['general', 'memory', 'heartbeat'],
+      joinedChannels: ['general', 'memory'],
       activity: { lastActivityAt: new Date().toISOString(), currentActivity: 'editing index.ts' },
+      contextSessionId: TEST_SESSION,
     });
     state.unreadCounts.set('Peer', 1);
     state.unreadCounts.set('Ghost', 2);
@@ -44,9 +46,9 @@ describe('extension status controller', () => {
       sessionId: 'session-peer',
       currentChannel: 'general',
       sessionChannel: 'general',
-      joinedChannels: ['general', 'memory', 'heartbeat'],
+      joinedChannels: ['general', 'memory'],
     });
-    swarmStore.createTask(cwd, { title: 'Task' }, 'general');
+    taskStore.createTask(cwd, TEST_SESSION, { title: 'Task' }, 'general');
 
     const setStatus = vi.fn();
     const maybeAutoOpenSwarmOverlay = vi.fn();
@@ -73,7 +75,7 @@ describe('extension status controller', () => {
     expect(state.unreadCounts.has('Ghost')).toBe(false);
     expect(setStatus).toHaveBeenCalledWith(
       'messenger',
-      expect.stringContaining('msg: AgentA (1 peer) ●1 · editing index.ts ☑ 0/1 tasks')
+      expect.stringContaining('msg: AgentA #general (1 peer) ●1 · editing index.ts ☑ 0/1 tasks')
     );
     expect(maybeAutoOpenSwarmOverlay).toHaveBeenCalledWith(ctx);
   });

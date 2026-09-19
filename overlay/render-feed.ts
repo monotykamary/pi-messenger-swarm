@@ -1,11 +1,11 @@
-import { truncateToWidth } from '@mariozechner/pi-tui';
-import type { Theme } from '@mariozechner/pi-coding-agent';
+import { truncateToWidth } from '@earendil-works/pi-tui';
+import type { Theme } from '@earendil-works/pi-coding-agent';
 import { coloredAgentName } from '../lib.js';
 import {
   formatFeedLine as sharedFormatFeedLine,
   sanitizeFeedEvent,
   type FeedEvent,
-} from '../feed.js';
+} from '../feed/index.js';
 
 const DIM_EVENTS = new Set(['join', 'leave', 'reserve', 'release']);
 

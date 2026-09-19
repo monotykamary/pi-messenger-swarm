@@ -1,11 +1,12 @@
-import { truncateToWidth } from '@mariozechner/pi-tui';
-import type { Theme } from '@mariozechner/pi-coding-agent';
+import { truncateToWidth, visibleWidth } from '@earendil-works/pi-tui';
+import type { Theme } from '@earendil-works/pi-coding-agent';
 import { formatDuration } from '../lib.js';
-import * as swarmStore from '../swarm/store.js';
+import * as taskStore from '../swarm/task-store.js';
 import type { SwarmTask as Task, SpawnedAgent } from '../swarm/types.js';
 import { formatRoleLabel } from '../swarm/labels.js';
 import { getLiveWorkers, type LiveWorkerInfo } from '../swarm/live-progress.js';
-import type { MessengerViewState } from '../overlay-actions.js';
+import type { MessengerViewState } from './actions.js';
+import { displayChannelLabel, normalizeChannelId } from '../channel.js';
 
 const STATUS_ICONS: Record<string, string> = {
   done: '✓',
@@ -19,6 +20,7 @@ let statusBarCache: {
   width: number;
   channelId: string;
   liveCount: number;
+  undiscoveredChannels: number;
   line: string;
 } | null = null;
 
@@ -26,9 +28,11 @@ export function renderStatusBar(
   _theme: Theme,
   cwd: string,
   width: number,
-  channelId: string = 'general',
+  channelId: string,
   liveWorkers: ReadonlyMap<string, LiveWorkerInfo> = getLiveWorkers(cwd),
-  tasks: Task[] = swarmStore.getTasks(cwd, channelId)
+  tasks: Task[],
+  sessionId: string = '',
+  undiscoveredChannels: number = 0
 ): string {
   const liveCount = liveWorkers.size;
   if (
@@ -36,23 +40,33 @@ export function renderStatusBar(
     statusBarCache.tasks === tasks &&
     statusBarCache.width === width &&
     statusBarCache.channelId === channelId &&
-    statusBarCache.liveCount === liveCount
+    statusBarCache.liveCount === liveCount &&
+    statusBarCache.undiscoveredChannels === undiscoveredChannels
   ) {
     return statusBarCache.line;
   }
 
-  const summary = swarmStore.getSummaryForTasks(tasks);
-  const ready = swarmStore.getReadyTasksForTasks(tasks);
+  const summary = taskStore.getSummaryForTasks(tasks);
+  const ready = taskStore.getReadyTasksForTasks(tasks);
 
   let line: string;
+  const channelLabel = displayChannelLabel(channelId);
+
   if (summary.total === 0) {
-    line = truncateToWidth(`No swarm tasks │ ⚙ ${liveCount} live`, width);
+    line = `${channelLabel} │ No tasks │ ⚙ ${liveCount} live`;
+    if (undiscoveredChannels > 0) {
+      line += ` │ 📡 ${undiscoveredChannels} other ch.`;
+    }
+    line = truncateToWidth(_theme.fg('dim', line), width);
   } else {
-    line = `☑ ${summary.done}/${summary.total} tasks`;
+    line = `${channelLabel} │ ☑ ${summary.done}/${summary.total} tasks`;
     line += ` │ ready ${ready.length}`;
     line += ` │ in progress ${summary.in_progress}`;
     line += ` │ blocked ${summary.blocked}`;
     line += ` │ ⚙ ${liveCount} live`;
+    if (undiscoveredChannels > 0) {
+      line += ` │ 📡 ${undiscoveredChannels}`;
+    }
     line = truncateToWidth(line, width);
   }
 
@@ -61,6 +75,7 @@ export function renderStatusBar(
     width,
     channelId,
     liveCount,
+    undiscoveredChannels,
     line,
   };
   return line;
@@ -100,9 +115,9 @@ export function renderTaskList(
   width: number,
   height: number,
   viewState: MessengerViewState,
-  channelId: string = 'general',
+  channelId: string,
   liveWorkers: ReadonlyMap<string, LiveWorkerInfo> = getLiveWorkers(cwd),
-  tasks: Task[] = swarmStore.getTasks(cwd, channelId)
+  tasks: Task[]
 ): string[] {
   const lines: string[] = [];
 
@@ -170,12 +185,7 @@ export function renderSwarmList(
 
   if (agents.length === 0) {
     lines.push(theme.fg('dim', 'No spawned agents in this session.'));
-    lines.push(
-      theme.fg(
-        'dim',
-        'spawn: pi_messenger({ action: "spawn", role: "Researcher", message: "..." })'
-      )
-    );
+    lines.push(theme.fg('dim', 'spawn: pi-messenger-swarm spawn --role Researcher "..."'));
     while (lines.length < height) lines.push('');
     return lines.slice(0, height);
   }
@@ -310,4 +320,45 @@ export function navigateSwarm(
     0,
     Math.min(swarmCount - 1, viewState.selectedSwarmIndex + direction)
   );
+}
+
+interface ChannelBarCache {
+  channels: string[];
+  currentChannel: string;
+  width: number;
+  line: string;
+}
+
+let channelBarCache: ChannelBarCache | null = null;
+
+export function renderChannelBar(
+  theme: Theme,
+  width: number,
+  channels: string[],
+  currentChannel: string
+): string {
+  if (
+    channelBarCache &&
+    channelBarCache.channels === channels &&
+    channelBarCache.currentChannel === currentChannel &&
+    channelBarCache.width === width
+  ) {
+    return channelBarCache.line;
+  }
+
+  const separator = theme.fg('dim', ' │ ');
+  const parts: string[] = [];
+
+  for (const ch of channels) {
+    const label = displayChannelLabel(ch);
+    if (ch === currentChannel) {
+      parts.push(theme.fg('accent', label));
+    } else {
+      parts.push(theme.fg('dim', label));
+    }
+  }
+
+  const line = truncateToWidth(parts.join(separator), width);
+  channelBarCache = { channels, currentChannel, width, line };
+  return line;
 }

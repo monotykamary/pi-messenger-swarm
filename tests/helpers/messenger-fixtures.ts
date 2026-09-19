@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach } from 'vitest';
-import type { ExtensionContext } from '@mariozechner/pi-coding-agent';
+import type { ExtensionContext } from '@earendil-works/pi-coding-agent';
 import type { AgentRegistration, Dirs, MessengerState } from '../../lib.js';
 
 const roots = new Set<string>();
@@ -20,11 +20,9 @@ export function createMessengerFixture(prefix = 'pi-messenger-fixture-'): Messen
   const dirs: Dirs = {
     base,
     registry: path.join(base, 'registry'),
-    inbox: path.join(base, 'inbox'),
   };
 
   fs.mkdirSync(dirs.registry, { recursive: true });
-  fs.mkdirSync(dirs.inbox, { recursive: true });
 
   return { cwd, dirs };
 }
@@ -56,10 +54,10 @@ export function createState(
     customStatus: false,
     registryFlushTimer: null,
     sessionStartedAt: new Date().toISOString(),
-    contextSessionId: undefined,
-    currentChannel: 'general',
-    sessionChannel: 'general',
-    joinedChannels: ['general', 'memory', 'heartbeat'],
+    contextSessionId: overrides.contextSessionId ?? 'test-session-default',
+    currentChannel: overrides.currentChannel ?? 'test-channel',
+    sessionChannel: overrides.sessionChannel ?? 'test-channel',
+    joinedChannels: overrides.joinedChannels ?? ['test-channel', 'memory'],
     ...overrides,
   };
 }

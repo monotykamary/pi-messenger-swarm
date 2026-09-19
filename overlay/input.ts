@@ -1,9 +1,10 @@
-import { matchesKey, type TUI } from '@mariozechner/pi-tui';
+import { matchesKey, type TUI } from '@earendil-works/pi-tui';
 import type { Dirs, MessengerState } from '../lib.js';
-import * as swarmStore from '../swarm/store.js';
-import { listSpawned } from '../swarm/spawn.js';
+import * as taskStore from '../swarm/task-store.js';
+import { listSpawned, listSpawnedHistory } from '../swarm/spawn.js';
 import type { SwarmTask as Task } from '../swarm/types.js';
-import { getFeedLineCount, readFeedEventsByRange } from '../feed.js';
+import { getFeedLineCount, readFeedEventsByRange } from '../feed/index.js';
+import { getEffectiveSessionId } from '../store/shared.js';
 import {
   calculateVisibleRange,
   isAtBottom,
@@ -11,15 +12,15 @@ import {
   jumpToTop,
   scrollDown,
   scrollUp,
-} from '../feed-scroll.js';
+} from '../feed/scroll.js';
 import {
   handleBlockReasonInput,
   handleConfirmInput,
   handleMessageInput,
   handleTaskKeyBinding,
   type MessengerViewState,
-} from '../overlay-actions.js';
-import { navigateSwarm, navigateTask } from '../overlay-render.js';
+} from './actions.js';
+import { navigateSwarm, navigateTask } from './render-exports.js';
 
 const FEED_GG_LOAD_SIZE = 100;
 
@@ -53,6 +54,7 @@ export interface OverlayInputParams {
   ) => number;
   ensureFeedWindowInitialized: (channelId: string, totalFeedLines: number) => void;
   getRenderedFeedLineCount: (sectionWidth: number) => number;
+  termRows: number;
 }
 
 export function handleOverlayInput({
@@ -72,6 +74,7 @@ export function handleOverlayInput({
   estimateFeedViewportHeight,
   ensureFeedWindowInitialized,
   getRenderedFeedLineCount,
+  termRows,
 }: OverlayInputParams): void {
   cancelCompletionTimer();
 
@@ -80,12 +83,20 @@ export function handleOverlayInput({
   }
 
   if (viewState.confirmAction) {
-    handleConfirmInput(data, viewState, cwd, state.agentName, currentChannel(), tui);
+    handleConfirmInput(
+      data,
+      viewState,
+      cwd,
+      state.agentName,
+      currentChannel(),
+      getEffectiveSessionId(cwd, state),
+      tui
+    );
     return;
   }
 
   if (viewState.inputMode === 'block-reason') {
-    const tasks = swarmStore.getTasks(cwd, currentChannel());
+    const tasks = taskStore.getTasks(cwd, getEffectiveSessionId(cwd, state));
     const task = tasks[viewState.selectedTaskIndex];
     handleBlockReasonInput(
       data,
@@ -94,6 +105,7 @@ export function handleOverlayInput({
       task as Task | undefined,
       state.agentName,
       currentChannel(),
+      getEffectiveSessionId(cwd, state),
       tui
     );
     return;
@@ -157,9 +169,9 @@ export function handleOverlayInput({
 
   const channelId = currentChannel();
   const totalFeedLines = getFeedLineCount(cwd, channelId);
-  const termRows = process.stdout.rows ?? 24;
+  // termRows comes from the overlay's capped height
   const sectionWidth = width - 4;
-  const taskList = swarmStore.getTasks(cwd, channelId);
+  const taskList = taskStore.getTasks(cwd, getEffectiveSessionId(cwd, state));
   const feedHeight = estimateFeedViewportHeight(
     termRows,
     sectionWidth,
@@ -235,8 +247,8 @@ export function handleOverlayInput({
     viewState.pendingG = false;
   }
 
-  const tasks = swarmStore.getTasks(cwd, currentChannel());
-  const spawned = listSpawned(cwd);
+  const tasks = taskStore.getTasks(cwd, getEffectiveSessionId(cwd, state));
+  const spawned = listSpawnedHistory(cwd, getEffectiveSessionId(cwd, state));
   const task = tasks[viewState.selectedTaskIndex];
   const swarmAgent = spawned[viewState.selectedSwarmIndex];
 
@@ -378,6 +390,7 @@ export function handleOverlayInput({
       cwd,
       state.agentName,
       currentChannel(),
+      getEffectiveSessionId(cwd, state),
       tui
     );
   }

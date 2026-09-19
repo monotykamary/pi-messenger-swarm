@@ -1,12 +1,15 @@
-import type { ExtensionContext } from '@mariozechner/pi-coding-agent';
+import type { ExtensionContext } from '@earendil-works/pi-coding-agent';
 import type { Dirs, MessengerState } from '../lib.js';
 import { agentHasTask, computeStatus } from '../lib.js';
+import { displayChannelLabel } from '../channel.js';
+import { syncChannelStateFromDisk } from '../store/agents.js';
 import type { MessengerConfig } from '../config.js';
 import * as store from '../store.js';
-import * as swarmStore from '../swarm/store.js';
-import { logFeedEvent } from '../feed.js';
+import * as taskStore from '../swarm/task-store.js';
+import { logFeedEvent } from '../feed/index.js';
 import { getLiveWorkers } from '../swarm/live-progress.js';
 import { getRunningSpawnCount } from '../swarm/spawn.js';
+import { getEffectiveSessionId } from '../store/shared.js';
 
 interface StatusControllerOptions {
   state: MessengerState;
@@ -28,17 +31,14 @@ export function createStatusController({
 
     const thresholdMs = config.stuckThreshold * 1000;
     const peers = store.getActiveAgents(state, dirs);
-    const allClaims = store.getClaims(dirs);
+    const cwd = ctx.cwd ?? process.cwd();
+    const sessionId = getEffectiveSessionId(cwd, state);
+    const sessionTasks = taskStore.getTasks(cwd, sessionId);
 
     const currentlyStuck = new Set<string>();
 
     for (const agent of peers) {
-      const agentChannel = agent.currentChannel ?? agent.sessionChannel ?? state.currentChannel;
-      const hasTask = agentHasTask(
-        agent.name,
-        allClaims,
-        swarmStore.getTasks(agent.cwd, agentChannel)
-      );
+      const hasTask = agentHasTask(agent.name, sessionTasks);
       const computed = computeStatus(
         agent.activity?.lastActivityAt ?? agent.startedAt,
         hasTask,
@@ -51,6 +51,7 @@ export function createStatusController({
 
         if (!notifiedStuck.has(agent.name)) {
           notifiedStuck.add(agent.name);
+          const agentChannel = agent.currentChannel || agent.sessionChannel || state.currentChannel;
           logFeedEvent(
             ctx.cwd ?? process.cwd(),
             agent.name,
@@ -76,6 +77,10 @@ export function createStatusController({
 
   function updateStatus(ctx: ExtensionContext): void {
     if (!ctx.hasUI || !state.registered) return;
+
+    // Sync channel state from disk so CLI changes (join, switch)
+    // are visible in the status bar without restarting the session.
+    syncChannelStateFromDisk(state, dirs);
 
     checkStuckAgents(ctx);
 
@@ -107,7 +112,7 @@ export function createStatusController({
       ? theme.fg('dim', ` · ${state.activity.currentActivity}`)
       : '';
 
-    const swarmSummary = swarmStore.getSummary(cwd, state.currentChannel);
+    const swarmSummary = taskStore.getSummary(cwd, getEffectiveSessionId(cwd, state));
     const taskStr =
       swarmSummary.total > 0
         ? theme.fg('accent', ` ☑ ${swarmSummary.done}/${swarmSummary.total} tasks`)
@@ -118,9 +123,11 @@ export function createStatusController({
     const workerCount = Math.max(runningSpawn, runningLive);
     const spawnStr = workerCount > 0 ? theme.fg('dim', ` 🔨${workerCount}`) : '';
 
+    const channelStr = theme.fg('dim', ` ${displayChannelLabel(state.currentChannel)}`);
+
     ctx.ui.setStatus(
       'messenger',
-      `msg: ${nameStr}${countStr}${unreadStr}${activityStr}${taskStr}${spawnStr}`
+      `msg: ${nameStr}${channelStr}${countStr}${unreadStr}${activityStr}${taskStr}${spawnStr}`
     );
 
     maybeAutoOpenSwarmOverlay?.(ctx);
