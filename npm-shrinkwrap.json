@@ -7,7 +7,6 @@
     "": {
       "name": "pi-messenger-swarm",
       "version": "0.25.20",
-      "hasInstallScript": true,
       "license": "MIT",
       "bin": {
         "pi-messenger-swarm": "dist/harness/cli.js"
