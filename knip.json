@@ -1,6 +1,5 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "entry": ["index.ts", "handlers.ts", "store.ts", "harness/server.ts", "harness/cli.ts"],
-  "ignoreExportsUsedInFile": true,
-  "ignore": ["dist/**"]
+  "ignoreExportsUsedInFile": true
 }

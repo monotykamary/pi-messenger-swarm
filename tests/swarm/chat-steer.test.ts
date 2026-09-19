@@ -14,14 +14,12 @@ vi.mock('@earendil-works/pi-tui', () => ({
 const mocks = vi.hoisted(() => ({
   sendMessageToAgent: vi.fn(),
   getActiveAgents: vi.fn(),
-  resolveTargetChannel: vi.fn(),
   logFeedEvent: vi.fn(),
 }));
 
 vi.mock('../../store.js', () => ({
   sendMessageToAgent: mocks.sendMessageToAgent,
   getActiveAgents: mocks.getActiveAgents,
-  resolveTargetChannel: mocks.resolveTargetChannel,
 }));
 
 vi.mock('../../swarm/live-progress.js', () => ({
@@ -66,7 +64,6 @@ describe('overlay chat steering behavior', () => {
   beforeEach(() => {
     mocks.sendMessageToAgent.mockReset();
     mocks.getActiveAgents.mockReset();
-    mocks.resolveTargetChannel.mockReset();
     mocks.logFeedEvent.mockReset();
   });
 

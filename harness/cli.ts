@@ -817,7 +817,16 @@ Environment:
           break;
         }
         default: {
-          process.stderr.write(`Unknown task subcommand: ${sub}\n`);
+          if (sub === undefined) {
+            process.stderr.write(
+              'Usage: pi-messenger-swarm task <subcommand>\n' +
+                '  list | ready | show <id> | create | claim <id> | unclaim <id>\n' +
+                '  progress <id> <msg> | done <id> <summary> | block <id> | unblock <id>\n' +
+                '  reset <id> [--cascade] | archive-done\n'
+            );
+          } else {
+            process.stderr.write(`Unknown task subcommand: ${sub}\n`);
+          }
           process.exit(1);
         }
       }

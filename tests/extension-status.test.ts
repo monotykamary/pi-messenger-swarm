@@ -51,7 +51,6 @@ describe('extension status controller', () => {
     taskStore.createTask(cwd, TEST_SESSION, { title: 'Task' }, 'general');
 
     const setStatus = vi.fn();
-    const maybeAutoOpenSwarmOverlay = vi.fn();
     const ctx = {
       hasUI: true,
       cwd,
@@ -67,7 +66,6 @@ describe('extension status controller', () => {
       state,
       dirs,
       config: baseConfig,
-      maybeAutoOpenSwarmOverlay,
     });
 
     controller.updateStatus(ctx);
@@ -77,6 +75,5 @@ describe('extension status controller', () => {
       'messenger',
       expect.stringContaining('msg: AgentA #general (1 peer) ●1 · editing index.ts ☑ 0/1 tasks')
     );
-    expect(maybeAutoOpenSwarmOverlay).toHaveBeenCalledWith(ctx);
   });
 });
