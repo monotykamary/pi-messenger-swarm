@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   getAgentPreferredChannel: vi.fn(
     (reg: { currentChannel?: string }) => reg.currentChannel ?? 'unknown'
   ),
+  getChannel: vi.fn(),
 }));
 
 vi.mock('../feed/index.js', () => ({
@@ -16,6 +17,11 @@ vi.mock('../store/agents.js', () => ({
   getActiveAgents: mocks.getActiveAgents,
   getAgentPreferredChannel: mocks.getAgentPreferredChannel,
 }));
+
+vi.mock('../channel.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../channel.js')>();
+  return { ...actual, getChannel: mocks.getChannel };
+});
 
 import { handleHashInput } from '../extension/handle-input.js';
 import type { MessengerState, Dirs } from '../lib.js';
@@ -40,6 +46,8 @@ describe('handleHashInput', () => {
 
   beforeEach(() => {
     mocks.logFeedEvent.mockReset();
+    mocks.getChannel.mockReset();
+    mocks.getChannel.mockReturnValue(null);
     mocks.getActiveAgents.mockReset();
     mocks.getAgentPreferredChannel.mockReset();
     notify.mockReset();
@@ -175,6 +183,9 @@ describe('handleHashInput', () => {
 
     it('handles multi-word messages', () => {
       mocks.getActiveAgents.mockReturnValue([]);
+      mocks.getChannel.mockImplementation((_dirs: unknown, id: string) =>
+        id === 'dev' ? { id: 'dev' } : null
+      );
 
       handleHashInput('#dev please review this PR', makeState(), makeDirs(), '/cwd', notify);
 
@@ -192,6 +203,42 @@ describe('handleHashInput', () => {
       const result = handleHashInput('#inval!d hi', makeState(), makeDirs(), '/cwd', notify);
       expect(result).toEqual({ action: 'continue' });
       expect(mocks.logFeedEvent).not.toHaveBeenCalled();
+    });
+
+    it('passes through unknown targets so hashtag prompts reach the model', () => {
+      mocks.getActiveAgents.mockReturnValue([]);
+
+      const result = handleHashInput(
+        '#define the interface first',
+        makeState(),
+        makeDirs(),
+        '/cwd',
+        notify
+      );
+
+      expect(result).toEqual({ action: 'continue' });
+      expect(mocks.logFeedEvent).not.toHaveBeenCalled();
+      expect(notify).toHaveBeenCalledWith(
+        'No channel or agent #define — sent as a prompt instead',
+        'warning'
+      );
+    });
+
+    it('routes an agent mention to the agent preferred channel', () => {
+      mocks.getActiveAgents.mockReturnValue([{ name: 'CoralFox', currentChannel: 'paper-tiger' }]);
+
+      const result = handleHashInput('#coral-fox hello', makeState(), makeDirs(), '/cwd', notify);
+
+      expect(result).toEqual({ action: 'handled' });
+      expect(mocks.logFeedEvent).toHaveBeenCalledWith(
+        '/cwd',
+        'TrueLion',
+        'message',
+        undefined,
+        'hello',
+        'paper-tiger'
+      );
+      expect(notify).toHaveBeenCalledWith('Sent to #paper-tiger', 'info');
     });
   });
 });

@@ -1,9 +1,38 @@
 import type { Dirs, MessengerState } from '../lib.js';
-import { normalizeChannelId, isValidChannelId } from '../channel.js';
+import {
+  agentNameToChannelId,
+  getChannel,
+  isValidChannelId,
+  normalizeChannelId,
+} from '../channel.js';
 import { logFeedEvent } from '../feed/index.js';
 import { getActiveAgents, getAgentPreferredChannel } from '../store/agents.js';
 
 export type InputHandlerResult = { action: 'continue' } | { action: 'handled' };
+
+/**
+ * Resolve a typed channel target to a real destination: an existing channel, a
+ * channel this session has joined, or an active agent addressed by its
+ * kebab-cased name. Returns undefined when nothing matches, so the caller can
+ * leave the text alone instead of swallowing a prompt that happens to start
+ * with a hashtag.
+ */
+function resolveTargetChannelId(
+  channelId: string,
+  state: MessengerState,
+  dirs: Dirs
+): string | undefined {
+  if (getChannel(dirs, channelId)) return channelId;
+  if (state.joinedChannels?.includes(channelId)) return channelId;
+
+  for (const agent of getActiveAgents(state, dirs)) {
+    if (agentNameToChannelId(agent.name) === channelId) {
+      return getAgentPreferredChannel(agent) || channelId;
+    }
+  }
+
+  return undefined;
+}
 
 /**
  * Handle `#channel message` or `#all message` input from the human user.
@@ -51,11 +80,19 @@ export function handleHashInput(
     return { action: 'handled' };
   }
 
-  // Specific named channel: #memory, #general, etc.
+  // Specific named channel or agent: #memory, #coral-fox, etc. Only consume
+  // input that resolves to a real destination — a prompt may legitimately
+  // start with a hashtag (e.g. "#define the interface first").
   const channelId = normalizeChannelId(`#${channelPart}`);
   if (!isValidChannelId(channelId)) return { action: 'continue' };
 
-  logFeedEvent(cwd, state.agentName, 'message', undefined, message, channelId);
-  notify(`Sent to #${channelId}`, 'info');
+  const targetChannel = resolveTargetChannelId(channelId, state, dirs);
+  if (targetChannel === undefined) {
+    notify(`No channel or agent #${channelId} — sent as a prompt instead`, 'warning');
+    return { action: 'continue' };
+  }
+
+  logFeedEvent(cwd, state.agentName, 'message', undefined, message, targetChannel);
+  notify(`Sent to #${targetChannel}`, 'info');
   return { action: 'handled' };
 }
