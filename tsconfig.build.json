@@ -12,7 +12,8 @@
     "outDir": "dist",
     "rootDir": ".",
     "declaration": false,
-    "sourceMap": false
+    "sourceMap": false,
+    "types": ["node"]
   },
   "include": [
     "*.ts",
