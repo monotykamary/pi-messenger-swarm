@@ -1,5 +1,6 @@
 allowBuilds:
   '@google/genai': false
+  esbuild: true
   protobufjs: false
   simple-git-hooks: false
 minimumReleaseAgeExclude:
