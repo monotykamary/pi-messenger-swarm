@@ -2,3 +2,10 @@ allowBuilds:
   '@google/genai': false
   protobufjs: false
   simple-git-hooks: false
+minimumReleaseAgeExclude:
+  - '@earendil-works/chord@0.87.0'
+  - '@earendil-works/pi-agent-core@0.87.0'
+  - '@earendil-works/pi-ai@0.87.0'
+  - '@earendil-works/pi-coding-agent@0.87.0'
+  - '@earendil-works/pi-telemetry@0.87.0'
+  - '@earendil-works/pi-tui@0.87.0'
