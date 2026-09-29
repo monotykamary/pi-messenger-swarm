@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## 0.26.4
+
+- Validate against Pi 0.99.0, including an offline real-host package-loading probe.
+- Declare imported host packages as wildcard peers and pin development dependencies to Pi 0.99.0.
+
 ### [0.25.20](https://github.com/monotykamary/pi-messenger-swarm/compare/v0.25.19...v0.25.20) (2026-06-04)
 
 
