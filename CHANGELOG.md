@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## 0.26.5
+
+- Validate against Pi 1.0.0 with pinned development dependencies and host-provided wildcard peers.
+- Exercise real Pi headless startup, public command registration, and shutdown in an isolated offline workspace without starting a shared daemon.
+
 ## 0.26.4
 
 - Validate against Pi 0.99.0, including an offline real-host package-loading probe.
