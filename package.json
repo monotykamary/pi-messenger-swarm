@@ -54,7 +54,7 @@
     "lint:dead": "knip --no-gitignore",
     "release": "standard-version",
     "release:dry-run": "standard-version --dry-run",
-    "prepare": "simple-git-hooks",
+    "prepare": "simple-git-hooks 2>/dev/null || true",
     "test:pi": "node scripts/test-pi-compat.mjs"
   },
   "simple-git-hooks": {
