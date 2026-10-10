@@ -1,12 +1,12 @@
 {
   "name": "pi-messenger-swarm",
-  "version": "0.26.6",
+  "version": "0.26.7",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
       "name": "pi-messenger-swarm",
-      "version": "0.26.6",
+      "version": "0.26.7",
       "license": "MIT",
       "bin": {
         "pi-messenger-swarm": "dist/harness/cli.js"

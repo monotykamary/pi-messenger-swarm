@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## 0.26.7
+
+- Resolve a channel's session from `PI_MESSENGER_DIR` / `PI_MESSENGER_GLOBAL`, so spawned `--no-session` subagents find and claim the parent's tasks (#8).
+- README: architecture and task lifecycle diagrams (#9); install through `npm:` package sources instead of git (#10).
+- CI: merge `minimumReleaseAgeExclude` entries per package so frozen installs honor every pinned Pi version.
+
 ## 0.26.5
 
 - Validate against Pi 1.0.0 with pinned development dependencies and host-provided wildcard peers.
