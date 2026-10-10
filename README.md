@@ -62,6 +62,26 @@ Spawn a specialized subagent:
 pi-messenger-swarm spawn --role "Packaging Gap Analyst" --persona "Skeptical market researcher" "Find productization gaps in idea aggregation tools"
 ```
 
+## How It Fits Together
+
+```mermaid
+flowchart LR
+  subgraph session["pi session"]
+    model["model"] -->|bash| cli["pi-messenger-swarm CLI"]
+    ext["extension<br/>(registration, status bar, /messenger overlay)"]
+  end
+  cli -->|"HTTP POST /action"| harness["harness server<br/>(127.0.0.1:9877 by default)"]
+  ext -->|starts if needed| harness
+  harness -->|"read / append"| state[(".pi/messenger/<br/>channels · tasks · agents · registry")]
+  ext -->|"register / read feeds"| state
+  harness -->|spawn| sub["subagent<br/>pi --mode json --no-session"]
+  sub -->|"same CLI, inherited #channel"| harness
+```
+
+- Models talk to the swarm through the `pi-messenger-swarm` CLI; there is no eagerly invoked tool.
+- The harness server is started on demand and dispatches every action; all state is plain files under `.pi/messenger/` (see [Storage Layout](#storage-layout)).
+- Spawned subagents inherit the parent's channel, so they share its feed and task board.
+
 ## Channel Model
 
 Pi Messenger is now **channel-first**.
@@ -141,6 +161,20 @@ If Pi switches or resumes sessions inside the same live messenger instance, mess
 - `task.reset` (`cascade: true` supported)
 - `task.delete`
 - `task.archive_done` (moves completed tasks to `.pi/messenger/archive/<channel>/...`)
+
+```mermaid
+stateDiagram-v2
+  [*] --> todo: task.create
+  todo --> in_progress: task.claim
+  in_progress --> todo: task.unclaim
+  in_progress --> done: task.done
+  todo --> blocked: task.block
+  in_progress --> blocked: task.block
+  blocked --> todo: task.unblock (unclaimed)
+  blocked --> in_progress: task.unblock (claimed)
+  done --> archived: task.archive_done
+  note right of todo: task.reset returns any task to todo
+```
 
 Compatibility aliases:
 
