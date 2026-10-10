@@ -27,7 +27,11 @@ import {
 } from './lib.js';
 import { displayChannelLabel } from './channel.js';
 import * as store from './store.js';
-import { getContextSessionId, getEffectiveSessionId } from './store/shared.js';
+import {
+  getContextSessionId,
+  getEffectiveSessionId,
+  resolveMessengerBaseDir,
+} from './store/shared.js';
 import { syncChannelStateFromDisk } from './store/agents.js';
 import { MessengerOverlay, type OverlayCallbacks } from './overlay/component.js';
 import { MessengerConfigOverlay } from './overlay/config-overlay.js';
@@ -81,11 +85,7 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
   const nameTheme = { theme: config.nameTheme, customWords: config.nameWords };
 
   function getMessengerDirs(): Dirs {
-    const baseDir =
-      process.env.PI_MESSENGER_DIR ||
-      (process.env.PI_MESSENGER_GLOBAL === '1'
-        ? join(getAgentDir(), 'messenger')
-        : join(process.cwd(), '.pi/messenger'));
+    const baseDir = resolveMessengerBaseDir(process.cwd());
     return {
       base: baseDir,
       registry: join(baseDir, 'registry'),

@@ -18,7 +18,6 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { getAgentDir } from '@earendil-works/pi-coding-agent';
 import { join } from 'node:path';
 import * as fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -33,7 +32,12 @@ import {
   getChannelsDir,
   patchChannelSessionId,
 } from '../channel.js';
-import { ensureDirSync, getGitBranch, normalizeCwd } from '../store/shared.js';
+import {
+  ensureDirSync,
+  getGitBranch,
+  normalizeCwd,
+  resolveMessengerBaseDir,
+} from '../store/shared.js';
 import {
   stopAllSpawned,
   forceKillAllSpawned,
@@ -46,11 +50,7 @@ import {
 
 function getMessengerDirs(cwd?: string): Dirs {
   const effectiveCwd = cwd ?? process.env.PI_MESSENGER_CWD ?? process.cwd();
-  const baseDir =
-    process.env.PI_MESSENGER_DIR ||
-    (process.env.PI_MESSENGER_GLOBAL === '1'
-      ? join(getAgentDir(), 'messenger')
-      : join(normalizeCwd(effectiveCwd), '.pi/messenger'));
+  const baseDir = resolveMessengerBaseDir(normalizeCwd(effectiveCwd));
   return {
     base: baseDir,
     registry: join(baseDir, 'registry'),

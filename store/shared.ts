@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import { execSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import type { ExtensionContext } from '@earendil-works/pi-coding-agent';
+import { getAgentDir } from '@earendil-works/pi-coding-agent';
 import type { AgentRegistration, Dirs, MessengerState } from '../lib.js';
 import { isProcessAlive } from '../lib.js';
 import {
@@ -87,12 +88,21 @@ export function getContextSessionId(ctx: ExtensionContext): string {
 }
 
 /**
- * Read a channel's sessionId from the project-scoped location.
- * Returns null if channel doesn't exist or has no sessionId.
+ * Resolve the messenger state root for a project, in the documented order:
+ * 1. `PI_MESSENGER_DIR` (custom location)
+ * 2. `PI_MESSENGER_GLOBAL=1` (legacy global `<agentDir>/messenger`)
+ * 3. project-scoped `<cwd>/.pi/messenger` (default)
  */
-export function getProjectChannelSessionId(cwd: string, channelId: string): string | null {
-  const normalized = normalizeChannelId(channelId);
-  const channelPath = join(cwd, '.pi', 'messenger', 'channels', `${normalized}.jsonl`);
+export function resolveMessengerBaseDir(cwd: string): string {
+  return (
+    process.env.PI_MESSENGER_DIR ||
+    (process.env.PI_MESSENGER_GLOBAL === '1'
+      ? join(getAgentDir(), 'messenger')
+      : join(cwd, '.pi', 'messenger'))
+  );
+}
+
+function readChannelHeaderSessionId(channelPath: string): string | null {
   try {
     if (!fs.existsSync(channelPath)) return null;
     const content = fs.readFileSync(channelPath, 'utf-8');
@@ -104,6 +114,24 @@ export function getProjectChannelSessionId(cwd: string, channelId: string): stri
     }
   } catch {
     // Fall through
+  }
+  return null;
+}
+
+/**
+ * Read a channel's sessionId from the messenger root that channels are
+ * written to (honouring `PI_MESSENGER_DIR` / `PI_MESSENGER_GLOBAL`), falling
+ * back to the project-scoped `<cwd>/.pi/messenger` location.
+ * Returns null if channel doesn't exist or has no sessionId.
+ */
+export function getProjectChannelSessionId(cwd: string, channelId: string): string | null {
+  const normalized = normalizeChannelId(channelId);
+  const file = `${normalized}.jsonl`;
+  const configured = join(resolveMessengerBaseDir(cwd), 'channels', file);
+  const projectScoped = join(cwd, '.pi', 'messenger', 'channels', file);
+  for (const channelPath of new Set([configured, projectScoped])) {
+    const sessionId = readChannelHeaderSessionId(channelPath);
+    if (sessionId) return sessionId;
   }
   return null;
 }
