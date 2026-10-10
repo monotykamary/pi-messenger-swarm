@@ -33,15 +33,15 @@ From npm:
 pi install npm:pi-messenger-swarm
 ```
 
-From git (Pi package settings):
+From Pi package settings (append `@X.Y.Z` to pin a version):
 
 ```json
 {
-  "packages": ["https://github.com/monotykamary/pi-messenger-swarm@main"]
+  "packages": ["npm:pi-messenger-swarm"]
 }
 ```
 
-> Tip: after release tags are published, pin to a version tag instead of `main` (for example `@vX.Y.Z`).
+> Installing straight from the git repository is not supported: Pi loads the compiled `dist/`, which is built at publish time and not committed.
 
 ## Quick Start
 
