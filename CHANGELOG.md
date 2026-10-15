@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## 0.26.8
+
+- Pin Pi SDK development dependencies to 1.2.0 while retaining wildcard host peers; verify real manifest loading, lifecycle and native/bundled Pi hosts offline.
+
 ## 0.26.7
 
 - Resolve a channel's session from `PI_MESSENGER_DIR` / `PI_MESSENGER_GLOBAL`, so spawned `--no-session` subagents find and claim the parent's tasks (#8).
