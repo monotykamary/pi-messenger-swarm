@@ -45,6 +45,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
+          # package.json names pnpm, which is not installed; Bun does the installing.
+          package-manager-cache: false
 
       - uses: oven-sh/setup-bun@v2
 
