@@ -1,0 +1,113 @@
+name: Publish
+
+# Releases of pi-messenger-swarm go out from here, and only from here.
+#
+#   1. Bump "version" in package.json (the `chore(release): X.Y.Z` commit).
+#   2. Push it to main. This workflow publishes every version that npm does
+#      not have yet; any other push is a no-op.
+#
+# Run it from the Actions tab to retry a failed release, or tick "dry_run" to
+# build, check and pack without publishing.
+#
+# Auth is npm Trusted Publishing (OIDC): npm trusts this file, so no npm token
+# is stored anywhere. Registered once with
+#   npm trust github pi-messenger-swarm --repo monotykamary/pi-messenger-swarm --file publish.yml --allow-publish
+#
+# Bun installs and packs exactly as `bun publish` does; npm uploads the
+# tarballs because only the npm CLI speaks trusted publishing.
+
+on:
+  push:
+    branches: [main]
+    paths: [package.json]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build, check and pack, but do not publish
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Find versions npm does not have
+        id: release
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          specs=$(
+          node -p "const p = require('./package.json'); p.name + '@' + p.version"
+          )
+          missing=""
+          for spec in $specs; do
+            # npm runs from outside the checkout so the repo's devEngines do not apply.
+            if (cd "$RUNNER_TEMP" && npm view "$spec" version >/dev/null 2>&1); then
+              echo "$spec is already on npm"
+            else
+              missing="$missing $spec"
+            fi
+          done
+          if [ "$DRY_RUN" = "true" ]; then
+            mode=dry-run
+          elif [ -n "$missing" ]; then
+            mode=publish
+            echo "::notice::Publishing$missing"
+          else
+            mode=skip
+            echo "::notice::Nothing to publish"
+          fi
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        if: steps.release.outputs.mode != 'skip'
+        run: bun install --frozen-lockfile
+
+      - name: Check
+        if: steps.release.outputs.mode != 'skip'
+        run: bun run typecheck
+
+      - name: Pack
+        if: steps.release.outputs.mode != 'skip'
+        run: |
+          bun run --if-present prepublishOnly
+          bun pm pack --destination "$RUNNER_TEMP/pack"
+
+      - name: Publish
+        if: steps.release.outputs.mode != 'skip'
+        env:
+          MODE: ${{ steps.release.outputs.mode }}
+        run: |
+          # Trusted publishing needs npm 11.5.1 or newer.
+          npm install --global npm@latest
+          cd "$RUNNER_TEMP"
+          for tarball in pack/*.tgz; do
+            spec=$(tar -xOzf "$tarball" package/package.json | node -p "const p = JSON.parse(require('fs').readFileSync(0, 'utf8')); p.name + '@' + p.version")
+            echo "::group::$spec"
+            tar -tzf "$tarball"
+            echo "::endgroup::"
+            if [ "$MODE" = "dry-run" ]; then
+              echo "Dry run: not publishing $spec"
+            elif npm view "$spec" version >/dev/null 2>&1; then
+              echo "$spec is already on npm"
+            else
+              npm publish "$tarball" --access public --provenance
+            fi
+          done
