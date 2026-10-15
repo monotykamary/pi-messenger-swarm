@@ -100,7 +100,8 @@ jobs:
           # Trusted publishing needs npm 11.5.1 or newer.
           npm install --global npm@latest
           cd "$RUNNER_TEMP"
-          for tarball in pack/*.tgz; do
+          # ./ keeps npm from reading pack/name.tgz as a GitHub repo shorthand.
+          for tarball in ./pack/*.tgz; do
             spec=$(tar -xOzf "$tarball" package/package.json | node -p "const p = JSON.parse(require('fs').readFileSync(0, 'utf8')); p.name + '@' + p.version")
             echo "::group::$spec"
             tar -tzf "$tarball"
