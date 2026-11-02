@@ -43,6 +43,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Dead code
+        run: pnpm lint:dead
+
+      - name: Build published entrypoints
+        run: pnpm build
+
+      - name: Pi host lifecycle
+        run: pnpm test:pi
+
       - name: Run tests
         run: pnpm test
 

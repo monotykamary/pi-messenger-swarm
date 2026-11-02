@@ -13,8 +13,8 @@ name: Publish
 # is stored anywhere. Registered once with
 #   npm trust github pi-messenger-swarm --repo monotykamary/pi-messenger-swarm --file publish.yml --allow-publish
 #
-# Bun installs and packs exactly as `bun publish` does; npm uploads the
-# tarballs because only the npm CLI speaks trusted publishing.
+# The pinned pnpm installs, builds and packs; npm uploads the tarballs
+# because only the npm CLI speaks trusted publishing.
 
 on:
   push:
@@ -45,10 +45,9 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
-          # package.json names pnpm, which is not installed; Bun does the installing.
           package-manager-cache: false
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: pnpm/action-setup@v4
 
       - name: Find versions npm does not have
         id: release
@@ -80,17 +79,17 @@ jobs:
 
       - name: Install dependencies
         if: steps.release.outputs.mode != 'skip'
-        run: bun install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Check
         if: steps.release.outputs.mode != 'skip'
-        run: bun run typecheck
+        run: pnpm typecheck && pnpm lint:dead && pnpm test && pnpm build && pnpm test:pi
 
       - name: Pack
         if: steps.release.outputs.mode != 'skip'
         run: |
-          bun run --if-present prepublishOnly
-          bun pm pack --destination "$RUNNER_TEMP/pack"
+          pnpm build
+          pnpm pack --pack-destination "$RUNNER_TEMP/pack"
 
       - name: Publish
         if: steps.release.outputs.mode != 'skip'

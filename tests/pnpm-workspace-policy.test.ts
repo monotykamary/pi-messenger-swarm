@@ -58,9 +58,16 @@ describe('pnpm-workspace.yaml supply-chain policy', () => {
       (entry, index) => entries.findIndex((e) => e.name === entry.name) === index
     );
     expect(honoured.length).toBeGreaterThan(0);
-    for (const { name, versions } of honoured) {
-      // Only check packages that the lockfile actually resolves at the pinned host version.
-      if (!LOCKFILE.includes(`${name}@${piVersion}`)) continue;
+    const pinnedPackages = new Set(
+      [...LOCKFILE.matchAll(/(@earendil-works\/[^@'\s]+)@(\d+\.\d+\.\d+)/g)]
+        .filter((match) => match[2] === piVersion)
+        .map((match) => match[1])
+    );
+    expect(pinnedPackages).toContain('@earendil-works/pi-coding-agent');
+    // Start from the lock, not the allowlist: new host packages must not slip
+    // through just because they have no exclusion yet (for example pi-schema).
+    for (const name of pinnedPackages) {
+      const versions = honoured.find((entry) => entry.name === name)?.versions ?? [];
       expect(versions, `${name} must exclude the pinned ${piVersion}`).toContain(piVersion);
     }
   });
