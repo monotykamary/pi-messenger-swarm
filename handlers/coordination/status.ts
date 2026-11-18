@@ -58,16 +58,25 @@ export function executeStatus(state: MessengerState, dirs: Dirs, cwd: string = p
 export function executeSetStatus(
   state: MessengerState,
   dirs: Dirs,
-  ctx: ExtensionContext,
+  _ctx: ExtensionContext,
   message: string
 ) {
   if (!state.registered) {
     return notRegisteredError();
   }
 
+  const saved = store.mutateOwnedRegistration(state, dirs, (reg) => {
+    reg.statusMessage = message;
+    reg.customStatus = true;
+    return true;
+  });
+  if (!saved)
+    return result('Could not set status.', {
+      mode: 'set_status',
+      error: 'registration_write_failed',
+    });
   state.statusMessage = message;
   state.customStatus = true;
-  store.updateRegistration(state, dirs, ctx);
 
   return result(`Status set to: ${message}`, { mode: 'set_status', message });
 }

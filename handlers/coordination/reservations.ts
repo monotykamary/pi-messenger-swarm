@@ -6,7 +6,7 @@ import { notRegisteredError, result } from '../result.js';
 export function executeReserve(
   state: MessengerState,
   dirs: Dirs,
-  ctx: ExtensionContext,
+  _ctx: ExtensionContext,
   paths: string[],
   reason?: string
 ) {
@@ -26,15 +26,17 @@ export function executeReserve(
     });
   }
 
-  for (const pattern of paths) {
-    state.reservations.push({
-      pattern,
-      reason,
-      since: new Date().toISOString(),
+  const saved = store.mutateReservations(state, dirs, (reservations) => {
+    for (const pattern of paths) {
+      reservations.push({ pattern, reason, since: new Date().toISOString() });
+    }
+    return true;
+  });
+  if (!saved)
+    return result('Could not update reservations.', {
+      mode: 'reserve',
+      error: 'registration_write_failed',
     });
-  }
-
-  store.updateRegistration(state, dirs, ctx);
 
   const lines = ['Reserved paths:', ...paths.map((p) => `  - ${p}`)];
   if (reason) lines.push(`Reason: ${reason}`);
@@ -45,7 +47,7 @@ export function executeReserve(
 export function executeRelease(
   state: MessengerState,
   dirs: Dirs,
-  ctx: ExtensionContext,
+  _ctx: ExtensionContext,
   paths: string[] | true
 ) {
   if (!state.registered) {
@@ -55,23 +57,28 @@ export function executeRelease(
   const released: string[] = [];
   const notFound: string[] = [];
 
-  if (paths === true) {
-    // Release all reservations
-    released.push(...state.reservations.map((r) => r.pattern));
-    state.reservations.length = 0;
-  } else {
-    for (const pattern of paths) {
-      const idx = state.reservations.findIndex((r) => r.pattern === pattern);
-      if (idx >= 0) {
-        state.reservations.splice(idx, 1);
-        released.push(pattern);
-      } else {
-        notFound.push(pattern);
+  const saved = store.mutateReservations(state, dirs, (reservations) => {
+    if (paths === true) {
+      released.push(...reservations.map((r) => r.pattern));
+      reservations.length = 0;
+    } else {
+      for (const pattern of paths) {
+        const idx = reservations.findIndex((r) => r.pattern === pattern);
+        if (idx >= 0) {
+          reservations.splice(idx, 1);
+          released.push(pattern);
+        } else {
+          notFound.push(pattern);
+        }
       }
     }
-  }
-
-  store.updateRegistration(state, dirs, ctx);
+    return true;
+  });
+  if (!saved)
+    return result('Could not update reservations.', {
+      mode: 'release',
+      error: 'registration_write_failed',
+    });
 
   const lines: string[] = [];
   if (released.length > 0) {

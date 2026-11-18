@@ -32,6 +32,7 @@ export interface AgentRegistration {
   session: AgentSession;
   activity: AgentActivity;
   statusMessage?: string;
+  customStatus?: boolean;
   currentChannel?: string;
   sessionChannel?: string;
   joinedChannels?: string[];
@@ -58,10 +59,9 @@ export interface ReservationConflict {
 export interface MessengerState {
   agentName: string;
   registered: boolean;
-  /** The PID of the caller's pi process, set by the harness server.
-   *  Used by register() to write the correct PID to the registration file.
-   */
+  /** Pi owner PID selected by the harness; for a new registration, the caller's PID. */
   callerPid?: number;
+  registrationStartedAt?: string;
   reservations: FileReservation[];
   chatHistory: Map<string, AgentMailMessage[]>;
   unreadCounts: Map<string, number>;

@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { atomicWriteFileSync } from '../persistence.js';
 import * as path from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -160,7 +161,7 @@ function generateAgentFile(cwd: string, sessionId: string, agent: SpawnedAgent):
 
   const filePath = agentFilePath(cwd, sessionId, agent.name, agent.id);
   ensureDir(path.dirname(filePath));
-  fs.writeFileSync(filePath, lines.join('\n'), 'utf-8');
+  atomicWriteFileSync(filePath, lines.join('\n'));
   return filePath;
 }
 
@@ -836,7 +837,7 @@ export function persistRuntimes(messengerDir: string): void {
   const filePath = getRuntimesFilePath(messengerDir);
   try {
     ensureDir(path.dirname(filePath));
-    fs.writeFileSync(filePath, JSON.stringify(entries, null, 2), 'utf-8');
+    atomicWriteFileSync(filePath, JSON.stringify(entries, null, 2));
   } catch {
     // Best effort
   }

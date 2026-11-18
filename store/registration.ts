@@ -1,9 +1,11 @@
 import * as fs from 'node:fs';
+import { atomicWriteFileSync } from '../persistence.js';
 import { join } from 'node:path';
 import type { ExtensionContext } from '@earendil-works/pi-coding-agent';
 import type {
   AgentMailMessage,
   AgentRegistration,
+  FileReservation,
   Dirs,
   MessengerState,
   NameThemeConfig,
@@ -17,7 +19,8 @@ import {
 } from '../channel.js';
 import { findAvailableName, invalidateAgentsCache } from './agents.js';
 import {
-  applyRegistrationDefaults,
+  applyRoutingFromRegistration,
+  registrationMatchesState,
   ensureDirSync,
   ensureStateChannels,
   getContextSessionId,
@@ -25,7 +28,36 @@ import {
   normalizeCwd,
   normalizeJoinedChannels,
   updateChannelsInRegistration,
+  readRegistrationSync,
+  withRegistryLock,
 } from './shared.js';
+
+// Callback reads and changes only the fields owned by this operation, under
+// the same lock as name allocation, rename, unregister and stale cleanup.
+export function mutateOwnedRegistration<T>(
+  state: MessengerState,
+  dirs: Dirs,
+  mutate: (reg: AgentRegistration) => T
+): T | undefined {
+  if (!state.registered || !isValidAgentName(state.agentName)) return;
+  try {
+    return withRegistryLock(dirs, () => {
+      const path = getRegistrationPath(state, dirs);
+      const reg = readRegistrationSync(path);
+      if (!reg || !registrationMatchesState(reg, state)) return;
+      const before = JSON.stringify(reg, null, 2);
+      const result = mutate(reg);
+      const after = JSON.stringify(reg, null, 2);
+      if (after !== before) {
+        atomicWriteFileSync(path, after);
+        invalidateAgentsCache();
+      }
+      return result;
+    });
+  } catch {
+    // Best effort: malformed or replacement records remain untouched.
+  }
+}
 
 export function getRegistrationPath(state: MessengerState, dirs: Dirs): string {
   return join(dirs.registry, `${state.agentName}.json`);
@@ -38,204 +70,71 @@ export function register(
   nameTheme?: NameThemeConfig
 ): boolean {
   if (state.registered) return true;
-
-  ensureDirSync(dirs.registry);
-
-  if (!state.agentName) {
-    state.agentName = generateMemorableName(nameTheme);
-  }
-
-  // If a previous process (e.g., harness CLI) registered this agent and
-  // joined a named channel, restore that state so the overlay opens on
-  // the right channel instead of resetting to the session channel.
-  const currentCtxSessionId = getContextSessionId(ctx);
-  let persistedSessionId: string | undefined;
-  const regPath = join(dirs.registry, `${state.agentName}.json`);
-  if (fs.existsSync(regPath)) {
-    try {
-      const existing: AgentRegistration = JSON.parse(fs.readFileSync(regPath, 'utf-8'));
-      persistedSessionId = existing.sessionId;
-      if (existing.sessionId === currentCtxSessionId) {
-        if (existing.currentChannel) {
+  try {
+    ensureDirSync(dirs.registry);
+    return withRegistryLock(dirs, () => {
+      const pid = state.callerPid ?? process.pid;
+      if (!Number.isInteger(pid) || pid <= 0 || pid > 0x7fffffff)
+        throw new Error(`Invalid PID: ${pid}`);
+      const name =
+        state.agentName || findAvailableName(generateMemorableName(nameTheme), dirs, pid);
+      if (!name || !isValidAgentName(name))
+        throw new Error(`Invalid or unavailable agent name: ${name}`);
+      const path = join(dirs.registry, `${name}.json`);
+      const existing = readRegistrationSync(path);
+      if (existing && existing.pid !== pid && isProcessAlive(existing.pid)) {
+        throw new Error(`Agent name "${name}" already in use (PID ${existing.pid})`);
+      }
+      state.agentName = name;
+      const sessionId = getContextSessionId(ctx);
+      const sameSession = existing?.sessionId === sessionId && !!existing;
+      if (sameSession) {
+        if (existing.currentChannel)
           state.currentChannel = normalizeChannelId(existing.currentChannel);
-        }
-        if (existing.joinedChannels) {
+        if (existing.joinedChannels)
           state.joinedChannels = normalizeJoinedChannels(existing.joinedChannels);
-        }
       }
-    } catch {
-      // malformed, ignore
-    }
-  }
-
-  ensureStateChannels(state, dirs, ctx, {
-    preserveNamedChannel: persistedSessionId === currentCtxSessionId,
-  });
-  state.contextSessionId = getContextSessionId(ctx);
-
-  const effectivePid = state.callerPid ?? process.pid;
-
-  const isExplicitName = !!state.agentName;
-  const maxAttempts = isExplicitName ? 1 : 3;
-
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    if (isExplicitName) {
-      if (!isValidAgentName(state.agentName)) {
-        if (ctx.hasUI) {
-          ctx.ui.notify(
-            `Invalid agent name "${state.agentName}" - use only letters, numbers, underscore, hyphen`,
-            'error'
-          );
-        }
-        return false;
-      }
-      const regPath = join(dirs.registry, `${state.agentName}.json`);
-      if (fs.existsSync(regPath)) {
-        try {
-          const existing: AgentRegistration = JSON.parse(fs.readFileSync(regPath, 'utf-8'));
-          if (isProcessAlive(existing.pid) && existing.pid !== effectivePid) {
-            if (ctx.hasUI) {
-              ctx.ui.notify(
-                `Agent name "${state.agentName}" already in use (PID ${existing.pid})`,
-                'error'
-              );
-            }
-            return false;
-          }
-        } catch {
-          // Malformed, proceed to overwrite
-        }
-      }
-    } else {
-      const availableName = findAvailableName(state.agentName, dirs);
-      if (!availableName) {
-        if (ctx.hasUI) {
-          ctx.ui.notify('Could not find available agent name after 99 attempts', 'error');
-        }
-        return false;
-      }
-      state.agentName = availableName;
-    }
-
-    const regPath = getRegistrationPath(state, dirs);
-    if (fs.existsSync(regPath)) {
-      try {
-        fs.unlinkSync(regPath);
-      } catch {
-        // Ignore
-      }
-    }
-
-    const cwd = normalizeCwd(ctx.cwd ?? process.cwd());
-    const gitBranch = getGitBranch(cwd);
-    const now = new Date().toISOString();
-    const registration: AgentRegistration = {
-      name: state.agentName,
-      pid: effectivePid,
-      sessionId: getContextSessionId(ctx),
-      cwd,
-      model:
-        (ctx.model as { id?: string } | undefined)?.id ??
-        (typeof ctx.model === 'string' ? ctx.model : 'unknown'),
-      startedAt: now,
-      gitBranch,
-      spec: state.spec,
-      isHuman: state.isHuman,
-      session: { ...state.session },
-      activity: { lastActivityAt: now },
-      currentChannel: state.currentChannel,
-      sessionChannel: state.sessionChannel,
-      joinedChannels: [...state.joinedChannels],
-    };
-
-    try {
-      fs.writeFileSync(regPath, JSON.stringify(registration, null, 2));
-    } catch (err) {
-      if (ctx.hasUI) {
-        const msg = err instanceof Error ? err.message : 'unknown error';
-        ctx.ui.notify(`Failed to register: ${msg}`, 'error');
-      }
-      return false;
-    }
-
-    let verified = false;
-    let verifyError = false;
-    try {
-      const written: AgentRegistration = JSON.parse(fs.readFileSync(regPath, 'utf-8'));
-      verified = written.pid === effectivePid;
-    } catch {
-      verifyError = true;
-    }
-
-    if (verified) {
+      ensureStateChannels(state, dirs, ctx, { preserveNamedChannel: sameSession });
+      const cwd = normalizeCwd(ctx.cwd ?? process.cwd());
+      const gitBranch = getGitBranch(cwd);
+      const startedAt = new Date().toISOString();
+      const model = getModel(ctx, 'unknown');
+      const registration: AgentRegistration = {
+        ...(sameSession && existing.pid === pid ? existing : {}),
+        name,
+        pid,
+        sessionId,
+        cwd,
+        model,
+        startedAt,
+        gitBranch,
+        spec: state.spec,
+        isHuman: state.isHuman,
+        session: { ...state.session },
+        activity: { lastActivityAt: startedAt },
+      };
+      updateChannelsInRegistration(state, registration);
+      atomicWriteFileSync(path, JSON.stringify(registration, null, 2));
       state.registered = true;
-      state.model =
-        (ctx.model as { id?: string } | undefined)?.id ??
-        (typeof ctx.model === 'string' ? ctx.model : 'unknown');
+      state.registrationStartedAt = startedAt;
+      state.contextSessionId = sessionId;
+      state.model = model;
       state.gitBranch = gitBranch;
-      state.activity.lastActivityAt = now;
+      state.activity.lastActivityAt = startedAt;
       invalidateAgentsCache();
       return true;
-    }
-
-    if (verifyError) {
-      try {
-        const checkContent = fs.readFileSync(regPath, 'utf-8');
-        const checkReg: AgentRegistration = JSON.parse(checkContent);
-        if (checkReg.pid === effectivePid) {
-          fs.unlinkSync(regPath);
-        }
-      } catch {
-        // Best effort cleanup
-      }
-    }
-
-    if (isExplicitName) {
-      if (ctx.hasUI) {
-        ctx.ui.notify(`Agent name "${state.agentName}" was claimed by another agent`, 'error');
-      }
-      return false;
-    }
-    invalidateAgentsCache();
+    });
+  } catch (error) {
+    if (ctx.hasUI) ctx.ui.notify(`Failed to register: ${String(error)}`, 'error');
+    return false;
   }
-
-  if (ctx.hasUI) {
-    ctx.ui.notify('Failed to register after multiple attempts due to name conflicts', 'error');
-  }
-  return false;
 }
 
-export function updateRegistration(state: MessengerState, dirs: Dirs, ctx: ExtensionContext): void {
-  if (!state.registered) return;
-
-  const regPath = getRegistrationPath(state, dirs);
-  if (!fs.existsSync(regPath)) return;
-
-  try {
-    const reg = applyRegistrationDefaults(
-      JSON.parse(fs.readFileSync(regPath, 'utf-8')) as AgentRegistration
-    );
-    const currentModel =
-      (ctx.model as { id?: string } | undefined)?.id ??
-      (typeof ctx.model === 'string' ? ctx.model : reg.model);
-    const currentSessionId = getContextSessionId(ctx);
-    reg.model = currentModel;
-    reg.sessionId = currentSessionId;
-    state.model = currentModel;
-    state.contextSessionId = currentSessionId;
-    reg.reservations = state.reservations.length > 0 ? state.reservations : undefined;
-    if (state.spec) {
-      reg.spec = state.spec;
-    } else {
-      delete reg.spec;
-    }
-    reg.session = { ...state.session };
-    reg.activity = { ...state.activity };
-    reg.statusMessage = state.statusMessage;
-    fs.writeFileSync(regPath, JSON.stringify(updateChannelsInRegistration(state, reg), null, 2));
-  } catch {
-    // Ignore errors
-  }
+function getModel(ctx: ExtensionContext, fallback: string): string {
+  return (
+    (ctx.model as { id?: string } | undefined)?.id ??
+    (typeof ctx.model === 'string' ? ctx.model : fallback)
+  );
 }
 
 export function flushActivityToRegistry(
@@ -243,56 +142,61 @@ export function flushActivityToRegistry(
   dirs: Dirs,
   ctx: ExtensionContext
 ): void {
-  if (!state.registered) return;
-
-  const regPath = getRegistrationPath(state, dirs);
-  if (!fs.existsSync(regPath)) return;
-
-  try {
-    const reg = applyRegistrationDefaults(
-      JSON.parse(fs.readFileSync(regPath, 'utf-8')) as AgentRegistration
-    );
-    const currentModel =
-      (ctx.model as { id?: string } | undefined)?.id ??
-      (typeof ctx.model === 'string' ? ctx.model : reg.model);
-    const currentSessionId = getContextSessionId(ctx);
-    reg.model = currentModel;
-    reg.sessionId = currentSessionId;
-    state.model = currentModel;
-    state.contextSessionId = currentSessionId;
+  mutateOwnedRegistration(state, dirs, (reg) => {
+    state.model = reg.model = getModel(ctx, reg.model);
+    // A periodic flush never republishes stale routing or session identity.
     reg.session = { ...state.session };
     reg.activity = { ...state.activity };
-    reg.statusMessage = state.statusMessage;
-    fs.writeFileSync(regPath, JSON.stringify(updateChannelsInRegistration(state, reg), null, 2));
-  } catch {
-    // Ignore errors
-  }
+    if (reg.customStatus) {
+      state.customStatus = true;
+      state.statusMessage = reg.statusMessage;
+    } else {
+      reg.statusMessage = state.statusMessage;
+    }
+  });
 }
 
-export function syncChannelsToRegistration(state: MessengerState, dirs: Dirs): void {
-  if (!state.registered) return;
-  const regPath = getRegistrationPath(state, dirs);
-  if (!fs.existsSync(regPath)) return;
+export function patchRegistrationSessionId(
+  state: MessengerState,
+  dirs: Dirs,
+  sessionId: string
+): boolean {
+  if (!sessionId) return false;
+  return (
+    mutateOwnedRegistration(state, dirs, (reg) => {
+      if (!reg.sessionId) reg.sessionId = sessionId;
+      return true;
+    }) ?? false
+  );
+}
 
-  try {
-    const reg = applyRegistrationDefaults(
-      JSON.parse(fs.readFileSync(regPath, 'utf-8')) as AgentRegistration
-    );
-    fs.writeFileSync(regPath, JSON.stringify(updateChannelsInRegistration(state, reg), null, 2));
-  } catch {
-    // Ignore errors
-  }
+export function mutateReservations<T>(
+  state: MessengerState,
+  dirs: Dirs,
+  edit: (reservations: FileReservation[]) => T
+): T | undefined {
+  return mutateOwnedRegistration(state, dirs, (reg) => {
+    const reservations = [...(reg.reservations ?? [])];
+    const result = edit(reservations);
+    reg.reservations = reservations.length > 0 ? reservations : undefined;
+    state.reservations = reservations;
+    return result;
+  });
 }
 
 export function unregister(state: MessengerState, dirs: Dirs): void {
-  if (!state.registered) return;
-
+  if (!state.registered || !isValidAgentName(state.agentName)) return;
   try {
-    fs.unlinkSync(getRegistrationPath(state, dirs));
+    withRegistryLock(dirs, () => {
+      const path = getRegistrationPath(state, dirs);
+      const reg = readRegistrationSync(path);
+      if (reg && registrationMatchesState(reg, state)) fs.unlinkSync(path);
+    });
   } catch {
-    // Ignore errors
+    // Best effort; preserve malformed records and replacement owners.
   }
   state.registered = false;
+  state.registrationStartedAt = undefined;
   invalidateAgentsCache();
 }
 
@@ -330,18 +234,12 @@ export function rebindContextSession(
     };
   }
 
-  ensureStateChannels(state, dirs, ctx);
-  state.contextSessionId = currentContextSessionId;
-
+  rebindRegisteredChannels(state, dirs, ctx);
   const changed =
     previousCurrentChannel !== state.currentChannel ||
     previousSessionChannel !== state.sessionChannel ||
-    previousContextSessionId !== currentContextSessionId ||
+    previousContextSessionId !== state.contextSessionId ||
     previousJoinedChannels !== JSON.stringify(state.joinedChannels);
-
-  if (changed && state.registered) {
-    updateRegistration(state, dirs, ctx);
-  }
 
   return {
     changed,
@@ -359,113 +257,96 @@ export type RenameResult =
       error: 'not_registered' | 'invalid_name' | 'name_taken' | 'same_name' | 'race_lost';
     };
 
+// The already-joined path may need to establish a session channel even
+// when rebindContextSession's local session ID did not change.
+export function rebindRegisteredChannels(
+  state: MessengerState,
+  dirs: Dirs,
+  ctx: ExtensionContext
+): void {
+  const rebind = () => {
+    ensureStateChannels(state, dirs, ctx);
+    state.contextSessionId = getContextSessionId(ctx);
+  };
+  if (!state.registered) {
+    rebind();
+    return;
+  }
+  mutateOwnedRegistration(state, dirs, (reg) => {
+    applyRoutingFromRegistration(state, reg);
+    rebind();
+    if (state.contextSessionId) reg.sessionId = state.contextSessionId;
+    updateChannelsInRegistration(state, reg);
+  });
+}
+
 export function renameAgent(
   state: MessengerState,
   dirs: Dirs,
   ctx: ExtensionContext,
   newName: string,
-  deliverFn: (msg: AgentMailMessage) => void
+  _deliverFn: (msg: AgentMailMessage) => void
 ): RenameResult {
-  if (!state.registered) {
+  if (!state.registered || !isValidAgentName(state.agentName))
     return { success: false, error: 'not_registered' };
-  }
-
-  if (!isValidAgentName(newName)) {
-    return { success: false, error: 'invalid_name' };
-  }
-
-  if (newName === state.agentName) {
-    return { success: false, error: 'same_name' };
-  }
-
-  const newRegPath = join(dirs.registry, `${newName}.json`);
-  if (fs.existsSync(newRegPath)) {
-    try {
-      const existing: AgentRegistration = JSON.parse(fs.readFileSync(newRegPath, 'utf-8'));
-      const effectivePid = state.callerPid ?? process.pid;
-      if (isProcessAlive(existing.pid) && existing.pid !== effectivePid) {
-        return { success: false, error: 'name_taken' };
-      }
-    } catch {
-      // Malformed file, we can overwrite
-    }
-  }
-
-  const oldName = state.agentName;
-  const oldRegPath = getRegistrationPath(state, dirs);
-
-  const cwd = normalizeCwd(ctx.cwd ?? process.cwd());
-  const gitBranch = getGitBranch(cwd);
-  const now = new Date().toISOString();
-  const effectivePid = state.callerPid ?? process.pid;
-  const registration: AgentRegistration = {
-    name: newName,
-    pid: effectivePid,
-    sessionId: getContextSessionId(ctx),
-    cwd,
-    model:
-      (ctx.model as { id?: string } | undefined)?.id ??
-      (typeof ctx.model === 'string' ? ctx.model : 'unknown'),
-    startedAt: now,
-    reservations: state.reservations.length > 0 ? state.reservations : undefined,
-    gitBranch,
-    spec: state.spec,
-    isHuman: state.isHuman,
-    session: { ...state.session },
-    activity: { lastActivityAt: now },
-    statusMessage: state.statusMessage,
-    currentChannel: state.currentChannel,
-    sessionChannel: state.sessionChannel,
-    joinedChannels: [...state.joinedChannels],
-  };
-
-  ensureDirSync(dirs.registry);
+  if (!isValidAgentName(newName)) return { success: false, error: 'invalid_name' };
+  if (newName === state.agentName) return { success: false, error: 'same_name' };
 
   try {
-    fs.writeFileSync(join(dirs.registry, `${newName}.json`), JSON.stringify(registration, null, 2));
-  } catch {
-    return { success: false, error: 'invalid_name' as const };
-  }
-
-  let verified = false;
-  let verifyError = false;
-  try {
-    const written: AgentRegistration = JSON.parse(fs.readFileSync(newRegPath, 'utf-8'));
-    verified = written.pid === effectivePid;
-  } catch {
-    verifyError = true;
-  }
-
-  if (!verified) {
-    if (verifyError) {
+    return withRegistryLock(dirs, () => {
+      const oldName = state.agentName;
+      const oldPath = getRegistrationPath(state, dirs);
+      const reg = readRegistrationSync(oldPath);
+      if (!reg || !registrationMatchesState(reg, state))
+        return { success: false, error: 'not_registered' };
+      const newPath = join(dirs.registry, `${newName}.json`);
       try {
-        const checkReg: AgentRegistration = JSON.parse(fs.readFileSync(newRegPath, 'utf-8'));
-        if (checkReg.pid === effectivePid) {
-          fs.unlinkSync(newRegPath);
+        const target = readRegistrationSync(newPath);
+        if (target && target.pid !== reg.pid && isProcessAlive(target.pid)) {
+          return { success: false, error: 'name_taken' };
         }
       } catch {
-        // Best effort cleanup
+        return { success: false, error: 'name_taken' };
       }
-    }
+      const cwd = normalizeCwd(ctx.cwd ?? process.cwd());
+      const gitBranch = getGitBranch(cwd);
+      const startedAt = new Date().toISOString();
+      const model = getModel(ctx, reg.model);
+      atomicWriteFileSync(
+        newPath,
+        JSON.stringify(
+          {
+            ...reg,
+            name: newName,
+            cwd,
+            gitBranch,
+            startedAt,
+            model,
+            sessionId: getContextSessionId(ctx) || reg.sessionId,
+            activity: { ...reg.activity, lastActivityAt: startedAt },
+          },
+          null,
+          2
+        )
+      );
+      try {
+        fs.unlinkSync(oldPath);
+      } catch {
+        // Keep the new record if the old entry could not be removed.
+      }
+      applyRoutingFromRegistration(state, reg);
+      state.agentName = newName;
+      state.registrationStartedAt = startedAt;
+      state.model = model;
+      state.gitBranch = gitBranch;
+      state.sessionStartedAt = startedAt;
+      state.activity.lastActivityAt = startedAt;
+      invalidateAgentsCache();
+      return { success: true, oldName, newName };
+    });
+  } catch {
     return { success: false, error: 'race_lost' };
   }
-
-  try {
-    fs.unlinkSync(oldRegPath);
-  } catch {
-    // Ignore - old file might already be gone
-  }
-
-  state.agentName = newName;
-
-  state.model =
-    (ctx.model as { id?: string } | undefined)?.id ??
-    (typeof ctx.model === 'string' ? ctx.model : 'unknown');
-  state.gitBranch = gitBranch;
-  state.sessionStartedAt = now;
-  state.activity.lastActivityAt = now;
-  invalidateAgentsCache();
-  return { success: true, oldName, newName };
 }
 
 export type JoinChannelResult =
@@ -483,30 +364,31 @@ export function joinChannel(
   }
 
   const normalizedRequested = normalizeChannelId(channelId);
-  const existedBefore = !!getChannel(dirs, normalizedRequested);
-  const record = ensureExistingOrCreateChannel(dirs, channelId, {
-    create: options?.create,
-    createdBy: state.agentName || undefined,
-    description: options?.description,
-  });
-  if (!record) {
-    return { success: false, error: 'not_found' };
-  }
+  const join = (reg?: AgentRegistration): JoinChannelResult => {
+    const existedBefore = !!getChannel(dirs, normalizedRequested);
+    const record = ensureExistingOrCreateChannel(dirs, channelId, {
+      create: options?.create,
+      createdBy: state.agentName || undefined,
+      description: options?.description,
+    });
+    if (!record) return { success: false, error: 'not_found' };
 
-  const normalized = normalizeChannelId(record.id);
-  const wasCurrent = state.currentChannel === normalized;
-  const alreadyJoined = state.joinedChannels.includes(normalized);
-  if (!alreadyJoined) {
-    state.joinedChannels = [...state.joinedChannels, normalized];
-  }
-  state.currentChannel = normalized;
-  syncChannelsToRegistration(state, dirs);
+    if (reg) applyRoutingFromRegistration(state, reg);
+    const normalized = normalizeChannelId(record.id);
+    const wasCurrent = state.currentChannel === normalized;
+    const alreadyJoined = state.joinedChannels.includes(normalized);
+    if (!alreadyJoined) state.joinedChannels.push(normalized);
+    state.currentChannel = normalized;
+    if (reg) updateChannelsInRegistration(state, reg);
 
-  return {
-    success: true,
-    channel: normalized,
-    created: !existedBefore,
-    switched: !wasCurrent,
-    alreadyJoined,
+    return {
+      success: true,
+      channel: normalized,
+      created: !existedBefore,
+      switched: !wasCurrent,
+      alreadyJoined,
+    };
   };
+  if (!state.registered) return join();
+  return mutateOwnedRegistration(state, dirs, join) ?? { success: false, error: 'not_found' };
 }

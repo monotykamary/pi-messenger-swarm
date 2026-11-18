@@ -21,8 +21,6 @@ export function executeRename(
     return result(`Error: ${result_data.error}`, { mode: 'rename', error: result_data.error });
   }
 
-  store.updateRegistration(state, dirs, ctx);
-
   return result(`Renamed from ${result_data.oldName} to ${result_data.newName}`, {
     mode: 'rename',
     oldName: result_data.oldName,

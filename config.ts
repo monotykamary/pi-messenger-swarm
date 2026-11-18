@@ -8,9 +8,10 @@
  * 4. Defaults
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { getAgentDir } from '@earendil-works/pi-coding-agent';
+import { atomicWriteFileSync, readJsonObjectSync, withFileLock } from './persistence.js';
 
 export interface MessengerConfig {
   autoRegister: boolean;
@@ -94,23 +95,28 @@ export function matchesAutoRegisterPath(cwd: string, paths: string[]): boolean {
   return false;
 }
 
-export function saveAutoRegisterPaths(paths: string[]): void {
-  const configPath = join(getAgentDir(), 'pi-messenger.json');
-  let existing: Record<string, unknown> = {};
-
-  if (existsSync(configPath)) {
-    try {
-      existing = JSON.parse(readFileSync(configPath, 'utf-8'));
-    } catch {
-      // Start fresh if malformed
-    }
-  }
-
-  existing.autoRegisterPaths = paths;
-
+export function mutateAutoRegisterPaths<T>(edit: (paths: string[]) => T): T {
   const dir = getAgentDir();
+  const configPath = join(dir, 'pi-messenger.json');
   mkdirSync(dir, { recursive: true });
-  writeFileSync(configPath, JSON.stringify(existing, null, 2));
+  return withFileLock(configPath, () => {
+    const config = readJsonObjectSync(configPath) ?? {};
+    const existing = config.autoRegisterPaths;
+    if (
+      existing !== undefined &&
+      (!Array.isArray(existing) || existing.some((path) => typeof path !== 'string'))
+    ) {
+      throw new Error(`Invalid autoRegisterPaths in ${configPath}`);
+    }
+    const paths: string[] = Array.isArray(existing) ? [...existing] : [];
+    const before = JSON.stringify(paths);
+    const result = edit(paths);
+    if (JSON.stringify(paths) !== before) {
+      config.autoRegisterPaths = paths;
+      atomicWriteFileSync(configPath, JSON.stringify(config, null, 2));
+    }
+    return result;
+  });
 }
 
 export function getAutoRegisterPaths(): string[] {

@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { atomicWriteFileSync } from '../../persistence.js';
 import * as path from 'node:path';
 
 function ensureDir(dir: string): void {
@@ -28,10 +29,9 @@ export function writeTaskSpec(
 ): void {
   const specPath = taskSpecPath(cwd, sessionId, taskId);
   ensureDir(path.dirname(specPath));
-  fs.writeFileSync(
+  atomicWriteFileSync(
     specPath,
-    content?.trim() ? `# ${title}\n\n${content.trim()}\n` : `# ${title}\n\n*Spec pending*\n`,
-    'utf-8'
+    content?.trim() ? `# ${title}\n\n${content.trim()}\n` : `# ${title}\n\n*Spec pending*\n`
   );
 }
 

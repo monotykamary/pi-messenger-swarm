@@ -12,6 +12,7 @@
  */
 
 import * as fs from 'node:fs';
+import { atomicWriteFileSync } from './persistence.js';
 import { join } from 'node:path';
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import { getAgentDir } from '@earendil-works/pi-coding-agent';
@@ -334,7 +335,7 @@ export default function piMessengerExtension(pi: ExtensionAPI) {
     if (sessionId && !process.env.PI_SWARM_SPAWNED) {
       try {
         const sessionFilePath = join(dirs.base, 'session-id');
-        fs.writeFileSync(sessionFilePath, sessionId, 'utf-8');
+        atomicWriteFileSync(sessionFilePath, sessionId);
       } catch {
         // Best effort
       }

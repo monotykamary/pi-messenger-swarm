@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { generateMemorableName, type Dirs } from './lib.js';
+import { atomicWriteFileSync, isMissing, readTextIfPresent, withFileLock } from './persistence.js';
 
 export type ChannelType = 'session' | 'named';
 
@@ -98,51 +99,16 @@ function metaHeaderToRecord(header: ChannelMetaHeader): ChannelRecord {
   };
 }
 
-function normalizeChannelRecord(
-  raw: Partial<ChannelRecord> | null | undefined,
-  fallbackId?: string
-): ChannelRecord | null {
-  const id = normalizeChannelId(raw?.id || fallbackId);
-  if (!isValidChannelId(id)) return null;
-
-  const type: ChannelType =
-    raw?.type === 'session' || raw?.type === 'named'
-      ? raw.type
-      : raw?.sessionId
-        ? 'session'
-        : isSessionChannelId(id)
-          ? 'session'
-          : 'named';
-
-  return {
-    id,
-    type,
-    createdAt: raw?.createdAt || new Date(0).toISOString(),
-    createdBy: raw?.createdBy,
-    sessionId: raw?.sessionId,
-    description: raw?.description,
-  };
-}
-
 /**
  * Read the metadata header from a channel JSONL file.
  * Returns null if file doesn't exist or has invalid header.
  */
 export function readChannelHeader(dirs: Dirs, channelId: string): ChannelMetaHeader | null {
-  const filePath = channelPath(dirs, channelId);
-  if (!fs.existsSync(filePath)) return null;
   try {
-    const content = fs.readFileSync(filePath, 'utf-8');
-    const firstLine = content.split('\n')[0];
-    if (!firstLine) return null;
-    const parsed = JSON.parse(firstLine) as unknown;
-    if (isMetaHeader(parsed)) {
-      return parsed;
-    }
+    return readChannelHead(channelPath(dirs, channelId))?.header ?? null;
   } catch {
-    // Ignore parse errors
+    return null;
   }
-  return null;
 }
 
 /**
@@ -175,10 +141,82 @@ export function readChannelEventLines(dirs: Dirs, channelId: string): string[] {
   }
 }
 
-/**
- * Append a single event line to a channel JSONL file.
- * Creates the file with metadata header if it doesn't exist.
- */
+class MalformedChannelError extends Error {}
+
+function parseHeader(line: string, filePath: string): ChannelMetaHeader {
+  let header: unknown;
+  try {
+    header = JSON.parse(line);
+  } catch {
+    throw new MalformedChannelError(`Malformed channel header: ${filePath}`);
+  }
+  if (!isMetaHeader(header))
+    throw new MalformedChannelError(`Malformed channel header: ${filePath}`);
+  return header;
+}
+
+// Append and channel discovery should not scan the whole history. Read
+// just the header and, for append, whether the last record ends with a LF.
+function readChannelHead(filePath: string, checkTail = false) {
+  let fd: number;
+  try {
+    fd = fs.openSync(filePath, 'r');
+  } catch (error) {
+    if (isMissing(error)) return undefined;
+    throw error;
+  }
+  try {
+    const chunks: Buffer[] = [];
+    let position = 0;
+    for (;;) {
+      const buffer = Buffer.allocUnsafe(4096);
+      const count = fs.readSync(fd, buffer, 0, buffer.length, position);
+      if (count === 0) break;
+      const chunk = buffer.subarray(0, count);
+      const newline = chunk.indexOf(10);
+      chunks.push(newline === -1 ? chunk : chunk.subarray(0, newline));
+      if (newline !== -1) break;
+      position += count;
+    }
+    const header = parseHeader(Buffer.concat(chunks).toString('utf-8'), filePath);
+    let needsSeparator = false;
+    if (checkTail) {
+      const last = Buffer.allocUnsafe(1);
+      const size = fs.fstatSync(fd).size;
+      needsSeparator = fs.readSync(fd, last, 0, 1, size - 1) === 1 && last[0] !== 10;
+    }
+    return { header, needsSeparator };
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function readChannelSnapshot(filePath: string) {
+  const content = readTextIfPresent(filePath);
+  if (content === undefined) return undefined;
+  const [headerLine, ...lines] = content.split('\n');
+  return {
+    header: parseHeader(headerLine, filePath),
+    headerLine,
+    lines,
+  };
+}
+
+function checkedEventLines(lines: string[]): string[] {
+  const events = lines.filter((line) => line.trim());
+  for (const line of events) JSON.parse(line);
+  return events;
+}
+
+// Catalog operations (e.g. session lookup + allocation) and all channel
+// mutations share this lock. Readers of snapshots don't need a lock.
+function withChannelsLock<T>(dirs: Dirs, operation: () => T): T {
+  const dir = getChannelsDir(dirs);
+  ensureDir(dir);
+  return withFileLock(path.join(dir, '.channels'), operation);
+}
+
+/** Append one JSONL event, publishing the initial header and event together. */
 export function appendChannelEventLine(
   dirs: Dirs,
   channelId: string,
@@ -187,49 +225,47 @@ export function appendChannelEventLine(
 ): void {
   const filePath = channelPath(dirs, channelId);
   try {
-    ensureDir(getChannelsDir(dirs));
-
-    if (!fs.existsSync(filePath)) {
-      // Create new file with minimal metadata header
-      const header: ChannelMetaHeader = {
-        _meta: true,
-        v: CHANNEL_META_VERSION,
-        id: normalizeChannelId(channelId),
-        type: isSessionChannelId(channelId) ? 'session' : 'named',
-        createdAt: new Date().toISOString(),
-        createdBy: meta?.createdBy,
-        sessionId: meta?.sessionId,
-        description: meta?.description,
-      };
-      fs.writeFileSync(filePath, JSON.stringify(header) + '\n' + eventLine + '\n');
-    } else {
-      fs.appendFileSync(filePath, eventLine + '\n');
-    }
+    // Never introduce a partial or multi-line record through the append API.
+    if (eventLine.includes('\n')) return;
+    JSON.parse(eventLine);
+    withChannelsLock(dirs, () => {
+      const current = readChannelHead(filePath, true);
+      if (!current) {
+        const header = createMetaHeader({
+          id: normalizeChannelId(channelId),
+          type: isSessionChannelId(channelId) ? 'session' : 'named',
+          createdAt: new Date().toISOString(),
+          createdBy: meta?.createdBy,
+          sessionId: meta?.sessionId,
+          description: meta?.description,
+        });
+        atomicWriteFileSync(filePath, `${JSON.stringify(header)}\n${eventLine}\n`);
+      } else {
+        const separator = current.needsSeparator ? '\n' : '';
+        fs.appendFileSync(filePath, `${separator}${eventLine}\n`);
+      }
+    });
   } catch {
     // Best effort
   }
 }
 
-/**
- * Prune events in a channel JSONL file to keep only the last N events.
- * Preserves the metadata header.
- */
+/** Keep the last N events, without exposing a truncated file to readers. */
 export function pruneChannelEvents(dirs: Dirs, channelId: string, maxEvents: number): void {
-  const filePath = channelPath(dirs, channelId);
-  if (!fs.existsSync(filePath)) return;
+  if (!Number.isFinite(maxEvents) || maxEvents < 0) return;
   try {
-    const content = fs.readFileSync(filePath, 'utf-8');
-    const lines = content.split('\n');
-    if (lines.length <= 1) return; // Only header or empty
-
-    const header = lines[0];
-    const events = lines.slice(1).filter((line) => line.trim());
-    if (events.length <= maxEvents) return;
-
-    const pruned = events.slice(-maxEvents);
-    fs.writeFileSync(filePath, header + '\n' + pruned.join('\n') + '\n');
+    withChannelsLock(dirs, () => {
+      const filePath = channelPath(dirs, channelId);
+      const current = readChannelSnapshot(filePath);
+      if (!current) return;
+      const events = checkedEventLines(current.lines);
+      const keep = Math.floor(maxEvents);
+      if (events.length <= keep) return;
+      const pruned = keep === 0 ? [] : events.slice(-keep);
+      atomicWriteFileSync(filePath, [current.headerLine, ...pruned].join('\n') + '\n');
+    });
   } catch {
-    // Best effort
+    // Best effort; do not replace a corrupt snapshot.
   }
 }
 
@@ -249,13 +285,8 @@ export function listChannels(dirs: Dirs): ChannelRecord[] {
     if (!file.endsWith('.jsonl')) continue;
     const filePath = path.join(dir, file);
     try {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      const firstLine = content.split('\n')[0];
-      if (!firstLine) continue;
-      const parsed = JSON.parse(firstLine) as unknown;
-      if (isMetaHeader(parsed)) {
-        items.push(metaHeaderToRecord(parsed));
-      }
+      const head = readChannelHead(filePath);
+      if (head) items.push(metaHeaderToRecord(head.header));
     } catch {
       // Ignore malformed channel files
     }
@@ -263,54 +294,48 @@ export function listChannels(dirs: Dirs): ChannelRecord[] {
   return items.sort((a, b) => a.id.localeCompare(b.id));
 }
 
-export function writeChannel(dirs: Dirs, record: ChannelRecord): ChannelRecord {
-  ensureDir(getChannelsDir(dirs));
+function writeChannelUnlocked(dirs: Dirs, record: ChannelRecord): ChannelRecord {
   const filePath = channelPath(dirs, record.id);
-  const metaHeader = createMetaHeader(record);
-  const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}`;
-  // Write metadata header as first line, preserving any existing events
-  let existingEvents: string[] = [];
-  if (fs.existsSync(filePath)) {
-    try {
-      existingEvents = readChannelEventLines(dirs, record.id);
-    } catch {
-      // Ignore read errors, start fresh
-    }
-  }
-  const lines = [JSON.stringify(metaHeader), ...existingEvents];
-  fs.writeFileSync(tmp, lines.join('\n') + '\n');
-  fs.renameSync(tmp, filePath);
+  const current = readChannelSnapshot(filePath);
+  const events = current ? checkedEventLines(current.lines) : [];
+  const lines = [JSON.stringify(createMetaHeader(record)), ...events];
+  atomicWriteFileSync(filePath, lines.join('\n') + '\n');
   return record;
 }
 
-/**
- * Patch the sessionId on a channel's metadata header if it's currently empty.
- * Used by the harness server when it discovers the session ID after the channel
- * was already created (race condition with session-id file).
- * Returns true if the channel was patched, false if no change was needed.
- */
+export function writeChannel(dirs: Dirs, record: ChannelRecord): ChannelRecord {
+  return withChannelsLock(dirs, () => writeChannelUnlocked(dirs, record));
+}
+
+/** Fill in the session ID once; the predicate and update use the same snapshot. */
 export function patchChannelSessionId(dirs: Dirs, channelId: string, sessionId: string): boolean {
   if (!sessionId) return false;
-  const header = readChannelHeader(dirs, channelId);
-  if (!header || header.sessionId) return false; // already set or missing
-
-  const filePath = channelPath(dirs, channelId);
   try {
-    const content = fs.readFileSync(filePath, 'utf-8');
-    const lines = content.split('\n');
-    if (lines.length === 0) return false;
-
-    const meta = JSON.parse(lines[0]) as ChannelMetaHeader;
-    meta.sessionId = sessionId;
-    lines[0] = JSON.stringify(meta);
-
-    const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}`;
-    fs.writeFileSync(tmp, lines.join('\n'));
-    fs.renameSync(tmp, filePath);
-    return true;
+    return withChannelsLock(dirs, () => {
+      const filePath = channelPath(dirs, channelId);
+      const current = readChannelSnapshot(filePath);
+      if (!current || current.header.sessionId) return false;
+      checkedEventLines(current.lines);
+      current.header.sessionId = sessionId;
+      atomicWriteFileSync(filePath, [JSON.stringify(current.header), ...current.lines].join('\n'));
+      return true;
+    });
   } catch {
     return false;
   }
+}
+
+function ensureChannelUnlocked(dirs: Dirs, record: ChannelRecord): ChannelRecord {
+  let current;
+  try {
+    current = readChannelHead(channelPath(dirs, record.id));
+  } catch (error) {
+    // Legacy #memory was implicitly joinable; keep its routing without
+    // discarding a legacy/corrupt file that needs manual repair.
+    if (record.id === MEMORY_CHANNEL_ID && error instanceof MalformedChannelError) return record;
+    throw error;
+  }
+  return current ? metaHeaderToRecord(current.header) : writeChannelUnlocked(dirs, record);
 }
 
 export function ensureNamedChannel(
@@ -319,16 +344,15 @@ export function ensureNamedChannel(
   createdBy?: string,
   description?: string
 ): ChannelRecord {
-  const normalized = normalizeChannelId(channelId);
-  const existing = getChannel(dirs, normalized);
-  if (existing) return existing;
-  return writeChannel(dirs, {
-    id: normalized,
-    type: 'named',
-    createdAt: new Date().toISOString(),
-    createdBy,
-    description,
-  });
+  return withChannelsLock(dirs, () =>
+    ensureChannelUnlocked(dirs, {
+      id: normalizeChannelId(channelId),
+      type: 'named',
+      createdAt: new Date().toISOString(),
+      createdBy,
+      description,
+    })
+  );
 }
 
 export function ensureDefaultNamedChannels(dirs: Dirs, createdBy?: string): ChannelRecord[] {
@@ -353,15 +377,22 @@ function toKebabCase(value: string): string {
 
 function allocateSessionChannelId(dirs: Dirs, baseId: string): string {
   const normalizedBase = normalizeChannelId(baseId);
-  if (!getChannel(dirs, normalizedBase)) return normalizedBase;
-
+  const available = (id: string) => {
+    try {
+      // A malformed file or dangling symlink also occupies its name.
+      fs.lstatSync(channelPath(dirs, id));
+      return false;
+    } catch (error) {
+      if (isMissing(error)) return true;
+      throw error;
+    }
+  };
+  if (available(normalizedBase)) return normalizedBase;
   for (let i = 2; i <= 99; i++) {
     const candidate = `${normalizedBase}-${i}`;
-    if (!getChannel(dirs, candidate)) return candidate;
+    if (available(candidate)) return candidate;
   }
-
-  const suffix = Math.random().toString(36).slice(2, 6);
-  return `${normalizedBase}-${suffix}`;
+  throw new Error(`No free channel ID for ${normalizedBase}`);
 }
 
 export function generateSessionChannelId(agentName?: string): string {
@@ -377,12 +408,12 @@ export function findChannelBySessionId(dirs: Dirs, sessionId: string): ChannelRe
   return null;
 }
 
-export function createSessionChannel(
+function createSessionChannelUnlocked(
   dirs: Dirs,
   sessionId: string | undefined,
   createdBy?: string
 ): ChannelRecord {
-  return writeChannel(dirs, {
+  return writeChannelUnlocked(dirs, {
     id: allocateSessionChannelId(dirs, generateSessionChannelId(createdBy)),
     type: 'session',
     createdAt: new Date().toISOString(),
@@ -396,11 +427,10 @@ export function ensureSessionChannel(
   sessionId: string | undefined,
   createdBy?: string
 ): ChannelRecord {
-  if (sessionId) {
-    const existing = findChannelBySessionId(dirs, sessionId);
-    if (existing) return existing;
-  }
-  return createSessionChannel(dirs, sessionId, createdBy);
+  return withChannelsLock(dirs, () => {
+    const existing = sessionId ? findChannelBySessionId(dirs, sessionId) : null;
+    return existing ?? createSessionChannelUnlocked(dirs, sessionId, createdBy);
+  });
 }
 
 export function ensureExistingOrCreateChannel(
@@ -411,25 +441,16 @@ export function ensureExistingOrCreateChannel(
   const normalized = normalizeChannelId(channelId);
   if (!isValidChannelId(normalized)) return null;
 
-  const existing = getChannel(dirs, normalized);
-  if (existing) return existing;
+  const preset = DEFAULT_NAMED_CHANNELS.find((channel) => channel.id === normalized);
+  if (!preset && !options?.create) return getChannel(dirs, normalized);
 
-  if (DEFAULT_NAMED_CHANNELS.some((channel) => channel.id === normalized)) {
-    const preset = DEFAULT_NAMED_CHANNELS.find((channel) => channel.id === normalized)!;
-    return ensureNamedChannel(dirs, normalized, options?.createdBy, preset.description);
-  }
-
-  if (!options?.create) return null;
-
-  if (isSessionChannelId(normalized)) {
-    return writeChannel(dirs, {
+  return withChannelsLock(dirs, () =>
+    ensureChannelUnlocked(dirs, {
       id: normalized,
-      type: 'session',
+      type: isSessionChannelId(normalized) ? 'session' : 'named',
       createdAt: new Date().toISOString(),
-      createdBy: options.createdBy,
-      description: options.description,
-    });
-  }
-
-  return ensureNamedChannel(dirs, normalized, options.createdBy, options.description);
+      createdBy: options?.createdBy,
+      description: preset?.description ?? options?.description,
+    })
+  );
 }

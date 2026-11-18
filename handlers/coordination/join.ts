@@ -3,8 +3,6 @@ import type { ExtensionContext } from '@earendil-works/pi-coding-agent';
 import type { AgentMailMessage, Dirs, MessengerState, NameThemeConfig } from '../../lib.js';
 import { displaySpecPath, extractFolder, resolveSpecPath } from '../../lib.js';
 import { displayChannelLabel } from '../../channel.js';
-import { ensureStateChannels } from '../../store/shared.js';
-import { getContextSessionId } from '../../store/shared.js';
 import * as store from '../../store.js';
 import { logFeedEvent, pruneFeed } from '../../feed/index.js';
 import { result } from '../result.js';
@@ -96,10 +94,8 @@ export function executeJoin(
     // the registration on disk if anything changed.
     const prevChannel = state.currentChannel;
     const prevSession = state.sessionChannel;
-    ensureStateChannels(state, dirs, ctx);
-    state.contextSessionId = getContextSessionId(ctx);
+    store.rebindRegisteredChannels(state, dirs, ctx);
     if (state.currentChannel !== prevChannel || state.sessionChannel !== prevSession) {
-      if (state.registered) store.updateRegistration(state, dirs, ctx);
       updateStatusFn(ctx);
     }
     const agents = store.getActiveAgents(state, dirs);
@@ -119,7 +115,9 @@ export function executeJoin(
   let specWarning = '';
   if (specPath) {
     state.spec = resolveSpecPath(specPath, cwd);
-    store.updateRegistration(state, dirs, ctx);
+    store.mutateOwnedRegistration(state, dirs, (reg) => {
+      reg.spec = state.spec;
+    });
     if (!existsSync(state.spec)) {
       specWarning = `\n\nWarning: Spec file not found at ${displaySpecPath(state.spec, cwd)}.`;
     }

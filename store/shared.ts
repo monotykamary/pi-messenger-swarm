@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import type { ExtensionContext } from '@earendil-works/pi-coding-agent';
 import { getAgentDir } from '@earendil-works/pi-coding-agent';
 import type { AgentRegistration, Dirs, MessengerState } from '../lib.js';
-import { isProcessAlive } from '../lib.js';
+import { readJsonObjectSync, withFileLock } from '../persistence.js';
 import {
   MEMORY_CHANNEL_ID,
   ensureDefaultNamedChannels,
@@ -18,6 +18,43 @@ export function ensureDirSync(dir: string): void {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
+}
+
+export function withRegistryLock<T>(dirs: Dirs, operation: () => T): T {
+  return withFileLock(join(dirs.registry, '.registry'), operation);
+}
+
+export function readRegistrationSync(path: string): AgentRegistration | undefined {
+  const value = readJsonObjectSync(path);
+  if (!value) return undefined;
+  const stringFields = [
+    'name',
+    'cwd',
+    'startedAt',
+    'sessionId',
+    'currentChannel',
+    'sessionChannel',
+  ];
+  if (
+    typeof value.pid !== 'number' ||
+    !Number.isInteger(value.pid) ||
+    value.pid <= 0 ||
+    value.pid > 0x7fffffff ||
+    stringFields.some((field) => value[field] !== undefined && typeof value[field] !== 'string') ||
+    (value.joinedChannels !== undefined &&
+      (!Array.isArray(value.joinedChannels) ||
+        value.joinedChannels.some((channel) => typeof channel !== 'string')))
+  ) {
+    throw new Error(`Invalid registration: ${path}`);
+  }
+  return value as unknown as AgentRegistration;
+}
+
+export function registrationMatchesState(reg: AgentRegistration, state: MessengerState): boolean {
+  return (
+    reg.pid === (state.callerPid ?? process.pid) &&
+    (state.registrationStartedAt === undefined || reg.startedAt === state.registrationStartedAt)
+  );
 }
 
 export function normalizeCwd(cwd: string): string {
@@ -251,18 +288,30 @@ export function applyRegistrationDefaults(reg: AgentRegistration): AgentRegistra
   };
 }
 
-export function updateChannelsInRegistration(
+export function updateChannelsInRegistration(state: MessengerState, reg: AgentRegistration): void {
+  reg.currentChannel = state.currentChannel;
+  reg.sessionChannel = state.sessionChannel;
+  reg.joinedChannels = normalizeJoinedChannels(
+    state.joinedChannels,
+    state.currentChannel,
+    state.sessionChannel
+  );
+}
+
+export function applyRoutingFromRegistration(
   state: MessengerState,
-  reg: AgentRegistration
-): AgentRegistration {
-  return {
-    ...reg,
-    currentChannel: state.currentChannel,
-    sessionChannel: state.sessionChannel,
-    joinedChannels: normalizeJoinedChannels(
-      state.joinedChannels,
-      state.currentChannel,
-      state.sessionChannel
-    ),
-  };
+  raw: AgentRegistration
+): boolean {
+  const reg = applyRegistrationDefaults(raw);
+  const current = reg.currentChannel ?? '';
+  const session = reg.sessionChannel ?? '';
+  const joined = reg.joinedChannels ?? [];
+  const changed =
+    state.currentChannel !== current ||
+    state.sessionChannel !== session ||
+    JSON.stringify(state.joinedChannels) !== JSON.stringify(joined);
+  state.currentChannel = current;
+  state.sessionChannel = session;
+  state.joinedChannels = joined;
+  return changed;
 }

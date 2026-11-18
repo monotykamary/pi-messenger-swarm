@@ -3,7 +3,15 @@ import { join } from 'node:path';
 import type { AgentRegistration, Dirs, MessengerState, ReservationConflict } from '../lib.js';
 import { isProcessAlive, isValidAgentName, pathMatchesReservation } from '../lib.js';
 import { MEMORY_CHANNEL_ID, normalizeChannelId } from '../channel.js';
-import { applyRegistrationDefaults, normalizeCwd, normalizeJoinedChannels } from './shared.js';
+import {
+  applyRegistrationDefaults,
+  applyRoutingFromRegistration,
+  normalizeCwd,
+  normalizeJoinedChannels,
+  readRegistrationSync,
+  registrationMatchesState,
+  withRegistryLock,
+} from './shared.js';
 
 /**
  * Re-read the agent's registration file from disk and sync channel state
@@ -14,38 +22,30 @@ import { applyRegistrationDefaults, normalizeCwd, normalizeJoinedChannels } from
  * directly to disk via the harness server) and the extension (whose
  * in-memory state would otherwise be stale after a CLI join/switch).
  */
-const regMtimeCache = new Map<string, number>();
+function removeStaleRegistration(dirs: Dirs, path: string, observed: AgentRegistration): void {
+  withRegistryLock(dirs, () => {
+    // The name may have been re-registered after the listing found it stale.
+    const current = readRegistrationSync(path);
+    if (
+      current &&
+      current.pid === observed.pid &&
+      current.startedAt === observed.startedAt &&
+      !isProcessAlive(current.pid)
+    ) {
+      fs.unlinkSync(path);
+    }
+  });
+}
 
 export function syncChannelStateFromDisk(state: MessengerState, dirs: Dirs): boolean {
-  if (!state.registered || !state.agentName) return false;
-
-  const regPath = join(dirs.registry, `${state.agentName}.json`);
+  if (!state.registered || !isValidAgentName(state.agentName)) return false;
   try {
-    const stat = fs.statSync(regPath);
-    const lastMtime = regMtimeCache.get(regPath) ?? 0;
-    // Skip the read if the file hasn't been modified since last sync.
-    if (stat.mtimeMs <= lastMtime) return false;
-    regMtimeCache.set(regPath, stat.mtimeMs);
-
-    const raw = JSON.parse(fs.readFileSync(regPath, 'utf-8')) as AgentRegistration;
-    const reg = applyRegistrationDefaults(raw);
-
-    const newCurrent = normalizeChannelId(reg.currentChannel || '');
-    const newSession = normalizeChannelId(reg.sessionChannel || '');
-    const newJoined = normalizeJoinedChannels(reg.joinedChannels, newCurrent, newSession);
-
-    const changed =
-      state.currentChannel !== newCurrent ||
-      state.sessionChannel !== newSession ||
-      JSON.stringify(state.joinedChannels) !== JSON.stringify(newJoined);
-
-    if (changed) {
-      state.currentChannel = newCurrent;
-      state.sessionChannel = newSession;
-      state.joinedChannels = newJoined;
-    }
-
-    return changed;
+    const reg = readRegistrationSync(join(dirs.registry, `${state.agentName}.json`));
+    // The read opens one atomic snapshot. A previous mtime check could miss a
+    // rename published within the same timestamp resolution as the old file.
+    return (
+      !!reg && registrationMatchesState(reg, state) && applyRoutingFromRegistration(state, reg)
+    );
   } catch {
     return false;
   }
@@ -70,12 +70,12 @@ export function getAgentRegistration(dirs: Dirs, agentName: string): AgentRegist
   if (!fs.existsSync(regPath)) return null;
 
   try {
-    const reg = applyRegistrationDefaults(
-      JSON.parse(fs.readFileSync(regPath, 'utf-8')) as AgentRegistration
-    );
+    const raw = readRegistrationSync(regPath);
+    if (!raw) return null;
+    const reg = applyRegistrationDefaults(raw);
     if (!isProcessAlive(reg.pid)) {
       try {
-        fs.unlinkSync(regPath);
+        removeStaleRegistration(dirs, regPath, raw);
       } catch {
         // Ignore cleanup errors
       }
@@ -159,13 +159,14 @@ export function getActiveAgents(
     if (!file.endsWith('.json')) continue;
 
     try {
-      const content = fs.readFileSync(join(dirs.registry, file), 'utf-8');
-      const reg = applyRegistrationDefaults(JSON.parse(content) as AgentRegistration);
+      const raw = readRegistrationSync(join(dirs.registry, file));
+      if (!raw) continue;
+      const reg = applyRegistrationDefaults(raw);
 
       if (!isProcessAlive(reg.pid)) {
         if (!skipGc) {
           try {
-            fs.unlinkSync(join(dirs.registry, file));
+            removeStaleRegistration(dirs, join(dirs.registry, file), raw);
           } catch {
             // Ignore cleanup errors
           }
@@ -192,33 +193,25 @@ export function getActiveAgents(
   return filtered;
 }
 
-export function findAvailableName(baseName: string, dirs: Dirs): string | null {
-  const basePath = join(dirs.registry, `${baseName}.json`);
-  if (!fs.existsSync(basePath)) return baseName;
-
-  try {
-    const existing: AgentRegistration = JSON.parse(fs.readFileSync(basePath, 'utf-8'));
-    if (!isProcessAlive(existing.pid) || existing.pid === process.pid) {
-      return baseName;
-    }
-  } catch {
-    return baseName;
-  }
-
-  for (let i = 2; i <= 99; i++) {
-    const altName = `${baseName}${i}`;
-    const altPath = join(dirs.registry, `${altName}.json`);
-
-    if (!fs.existsSync(altPath)) return altName;
-
+export function findAvailableName(
+  baseName: string,
+  dirs: Dirs,
+  effectivePid = process.pid
+): string | null {
+  // This is advisory; registration holds the registry lock across selection and publication.
+  const available = (name: string, allowOwn: boolean): boolean => {
     try {
-      const altReg: AgentRegistration = JSON.parse(fs.readFileSync(altPath, 'utf-8'));
-      if (!isProcessAlive(altReg.pid)) return altName;
+      const reg = readRegistrationSync(join(dirs.registry, `${name}.json`));
+      return !reg || !isProcessAlive(reg.pid) || (allowOwn && reg.pid === effectivePid);
     } catch {
-      return altName;
+      return false; // An unreadable authoritative file is occupied, not disposable.
     }
+  };
+  if (available(baseName, true)) return baseName;
+  for (let i = 2; i <= 99; i++) {
+    const name = `${baseName}${i}`;
+    if (available(name, false)) return name;
   }
-
   return null;
 }
 

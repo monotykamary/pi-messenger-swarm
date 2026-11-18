@@ -20,6 +20,12 @@ Runtime persistence and coordination are split by responsibility:
 - `store/legacy-claims.ts` — legacy spec-based claim/completion compatibility
 - `store/registry.ts` — agent registry, session rebinding, rename/join, routing helpers
 
+### Shared-file publication
+
+On a local filesystem, the extension and harness take the same exclusive writer locks before changing registration, channel, or auto-register state. Rewrites publish via same-directory rename; channel appends keep the JSONL format and participate in the same channel lock as pruning and metadata changes. This is atomic visibility, not a power-loss durability guarantee.
+
+The locks are `registry/.registry.lock`, `channels/.channels.lock`, and `pi-messenger.json.lock` (next to the resolved config target). Writers wait up to five seconds and never take over a lock based on its age or PID. An abrupt exit can leave a lock behind; stop all writers before manually removing an orphaned lock. Do not run older writers against the same state during an upgrade.
+
 ### `handlers/`
 
 Tool actions are split by active vs compatibility concerns:

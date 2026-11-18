@@ -5,13 +5,18 @@
 import type { Component, Focusable, TUI } from '@earendil-works/pi-tui';
 import { matchesKey, truncateToWidth, visibleWidth } from '@earendil-works/pi-tui';
 import type { Theme } from '@earendil-works/pi-coding-agent';
-import { getAutoRegisterPaths, saveAutoRegisterPaths, matchesAutoRegisterPath } from '../config.js';
+import {
+  getAutoRegisterPaths,
+  mutateAutoRegisterPaths,
+  matchesAutoRegisterPath,
+} from '../config.js';
 
 export class MessengerConfigOverlay implements Component, Focusable {
   readonly width = 60;
   focused = false;
 
   private paths: string[];
+  private readonly initialPaths: string[];
   private selectedIndex = 0;
   private dirty = false;
   private statusMessage = '';
@@ -21,13 +26,25 @@ export class MessengerConfigOverlay implements Component, Focusable {
     private theme: Theme,
     private done: () => void
   ) {
-    this.paths = getAutoRegisterPaths();
+    this.initialPaths = getAutoRegisterPaths();
+    this.paths = [...this.initialPaths];
   }
 
   handleInput(data: string): void {
     if (matchesKey(data, 'escape')) {
       if (this.dirty) {
-        saveAutoRegisterPaths(this.paths);
+        const removed = new Set(this.initialPaths.filter((path) => !this.paths.includes(path)));
+        const added = this.paths.filter((path) => !this.initialPaths.includes(path));
+        try {
+          mutateAutoRegisterPaths((paths) => {
+            paths.splice(0, paths.length, ...paths.filter((path) => !removed.has(path)));
+            for (const path of added) if (!paths.includes(path)) paths.push(path);
+          });
+        } catch (error) {
+          this.statusMessage = `Could not save: ${String(error)}`;
+          this.tui.requestRender();
+          return;
+        }
       }
       this.done();
       return;

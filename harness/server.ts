@@ -20,8 +20,16 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import * as fs from 'node:fs';
+import { readRegistrationSync } from '../store/shared.js';
+import { patchRegistrationSessionId } from '../store/registration.js';
 import { fileURLToPath } from 'node:url';
-import type { MessengerState, Dirs, AgentMailMessage, NameThemeConfig } from '../lib.js';
+import type {
+  MessengerState,
+  Dirs,
+  AgentMailMessage,
+  AgentRegistration,
+  NameThemeConfig,
+} from '../lib.js';
 import { loadConfig, type MessengerConfig } from '../config.js';
 import { executeAction, type RouterConfig } from '../router.js';
 import {
@@ -127,28 +135,17 @@ function routerConfigForCwd(cwd: string): RouterConfig {
   };
 }
 
-interface RegistrationFile {
-  name: string;
-  pid: number;
-  sessionId: string;
-  cwd: string;
-  currentChannel?: string;
-  sessionChannel?: string;
-  joinedChannels?: string[];
-}
-
-function readRegistrations(dirs: Dirs): RegistrationFile[] {
+function readRegistrations(dirs: Dirs): AgentRegistration[] {
   try {
     const files = fs.readdirSync(dirs.registry).filter((f) => f.endsWith('.json'));
-    return files
-      .map((f) => {
-        try {
-          return JSON.parse(fs.readFileSync(join(dirs.registry, f), 'utf-8'));
-        } catch {
-          return null;
-        }
-      })
-      .filter((r): r is RegistrationFile => r !== null);
+    return files.flatMap((file) => {
+      try {
+        const reg = readRegistrationSync(join(dirs.registry, file));
+        return reg && file === `${reg.name}.json` ? [reg] : [];
+      } catch {
+        return [];
+      }
+    });
   } catch {
     return [];
   }
@@ -245,10 +242,12 @@ function resolveAgentState(
     } else {
       // Multiple agents, no identity hint — pick most recently active by mtime
       let best: { name: string; mtime: number } | null = null;
-      for (const f of fs.readdirSync(dirs.registry).filter((f) => f.endsWith('.json'))) {
-        const stat = fs.statSync(join(dirs.registry, f));
-        if (!best || stat.mtimeMs > best.mtime) {
-          best = { name: f.replace(/\.json$/, ''), mtime: stat.mtimeMs };
+      for (const reg of regs) {
+        const stat = fs.statSync(join(dirs.registry, `${reg.name}.json`), {
+          throwIfNoEntry: false,
+        });
+        if (stat && (!best || stat.mtimeMs > best.mtime)) {
+          best = { name: reg.name, mtime: stat.mtimeMs };
         }
       }
       if (best) {
@@ -345,11 +344,12 @@ function resolveAgentState(
     joinedChannels.push(normalizeChannelId(currentChannel));
   }
 
+  const owner = registered ? regs.find((reg) => reg.name === resolvedName) : undefined;
   return {
     state: {
       agentName: resolvedName,
       registered,
-      reservations: [],
+      reservations: owner?.reservations ?? [],
       chatHistory: new Map(),
       unreadCounts: new Map(),
       channelPostHistory: [],
@@ -361,12 +361,15 @@ function resolveAgentState(
       isHuman: false,
       session: { toolCalls: 0, tokens: 0, filesModified: [] },
       activity: { lastActivityAt: new Date().toISOString() },
-      statusMessage: undefined,
-      customStatus: false,
+      statusMessage: owner?.statusMessage,
+      customStatus: owner?.customStatus ?? false,
       registryFlushTimer: null,
       sessionStartedAt: new Date().toISOString(),
       contextSessionId: sessionIdFromDisk,
-      callerPid,
+      // Name/PID/fallback routing selects an owner snapshot. Mutations must
+      // compare that PID again under the registry lock, not the CLI process PID.
+      callerPid: owner?.pid ?? callerPid,
+      registrationStartedAt: owner?.startedAt,
       currentChannel,
       sessionChannel,
       joinedChannels,
@@ -573,20 +576,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     // If the registration on disk has an empty sessionId but we now have one
     // (from the x-session-id header), patch the registration file so the
     // channel's sessionId and future reads are consistent.
-    if (effectiveSessionId && state.registered && state.agentName) {
-      const regPath = join(dirs.registry, `${state.agentName}.json`);
-      try {
-        if (fs.existsSync(regPath)) {
-          const reg = JSON.parse(fs.readFileSync(regPath, 'utf-8'));
-          if (!reg.sessionId) {
-            reg.sessionId = effectiveSessionId;
-            fs.writeFileSync(regPath, JSON.stringify(reg, null, 2));
-          }
-        }
-      } catch {
-        // Best effort
-      }
-
+    if (patchRegistrationSessionId(state, dirs, effectiveSessionId)) {
       // Also patch the session channel's sessionId if it was created before
       // the session-id file was available.
       const ch = state.currentChannel || state.sessionChannel;
